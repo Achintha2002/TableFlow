@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../services/supabase_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -15,15 +17,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  String? _errorMessage;
 
   void _handleRegister() async {
-    setState(() => _isLoading = true);
-    // Simulate API delay
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isLoading = false);
-    
-    // Navigate to Home after successful registration
-    if (mounted) context.go('/home');
+    setState(() { _isLoading = true; _errorMessage = null; });
+    try {
+      await SupabaseService.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        fullName: _nameController.text.trim(),
+        phone: _phoneController.text.trim(),
+      );
+      // Navigate to Home after successful registration
+      if (mounted) context.go('/home');
+    } on AuthException catch (e) {
+      setState(() => _errorMessage = e.message);
+    } catch (e) {
+      setState(() => _errorMessage = 'An unexpected error occurred.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
