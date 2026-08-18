@@ -10,6 +10,8 @@ import '../screens/customer/cart_screen.dart';
 import '../screens/customer/table_selection_screen.dart';
 import '../screens/customer/reservation_details_screen.dart';
 import '../screens/customer/queue_screen.dart';
+import '../screens/customer/qr_checkin_screen.dart';
+import '../screens/customer/loyalty_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -22,6 +24,8 @@ class AppRoutes {
   static const String tableSelection = '/table-selection';
   static const String reservationDetails = '/reservation-details';
   static const String queue = '/queue';
+  static const String qrCheckin = '/qr-checkin';
+  static const String loyalty = '/loyalty';
   
   static final GoRouter router = GoRouter(
     initialLocation: splash, // Reset initial location to splash
@@ -68,6 +72,14 @@ class AppRoutes {
       GoRoute(
         path: queue,
         builder: (context, state) => const QueueScreen(),
+      ),
+      GoRoute(
+        path: qrCheckin,
+        builder: (context, state) => const QrCheckinScreen(),
+      ),
+      GoRoute(
+        path: loyalty,
+        builder: (context, state) => const LoyaltyScreen(),
       ),
     ],
   );
