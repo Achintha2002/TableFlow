@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'core/routes.dart';
+import 'services/supabase_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Supabase real-time connection
+  await SupabaseService.initialize();
+  
   runApp(const TableFlowApp());
 }
 
@@ -13,7 +18,6 @@ class TableFlowApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // We will wrap this with MultiProvider later when we add the state classes
     return MaterialApp.router(
       title: 'TableFlow',
       debugShowCheckedModeBanner: false,
