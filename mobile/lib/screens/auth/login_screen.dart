@@ -21,7 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
     
     // For now, bypass auth and go straight to home
-    if (mounted) context.go('/profile');
+    if (mounted) context.go('/home');
   }
 
   @override

@@ -3,8 +3,10 @@ import 'package:go_router/go_router.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/shared/profile_screen.dart';
-
-// Screens will be imported here later
+import '../screens/customer/splash_screen.dart';
+import '../screens/customer/home_screen.dart';
+import '../screens/customer/menu_screen.dart';
+import '../screens/customer/cart_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -12,17 +14,19 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String profile = '/profile';
+  static const String menu = '/menu';
+  static const String cart = '/cart';
   
   static final GoRouter router = GoRouter(
-    initialLocation: login, // Changed initial to login for testing
+    initialLocation: splash, // Reset initial location to splash
     routes: [
       GoRoute(
         path: splash,
-        builder: (context, state) => const PlaceholderScreen(title: 'Splash Screen'),
+        builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
         path: home,
-        builder: (context, state) => const PlaceholderScreen(title: 'Home Screen'),
+        builder: (context, state) => const HomeScreen(),
       ),
       GoRoute(
         path: login,
@@ -35,6 +39,14 @@ class AppRoutes {
       GoRoute(
         path: profile,
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: menu,
+        builder: (context, state) => const MenuScreen(),
+      ),
+      GoRoute(
+        path: cart,
+        builder: (context, state) => const CartScreen(),
       ),
     ],
   );
