@@ -139,8 +139,11 @@ class HomeScreen extends StatelessWidget {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
