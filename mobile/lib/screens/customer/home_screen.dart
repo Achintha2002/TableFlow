@@ -96,7 +96,7 @@ class HomeScreen extends StatelessWidget {
                     subtitle: 'Reserve your spot for a perfect evening.',
                     icon: Icons.event_seat,
                     onTap: () {
-                      // Navigate to Table Selection
+                      context.push('/table-selection');
                     },
                   ),
                   const SizedBox(height: 16),
@@ -108,7 +108,7 @@ class HomeScreen extends StatelessWidget {
                     subtitle: 'Waitlist from anywhere, arrive when ready.',
                     icon: Icons.people_outline,
                     onTap: () {
-                      // Navigate to Queue
+                      context.push('/queue');
                     },
                   ),
                   const SizedBox(height: 16),

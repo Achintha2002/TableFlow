@@ -7,6 +7,9 @@ import '../screens/customer/splash_screen.dart';
 import '../screens/customer/home_screen.dart';
 import '../screens/customer/menu_screen.dart';
 import '../screens/customer/cart_screen.dart';
+import '../screens/customer/table_selection_screen.dart';
+import '../screens/customer/reservation_details_screen.dart';
+import '../screens/customer/queue_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -16,6 +19,9 @@ class AppRoutes {
   static const String profile = '/profile';
   static const String menu = '/menu';
   static const String cart = '/cart';
+  static const String tableSelection = '/table-selection';
+  static const String reservationDetails = '/reservation-details';
+  static const String queue = '/queue';
   
   static final GoRouter router = GoRouter(
     initialLocation: splash, // Reset initial location to splash
@@ -47,6 +53,21 @@ class AppRoutes {
       GoRoute(
         path: cart,
         builder: (context, state) => const CartScreen(),
+      ),
+      GoRoute(
+        path: tableSelection,
+        builder: (context, state) => const TableSelectionScreen(),
+      ),
+      GoRoute(
+        path: reservationDetails,
+        builder: (context, state) {
+          final tableId = state.extra as String? ?? 'T1';
+          return ReservationDetailsScreen(tableId: tableId);
+        },
+      ),
+      GoRoute(
+        path: queue,
+        builder: (context, state) => const QueueScreen(),
       ),
     ],
   );
