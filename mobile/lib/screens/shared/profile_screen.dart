@@ -126,9 +126,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             // Logout
             TextButton(
-              onPressed: () {
-                // Logout logic
-                context.go('/login');
+              onPressed: () async {
+                await SupabaseService.signOut();
+                if (context.mounted) context.go('/login');
               },
               child: const Text(
                 'Log Out',
