@@ -207,15 +207,27 @@ class SupabaseService {
   // MENU
   // ─────────────────────────────────────────
 
-  /// Get menu items for a restaurant
-  static Future<List<Map<String, dynamic>>> getMenuItems(
-      String restaurantId) async {
+  /// Get all available menu items
+  static Future<List<Map<String, dynamic>>> getMenuItems() async {
     final response = await _client
         .from('menu_items')
         .select()
-        .eq('restaurant_id', restaurantId)
         .eq('is_available', true)
         .order('category');
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────
+  // TABLES
+  // ─────────────────────────────────────────
+
+  /// Get all restaurant tables
+  static Future<List<Map<String, dynamic>>> getTables() async {
+    final response = await _client
+        .from('restaurant_tables')
+        .select('*, table_categories(name)')
+        .order('table_number');
 
     return List<Map<String, dynamic>>.from(response);
   }

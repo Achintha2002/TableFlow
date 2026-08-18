@@ -1,9 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/supabase_service.dart';
 
-class MenuScreen extends StatelessWidget {
+class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
+
+  @override
+  State<MenuScreen> createState() => _MenuScreenState();
+}
+
+class _MenuScreenState extends State<MenuScreen> {
+  List<Map<String, dynamic>> _menuItems = [];
+  bool _isLoading = true;
+  String _selectedCategory = 'All';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMenu();
+  }
+
+  Future<void> _fetchMenu() async {
+    try {
+      final items = await SupabaseService.getMenuItems();
+      if (mounted) {
+        setState(() {
+          _menuItems = items;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching menu: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredItems {
+    if (_selectedCategory == 'All') return _menuItems;
+    return _menuItems.where((item) => item['category'] == _selectedCategory).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,76 +77,80 @@ class MenuScreen extends StatelessWidget {
             ),
           ),
           
-          // Categories Filter (Mock)
+          // Categories Filter
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
             child: Row(
               children: [
-                _buildCategoryChip('Starters', true),
+                _buildCategoryChip('All'),
                 const SizedBox(width: 12),
-                _buildCategoryChip('Mains', false),
+                _buildCategoryChip('Starters'),
                 const SizedBox(width: 12),
-                _buildCategoryChip('Desserts', false),
+                _buildCategoryChip('Mains'),
                 const SizedBox(width: 12),
-                _buildCategoryChip('Drinks', false),
+                _buildCategoryChip('Desserts'),
+                const SizedBox(width: 12),
+                _buildCategoryChip('Drinks'),
               ],
             ),
           ),
           
           // Menu Items List
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              children: [
-                _buildMenuItem(
-                  context,
-                  title: 'Seared Hokkaido Scallops',
-                  description: 'Pan-seared premium scallops, served atop a silky cauliflower purée with crispy pancetta dust.',
-                  price: '\$28',
-                  imageUrl: 'https://images.unsplash.com/photo-1599084993091-1cb5c0721cc6?q=80&w=500&auto=format&fit=crop',
-                ),
-                const SizedBox(height: 24),
-                _buildMenuItem(
-                  context,
-                  title: 'Artisanal Burrata',
-                  description: 'Fresh Italian burrata with virgin heirloom tomatoes, basil oil, and aged balsamic.',
-                  price: '\$22',
-                  imageUrl: 'https://images.unsplash.com/photo-1608897013039-887f21d8c804?q=80&w=500&auto=format&fit=crop',
-                ),
-                const SizedBox(height: 24),
-                _buildMenuItem(
-                  context,
-                  title: 'Wagyu Beef Carpaccio',
-                  description: 'Thinly sliced grade A5 wagyu, truffle aioli, shaved parmesan, and micro arugula.',
-                  price: '\$34',
-                  imageUrl: 'https://images.unsplash.com/photo-1550547660-d9450f859349?q=80&w=500&auto=format&fit=crop',
-                ),
-                const SizedBox(height: 40),
-              ],
-            ),
+            child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredItems.isEmpty
+                    ? const Center(child: Text("No items available"))
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                        itemCount: _filteredItems.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 24),
+                        itemBuilder: (context, index) {
+                          final item = _filteredItems[index];
+                          return _buildMenuItem(
+                            context,
+                            title: item['name'] ?? '',
+                            description: item['description'] ?? '',
+                            price: '\$${(item['price'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                            imageUrl: item['image_url'] ?? 'https://via.placeholder.com/500',
+                          );
+                        },
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryChip(String label, bool isSelected) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? AppTheme.primary : AppTheme.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isSelected ? AppTheme.primary : AppTheme.secondary.withOpacity(0.2),
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isSelected ? AppTheme.white : AppTheme.secondary,
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
+  Widget _buildCategoryChip(String label) {
+    final isSelected = _selectedCategory == label;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedCategory = label;
+          });
+        },
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primary : AppTheme.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? AppTheme.white : AppTheme.secondary,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../services/supabase_service.dart';
 
 class TableSelectionScreen extends StatefulWidget {
   const TableSelectionScreen({super.key});
@@ -14,14 +15,46 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = const TimeOfDay(hour: 19, minute: 0);
 
-  // Mock table data: id, x, y, width, height, isAvailable, seats
-  final List<Map<String, dynamic>> _tables = [
-    {'id': 'T1', 'x': 50.0, 'y': 50.0, 'w': 80.0, 'h': 80.0, 'isAvailable': true, 'seats': 2},
-    {'id': 'T2', 'x': 180.0, 'y': 50.0, 'w': 120.0, 'h': 80.0, 'isAvailable': false, 'seats': 4},
-    {'id': 'T3', 'x': 50.0, 'y': 180.0, 'w': 80.0, 'h': 80.0, 'isAvailable': true, 'seats': 2},
-    {'id': 'T4', 'x': 180.0, 'y': 180.0, 'w': 120.0, 'h': 120.0, 'isAvailable': true, 'seats': 6, 'isVIP': true},
-    {'id': 'T5', 'x': 50.0, 'y': 310.0, 'w': 250.0, 'h': 80.0, 'isAvailable': true, 'seats': 8},
-  ];
+  List<Map<String, dynamic>> _tables = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTables();
+  }
+
+  Future<void> _fetchTables() async {
+    try {
+      final data = await SupabaseService.getTables();
+      if (mounted) {
+        setState(() {
+          _tables = data.map((t) => {
+            'id': 'T${t['table_number']}',
+            'dbId': t['id'],
+            'x': t['x_coordinate'] ?? 0.0,
+            'y': t['y_coordinate'] ?? 0.0,
+            'w': 80.0, // Fixed width for simplicity, can be adjusted based on capacity
+            'h': 80.0,
+            'isAvailable': t['status'] == 'available',
+            'seats': t['capacity'],
+            'isVIP': t['table_categories']?['name'] == 'VIP Lounge',
+          }).toList();
+          // Adjust width for larger tables to make floor plan look better
+          for (var table in _tables) {
+            if (table['seats'] >= 6) table['w'] = 120.0;
+            if (table['seats'] >= 8) table['w'] = 180.0;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching tables: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,18 +136,20 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           // Floor Plan Interactive Area
           Expanded(
             child: Center(
-              child: Container(
-                width: 350,
-                height: 450,
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.secondary.withOpacity(0.1)),
-                ),
-                child: Stack(
-                  children: _tables.map((table) => _buildTableWidget(table)).toList(),
-                ),
-              ),
+              child: _isLoading 
+                ? const CircularProgressIndicator()
+                : Container(
+                    width: 350,
+                    height: 450,
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.1)),
+                    ),
+                    child: Stack(
+                      children: _tables.map((table) => _buildTableWidget(table)).toList(),
+                    ),
+                  ),
             ),
           ),
           
