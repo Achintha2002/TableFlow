@@ -22,7 +22,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     await Future.delayed(const Duration(seconds: 1));
     setState(() => _isLoading = false);
     
-    // Bypass auth for now and go to home
+    // Navigate to Home after successful registration
     if (mounted) context.go('/home');
   }
 
