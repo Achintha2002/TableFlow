@@ -191,6 +191,7 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),  // closes GestureDetector
+    ); // closes MouseRegion
   }
 }
