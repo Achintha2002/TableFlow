@@ -101,7 +101,7 @@ class _CartScreenState extends State<CartScreen> {
                 color: AppTheme.white,
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.secondary.withOpacity(0.05),
+                    color: AppTheme.secondary.withValues(alpha: 0.05),
                     offset: const Offset(0, -4),
                     blurRadius: 16,
                   ),
@@ -149,7 +149,7 @@ class _CartScreenState extends State<CartScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-      color: statusColor.withOpacity(0.1),
+      color: statusColor.withValues(alpha: 0.1),
       child: Row(
         children: [
           Icon(statusIcon, color: statusColor),
@@ -202,7 +202,7 @@ class _CartScreenState extends State<CartScreen> {
               Text(
                 description,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.secondary.withOpacity(0.6),
+                  color: AppTheme.secondary.withValues(alpha: 0.6),
                 ),
               ),
               const SizedBox(height: 8),
@@ -240,7 +240,7 @@ class _CartScreenState extends State<CartScreen> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
+        border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.2)),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Icon(icon, size: 16, color: AppTheme.secondary),

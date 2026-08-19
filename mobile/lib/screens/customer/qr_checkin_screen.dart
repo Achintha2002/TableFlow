@@ -96,7 +96,7 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
                   'TF-23081819-001',
                   style: TextStyle(
                     fontSize: 11,
-                    color: AppTheme.secondary.withOpacity(0.5),
+                    color: AppTheme.secondary.withValues(alpha: 0.5),
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -125,7 +125,7 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
           height: 120,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.green.withOpacity(0.1),
+            color: Colors.green.withValues(alpha: 0.1),
           ),
           child: const Icon(Icons.check_circle, size: 80, color: Colors.green),
         ),

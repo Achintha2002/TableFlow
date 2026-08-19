@@ -63,7 +63,7 @@ class _QueueScreenState extends State<QueueScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(Icons.people_outline, size: 80, color: AppTheme.primary.withOpacity(0.5)),
+        Icon(Icons.people_outline, size: 80, color: AppTheme.primary.withValues(alpha: 0.5)),
         const SizedBox(height: 24),
         Text(
           'Join the Waitlist',
@@ -98,7 +98,7 @@ class _QueueScreenState extends State<QueueScreen> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: AppTheme.primary, width: 4),
-            color: AppTheme.primary.withOpacity(0.05),
+            color: AppTheme.primary.withValues(alpha: 0.05),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

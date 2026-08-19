@@ -211,7 +211,7 @@ class _MenuScreenState extends State<MenuScreen> {
           onPressed: () {},
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 44),
-            side: BorderSide(color: AppTheme.secondary.withOpacity(0.2)),
+            side: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.2)),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           child: const Text('+ Add'),

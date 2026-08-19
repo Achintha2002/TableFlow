@@ -32,7 +32,7 @@ class LoyaltyScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.secondary.withOpacity(0.3),
+                    color: AppTheme.secondary.withValues(alpha: 0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -88,7 +88,7 @@ class LoyaltyScreen extends StatelessWidget {
                           Text(
                             'POINTS',
                             style: TextStyle(
-                              color: AppTheme.white.withOpacity(0.5),
+                              color: AppTheme.white.withValues(alpha: 0.5),
                               fontSize: 11,
                               letterSpacing: 2,
                             ),
@@ -138,7 +138,7 @@ class LoyaltyScreen extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: 0.62,
                       minHeight: 8,
-                      backgroundColor: AppTheme.secondary.withOpacity(0.1),
+                      backgroundColor: AppTheme.secondary.withValues(alpha: 0.1),
                       valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.tertiary),
                     ),
                   ),
@@ -214,7 +214,7 @@ class LoyaltyScreen extends StatelessWidget {
         color: AppTheme.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isUnlocked ? AppTheme.tertiary.withOpacity(0.3) : AppTheme.secondary.withOpacity(0.1),
+          color: isUnlocked ? AppTheme.tertiary.withValues(alpha: 0.3) : AppTheme.secondary.withValues(alpha: 0.1),
         ),
       ),
       child: Row(
@@ -222,12 +222,12 @@ class LoyaltyScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isUnlocked ? AppTheme.tertiary.withOpacity(0.15) : AppTheme.secondary.withOpacity(0.05),
+              color: isUnlocked ? AppTheme.tertiary.withValues(alpha: 0.15) : AppTheme.secondary.withValues(alpha: 0.05),
               shape: BoxShape.circle,
             ),
             child: Icon(
               icon,
-              color: isUnlocked ? AppTheme.tertiary : AppTheme.secondary.withOpacity(0.3),
+              color: isUnlocked ? AppTheme.tertiary : AppTheme.secondary.withValues(alpha: 0.3),
             ),
           ),
           const SizedBox(width: 16),
@@ -236,14 +236,14 @@ class LoyaltyScreen extends StatelessWidget {
               title,
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: isUnlocked ? AppTheme.secondary : AppTheme.secondary.withOpacity(0.4),
+                color: isUnlocked ? AppTheme.secondary : AppTheme.secondary.withValues(alpha: 0.4),
               ),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: isUnlocked ? AppTheme.tertiary : AppTheme.secondary.withOpacity(0.05),
+              color: isUnlocked ? AppTheme.tertiary : AppTheme.secondary.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -251,7 +251,7 @@ class LoyaltyScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: isUnlocked ? AppTheme.secondary : AppTheme.secondary.withOpacity(0.3),
+                color: isUnlocked ? AppTheme.secondary : AppTheme.secondary.withValues(alpha: 0.3),
               ),
             ),
           ),

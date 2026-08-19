@@ -73,7 +73,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
               color: AppTheme.white,
-              border: Border(bottom: BorderSide(color: AppTheme.secondary.withOpacity(0.1))),
+              border: Border(bottom: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1))),
             ),
             child: Row(
               children: [
@@ -92,7 +92,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     label: Text('${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.secondary,
-                      side: BorderSide(color: AppTheme.secondary.withOpacity(0.2)),
+                      side: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.2)),
                     ),
                   ),
                 ),
@@ -110,7 +110,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     label: Text(_selectedTime.format(context)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.secondary,
-                      side: BorderSide(color: AppTheme.secondary.withOpacity(0.2)),
+                      side: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.2)),
                     ),
                   ),
                 ),
@@ -126,7 +126,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               children: [
                 _buildLegendItem(AppTheme.white, 'Available'),
                 const SizedBox(width: 16),
-                _buildLegendItem(AppTheme.secondary.withOpacity(0.1), 'Booked'),
+                _buildLegendItem(AppTheme.secondary.withValues(alpha: 0.1), 'Booked'),
                 const SizedBox(width: 16),
                 _buildLegendItem(AppTheme.primary, 'Selected'),
               ],
@@ -160,7 +160,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               color: AppTheme.white,
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.secondary.withOpacity(0.05),
+                  color: AppTheme.secondary.withValues(alpha: 0.05),
                   offset: const Offset(0, -4),
                   blurRadius: 16,
                 ),
@@ -186,7 +186,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           height: 16,
           decoration: BoxDecoration(
             color: color,
-            border: Border.all(color: AppTheme.secondary.withOpacity(0.2)),
+            border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.2)),
             borderRadius: BorderRadius.circular(4),
           ),
         ),
@@ -202,11 +202,11 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     final bool isVIP = table['isVIP'] ?? false;
 
     Color bgColor = AppTheme.white;
-    if (!isAvailable) bgColor = AppTheme.secondary.withOpacity(0.1);
+    if (!isAvailable) bgColor = AppTheme.secondary.withValues(alpha: 0.1);
     if (isSelected) bgColor = AppTheme.primary;
 
     Color textColor = isSelected ? AppTheme.white : AppTheme.secondary;
-    if (!isAvailable) textColor = AppTheme.secondary.withOpacity(0.4);
+    if (!isAvailable) textColor = AppTheme.secondary.withValues(alpha: 0.4);
 
     return Positioned(
       left: table['x'],
@@ -226,7 +226,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             color: bgColor,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSelected ? AppTheme.primary : AppTheme.secondary.withOpacity(0.2),
+              color: isSelected ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.2),
               width: 2,
             ),
           ),

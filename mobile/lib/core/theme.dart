@@ -20,7 +20,6 @@ class AppTheme {
         secondary: secondary,
         tertiary: tertiary,
         surface: white,
-        background: background,
       ),
       
       // Typography
@@ -48,7 +47,7 @@ class AppTheme {
         bodyMedium: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.normal,
-          color: secondary.withOpacity(0.8),
+          color: secondary.withValues(alpha: 0.8),
         ),
         labelLarge: GoogleFonts.inter(
           fontSize: 14,

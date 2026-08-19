@@ -17,10 +17,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  String? _errorMessage;
 
   void _handleRegister() async {
-    setState(() { _isLoading = true; _errorMessage = null; });
+    setState(() { _isLoading = true; });
     try {
       await SupabaseService.signUp(
         email: _emailController.text.trim(),
@@ -31,9 +30,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Navigate to Home after successful registration
       if (mounted) context.go('/home');
     } on AuthException catch (e) {
-      setState(() => _errorMessage = e.message);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
-      setState(() => _errorMessage = 'An unexpected error occurred.');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('An unexpected error occurred.')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -141,17 +140,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hintText,
-        prefixIcon: Icon(icon, color: AppTheme.secondary.withOpacity(0.5)),
+        prefixIcon: Icon(icon, color: AppTheme.secondary.withValues(alpha: 0.5)),
         filled: true,
         fillColor: AppTheme.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: AppTheme.secondary.withOpacity(0.1)),
+          borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: AppTheme.secondary.withOpacity(0.1)),
+          borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),

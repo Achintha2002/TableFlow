@@ -81,7 +81,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [
@@ -120,11 +120,11 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                 fillColor: AppTheme.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppTheme.secondary.withOpacity(0.1)),
+                  borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppTheme.secondary.withOpacity(0.1)),
+                  borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -145,7 +145,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
             Text(
               'Cancellations made less than 24 hours before the reservation time may be subject to a \$20 per person cancellation fee.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.secondary.withOpacity(0.7),
+                color: AppTheme.secondary.withValues(alpha: 0.7),
                 height: 1.5,
               ),
             ),
@@ -171,12 +171,12 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
   Widget _buildSummaryRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: AppTheme.secondary.withOpacity(0.6)),
+        Icon(icon, size: 20, color: AppTheme.secondary.withValues(alpha: 0.6)),
         const SizedBox(width: 12),
         Text(
           label,
           style: TextStyle(
-            color: AppTheme.secondary.withOpacity(0.6),
+            color: AppTheme.secondary.withValues(alpha: 0.6),
           ),
         ),
         const Spacer(),
