@@ -69,6 +69,65 @@ class SupabaseService {
   static User? get currentUser => _client.auth.currentUser;
 
   // ─────────────────────────────────────────
+  // PROFILE & SETTINGS
+  // ─────────────────────────────────────────
+
+  /// Get current user profile
+  static Future<Map<String, dynamic>?> getUserProfile() async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('users')
+        .select()
+        .eq('id', userId)
+        .maybeSingle();
+    return response;
+  }
+
+  /// Get accessibility settings
+  static Future<Map<String, dynamic>?> getAccessibilitySettings() async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('accessibility_settings')
+        .select()
+        .eq('user_id', userId)
+        .maybeSingle();
+    return response;
+  }
+
+  /// Update user profile
+  static Future<void> updateUserProfile({
+    required String fullName,
+    required String phone,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('users').update({
+      'full_name': fullName,
+      'phone_number': phone,
+    }).eq('id', userId);
+  }
+
+  /// Update accessibility settings
+  static Future<void> updateAccessibilitySettings({
+    required bool highContrast,
+    required String fontSize,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('accessibility_settings').upsert({
+      'user_id': userId,
+      'high_contrast': highContrast,
+      'font_size': fontSize,
+    });
+  }
+
+  // ─────────────────────────────────────────
   // QUEUE — Real-time
   // ─────────────────────────────────────────
 
