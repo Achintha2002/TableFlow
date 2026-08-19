@@ -59,13 +59,6 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text('Select a Table'),
-      ),
       body: Column(
         children: [
           // Date & Time Picker Bar

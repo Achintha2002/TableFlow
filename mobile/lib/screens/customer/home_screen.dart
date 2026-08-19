@@ -8,21 +8,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'TableFlow',
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            color: AppTheme.primary,
-            fontSize: 24,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => context.push('/profile'),
-          ),
-        ],
-      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -96,7 +81,7 @@ class HomeScreen extends StatelessWidget {
                     subtitle: 'Reserve your spot for a perfect evening.',
                     icon: Icons.event_seat,
                     onTap: () {
-                      context.push('/table-selection');
+                      context.go('/table-selection');
                     },
                   ),
                   const SizedBox(height: 16),
@@ -108,7 +93,7 @@ class HomeScreen extends StatelessWidget {
                     subtitle: 'Waitlist from anywhere, arrive when ready.',
                     icon: Icons.people_outline,
                     onTap: () {
-                      context.push('/queue');
+                      context.go('/queue');
                     },
                   ),
                   const SizedBox(height: 16),
@@ -120,7 +105,7 @@ class HomeScreen extends StatelessWidget {
                     subtitle: 'Pre-order your favorites.',
                     icon: Icons.restaurant_menu,
                     onTap: () {
-                      context.push('/menu');
+                      context.go('/menu');
                     },
                   ),
                 ],

@@ -169,13 +169,6 @@ class _QueueScreenState extends State<QueueScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text('Live Waitlist'),
-      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -273,7 +266,7 @@ class _QueueScreenState extends State<QueueScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             OutlinedButton(
-              onPressed: () => context.push('/menu'),
+              onPressed: () => context.go('/menu'),
               child: const Text('Browse Menu'),
             ),
             const SizedBox(width: 16),

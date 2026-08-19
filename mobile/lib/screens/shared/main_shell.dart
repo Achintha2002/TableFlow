@@ -7,90 +7,107 @@ class MainShell extends StatelessWidget {
 
   const MainShell({super.key, required this.navigationShell});
 
+  String _getTitle(int index) {
+    switch (index) {
+      case 0: return 'TableFlow';
+      case 1: return 'Curated Selection';
+      case 2: return 'Select a Table';
+      case 3: return 'Live Waitlist';
+      case 4: return 'Profile & Settings';
+      default: return 'TableFlow';
+    }
+  }
+
+  List<Widget>? _getActions(BuildContext context, int index) {
+    switch (index) {
+      case 0:
+        return [
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            onPressed: () => navigationShell.goBranch(4),
+          ),
+        ];
+      case 1:
+        return [
+          IconButton(
+            icon: const Icon(Icons.shopping_bag_outlined),
+            onPressed: () => context.push('/cart'),
+          ),
+        ];
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentIndex = navigationShell.currentIndex;
     return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _getTitle(currentIndex),
+          style: currentIndex == 0 || currentIndex == 1
+              ? Theme.of(context).textTheme.displayMedium?.copyWith(
+                  color: currentIndex == 0 ? AppTheme.primary : AppTheme.secondary,
+                  fontSize: 24,
+                )
+              : null,
+        ),
+        actions: _getActions(context, currentIndex),
+      ),
+      drawer: _buildDrawer(context),
       body: navigationShell,
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        border: Border(
-          top: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.secondary.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
+  Widget _buildDrawer(BuildContext context) {
+    return Drawer(
+      child: Column(
+        children: [
+          DrawerHeader(
+            decoration: const BoxDecoration(color: AppTheme.secondary),
+            child: Center(
+              child: Text(
+                'TableFlow',
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  color: AppTheme.white,
+                  fontSize: 32,
+                ),
+              ),
+            ),
           ),
+          _buildDrawerItem(context, 0, Icons.home_outlined, Icons.home, 'Home'),
+          _buildDrawerItem(context, 1, Icons.restaurant_menu_outlined, Icons.restaurant_menu, 'Menu'),
+          _buildDrawerItem(context, 2, Icons.event_seat_outlined, Icons.event_seat, 'Book a Table'),
+          _buildDrawerItem(context, 3, Icons.people_outline, Icons.people, 'Live Queue'),
+          _buildDrawerItem(context, 4, Icons.person_outline, Icons.person, 'Profile'),
         ],
       ),
-      child: SafeArea(
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            children: [
-              _buildNavItem(0, Icons.home_outlined, Icons.home, 'Home'),
-              _buildNavItem(1, Icons.restaurant_menu_outlined, Icons.restaurant_menu, 'Menu'),
-              _buildNavItem(2, Icons.event_seat_outlined, Icons.event_seat, 'Book'),
-              _buildNavItem(3, Icons.people_outline, Icons.people, 'Queue'),
-              _buildNavItem(4, Icons.person_outline, Icons.person, 'Profile'),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
+  Widget _buildDrawerItem(BuildContext context, int index, IconData icon, IconData activeIcon, String label) {
     final isActive = navigationShell.currentIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          );
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isActive ? AppTheme.primary.withValues(alpha: 0.1) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(
-                  isActive ? activeIcon : icon,
-                  color: isActive ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.4),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(height: 4),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                  color: isActive ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.4),
-                ),
-                child: Text(label),
-              ),
-            ],
-          ),
+    return ListTile(
+      leading: Icon(
+        isActive ? activeIcon : icon,
+        color: isActive ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.6),
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: isActive ? AppTheme.primary : AppTheme.secondary,
+          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
         ),
       ),
+      selected: isActive,
+      onTap: () {
+        Navigator.pop(context); // Close the drawer
+        navigationShell.goBranch(
+          index,
+          initialLocation: index == navigationShell.currentIndex,
+        );
+      },
     );
   }
 }
