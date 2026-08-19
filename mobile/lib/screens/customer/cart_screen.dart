@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
-
+import 'package:provider/provider.dart';
+import '../../providers/cart_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
 
@@ -13,19 +15,56 @@ class _CartScreenState extends State<CartScreen> {
   // Mock State: 'none', 'pending', 'preparing', 'ready', 'served'
   String _orderStatus = 'none';
 
-  void _submitOrder() {
+  void _submitOrder() async {
     setState(() {
       _orderStatus = 'pending';
     });
+
+    final cart = context.read<CartProvider>();
+    final user = Supabase.instance.client.auth.currentUser;
     
-    // Simulate real-time status updates for preview
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _orderStatus = 'preparing');
-    });
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in first')));
+      setState(() => _orderStatus = 'none');
+      return;
+    }
+
+    try {
+      final orderResponse = await Supabase.instance.client.from('orders').insert({
+        'user_id': user.id,
+        'total_amount': cart.totalAmount * 1.08,
+        'status': 'pending',
+      }).select().single();
+
+      final orderId = orderResponse['id'];
+
+      final orderItems = cart.itemsList.map((item) => {
+        'order_id': orderId,
+        'menu_item_id': item.id,
+        'quantity': item.quantity,
+        'unit_price': item.price,
+      }).toList();
+
+      await Supabase.instance.client.from('order_items').insert(orderItems);
+
+      if (mounted) {
+        cart.clear();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order sent to kitchen!')));
+      }
+    } catch (e) {
+      debugPrint('Error submitting order: $e');
+      if (mounted) {
+        setState(() => _orderStatus = 'none');
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to submit order.')));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final cart = context.watch<CartProvider>();
+    final cartItems = cart.itemsList;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -42,53 +81,55 @@ class _CartScreenState extends State<CartScreen> {
             child: ListView(
               padding: const EdgeInsets.all(24.0),
               children: [
-                _buildCartItem(
-                  title: 'Seared Hokkaido Scallops',
-                  description: 'No pancetta dust.',
-                  price: '\$28.00',
-                  quantity: 1,
-                  imageUrl: 'https://images.unsplash.com/photo-1599084993091-1cb5c0721cc6?q=80&w=200&auto=format&fit=crop',
-                ),
-                const SizedBox(height: 20),
-                _buildCartItem(
-                  title: 'Braised Short Rib',
-                  description: 'Extra gravy.',
-                  price: '\$42.00',
-                  quantity: 1,
-                  imageUrl: 'https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=200&auto=format&fit=crop',
-                ),
-                const SizedBox(height: 40),
-                
-                const Divider(),
-                const SizedBox(height: 16),
-                
-                _buildSummaryRow('Subtotal', '\$70.00'),
-                const SizedBox(height: 8),
-                _buildSummaryRow('Taxes & Fees', '\$5.50'),
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 16),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Total',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                if (cartItems.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: Text('Your cart is empty')),
+                  ),
+                ...cartItems.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 20.0),
+                  child: _buildCartItem(
+                    cart: cart,
+                    id: item.id,
+                    title: item.name,
+                    description: '',
+                    price: '\$${item.price.toStringAsFixed(2)}',
+                    quantity: item.quantity,
+                    imageUrl: item.imageUrl ?? 'https://via.placeholder.com/500',
+                  ),
+                )),
+                if (cartItems.isNotEmpty) ...[
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  
+                  _buildSummaryRow('Subtotal', '\$${cart.totalAmount.toStringAsFixed(2)}'),
+                  const SizedBox(height: 8),
+                  _buildSummaryRow('Taxes & Fees', '\$${(cart.totalAmount * 0.08).toStringAsFixed(2)}'),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const Text(
-                      '\$75.50',
-                      style: TextStyle(
-                        color: AppTheme.primary,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                      Text(
+                        '\$${(cart.totalAmount * 1.08).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: AppTheme.primary,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ],
             ),
           ),
@@ -108,7 +149,7 @@ class _CartScreenState extends State<CartScreen> {
                 ],
               ),
               child: ElevatedButton(
-                onPressed: _submitOrder,
+                onPressed: cart.items.isEmpty ? null : _submitOrder,
                 child: const Text('Send Order to Kitchen'),
               ),
             ),
@@ -168,6 +209,8 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _buildCartItem({
+    required CartProvider cart,
+    required String id,
     required String title,
     required String description,
     required String price,
@@ -216,17 +259,23 @@ class _CartScreenState extends State<CartScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (_orderStatus == 'none')
-                    Row(
-                      children: [
-                        _buildQtyBtn(Icons.remove),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(quantity.toString()),
-                        ),
-                        _buildQtyBtn(Icons.add),
-                      ],
-                    ),
+                    if (_orderStatus == 'none')
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => cart.updateQuantity(id, quantity - 1),
+                            child: _buildQtyBtn(Icons.remove),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(quantity.toString()),
+                          ),
+                          GestureDetector(
+                            onTap: () => cart.updateQuantity(id, quantity + 1),
+                            child: _buildQtyBtn(Icons.add),
+                          ),
+                        ],
+                      ),
                 ],
               ),
             ],

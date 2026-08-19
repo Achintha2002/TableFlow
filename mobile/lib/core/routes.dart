@@ -1,5 +1,5 @@
-
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/customer/splash_screen.dart';
@@ -21,6 +21,16 @@ class AppRoutes {
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
+    redirect: (context, state) {
+      final isAuth = Supabase.instance.client.auth.currentSession != null;
+      final isSplash = state.matchedLocation == splash;
+      final isAuthRoute = state.matchedLocation == login || state.matchedLocation == register;
+
+      if (!isAuth && !isSplash && !isAuthRoute) {
+        return login;
+      }
+      return null;
+    },
     routes: [
       // Unauthenticated routes
       GoRoute(
@@ -50,8 +60,14 @@ class AppRoutes {
       GoRoute(
         path: reservationDetails,
         builder: (context, state) {
-          final tableId = state.extra as String? ?? 'T1';
-          return ReservationDetailsScreen(tableId: tableId);
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return ReservationDetailsScreen(
+            tableId: extra['tableId'] ?? 'T1',
+            dbId: extra['dbId'] ?? 0,
+            date: extra['date'] ?? DateTime.now().toIso8601String(),
+            time: extra['time'] ?? '19:00',
+            seats: extra['seats'] ?? 2,
+          );
         },
       ),
       GoRoute(

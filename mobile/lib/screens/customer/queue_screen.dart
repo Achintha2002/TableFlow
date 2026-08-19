@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import '../../core/theme.dart';
 
 class QueueScreen extends StatefulWidget {
@@ -10,33 +12,158 @@ class QueueScreen extends StatefulWidget {
 }
 
 class _QueueScreenState extends State<QueueScreen> {
-  // Mock Data
   bool _inQueue = false;
-  int _position = 14;
-  int _estimatedWaitTime = 45; // minutes
+  int _position = 0;
+  int _estimatedWaitTime = 0;
+  int _totalWaiting = 0;
+  bool _isLoading = true;
+  String? _queueId;
+  StreamSubscription? _queueSubscription;
 
-  void _joinQueue() {
-    setState(() {
-      _inQueue = true;
-      _position = 15;
-      _estimatedWaitTime = 50;
-    });
-    
-    // Simulate position moving up after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _position = 14;
-          _estimatedWaitTime = 45;
-        });
-      }
-    });
+  @override
+  void initState() {
+    super.initState();
+    _checkQueueStatus();
   }
 
-  void _leaveQueue() {
-    setState(() {
+  @override
+  void dispose() {
+    _queueSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkQueueStatus() async {
+    setState(() => _isLoading = true);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if(mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      // Check if user has an active queue entry
+      final activeEntry = await Supabase.instance.client
+          .from('queue_entries')
+          .select()
+          .eq('user_id', user.id)
+          .inFilter('status', ['waiting', 'seated'])
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (activeEntry != null && activeEntry['status'] == 'waiting') {
+        _inQueue = true;
+        _queueId = activeEntry['id'];
+        await _calculatePosition(activeEntry['created_at']);
+        _setupSubscription();
+      } else {
+        _inQueue = false;
+        await _calculateTotalWaiting();
+        _setupSubscription();
+      }
+    } catch (e) {
+      debugPrint('Error checking queue: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _calculateTotalWaiting() async {
+    try {
+      final res = await Supabase.instance.client
+          .from('queue_entries')
+          .select('id')
+          .eq('status', 'waiting');
+      if (mounted) {
+        setState(() {
+          _totalWaiting = res.length;
+        });
+      }
+    } catch(e) {
+      debugPrint('Total waiting error: $e');
+    }
+  }
+
+  Future<void> _calculatePosition(String joinedAt) async {
+    try {
+      final res = await Supabase.instance.client
+          .from('queue_entries')
+          .select('id')
+          .eq('status', 'waiting')
+          .lt('created_at', joinedAt);
+      if (mounted) {
+        setState(() {
+          _position = res.length + 1;
+          _estimatedWaitTime = _position * 5;
+        });
+      }
+    } catch(e) {
+      debugPrint('Position error: $e');
+    }
+  }
+
+  void _setupSubscription() {
+    _queueSubscription?.cancel();
+    _queueSubscription = Supabase.instance.client
+        .from('queue_entries')
+        .stream(primaryKey: ['id'])
+        .eq('status', 'waiting')
+        .listen((data) {
+          if (!mounted) return;
+          if (_inQueue && _queueId != null) {
+             try {
+               final myEntry = data.firstWhere((e) => e['id'] == _queueId);
+               _calculatePosition(myEntry['created_at']);
+             } catch(e) {
+               // We were seated, cancelled, or left (status no longer waiting)
+               _checkQueueStatus();
+             }
+          } else {
+             _calculateTotalWaiting();
+          }
+        });
+  }
+
+  Future<void> _joinQueue() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in')));
+      return;
+    }
+    
+    setState(() => _isLoading = true);
+    try {
+      final res = await Supabase.instance.client.from('queue_entries').insert({
+        'user_id': user.id,
+        'party_size': 2, // Hardcoded for simplicity
+        'status': 'waiting'
+      }).select().single();
+      
+      _inQueue = true;
+      _queueId = res['id'];
+      await _calculatePosition(res['created_at']);
+      _setupSubscription();
+    } catch (e) {
+       debugPrint('Failed to join queue: $e');
+       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    } finally {
+       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _leaveQueue() async {
+    if (_queueId == null) return;
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.from('queue_entries').update({'status': 'left'}).eq('id', _queueId!);
       _inQueue = false;
-    });
+      _queueId = null;
+      await _calculateTotalWaiting();
+    } catch (e) {
+      debugPrint('Error leaving queue: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -52,7 +179,9 @@ class _QueueScreenState extends State<QueueScreen> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
-          child: _inQueue ? _buildInQueueView() : _buildJoinQueueView(),
+          child: _isLoading 
+            ? const CircularProgressIndicator()
+            : _inQueue ? _buildInQueueView() : _buildJoinQueueView(),
         ),
       ),
     );
@@ -74,7 +203,7 @@ class _QueueScreenState extends State<QueueScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Currently there are 14 parties ahead of you. Estimated wait time is 45-50 minutes.',
+          'Currently there are $_totalWaiting parties waiting. Estimated wait time is ${_totalWaiting * 5} minutes.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
         ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import 'package:provider/provider.dart';
+import '../../providers/cart_provider.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -110,9 +112,10 @@ class _MenuScreenState extends State<MenuScreen> {
                           final item = _filteredItems[index];
                           return _buildMenuItem(
                             context,
+                            id: item['id'],
                             title: item['name'] ?? '',
                             description: item['description'] ?? '',
-                            price: '\$${(item['price'] as num?)?.toStringAsFixed(2) ?? '0.00'}',
+                            price: (item['price'] as num?)?.toDouble() ?? 0.0,
                             imageUrl: item['image_url'] ?? 'https://via.placeholder.com/500',
                           );
                         },
@@ -157,9 +160,10 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   Widget _buildMenuItem(BuildContext context, {
+    required String id,
     required String title,
     required String description,
-    required String price,
+    required double price,
     required String imageUrl,
   }) {
     return Column(
@@ -190,7 +194,7 @@ class _MenuScreenState extends State<MenuScreen> {
               ),
             ),
             Text(
-              price,
+              '\$${price.toStringAsFixed(2)}',
               style: const TextStyle(
                 color: AppTheme.primary,
                 fontWeight: FontWeight.bold,
@@ -208,13 +212,25 @@ class _MenuScreenState extends State<MenuScreen> {
         ),
         const SizedBox(height: 16),
         OutlinedButton(
-          onPressed: () {},
+          onPressed: () {
+            context.read<CartProvider>().addItem(id, title, price, imageUrl);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$title added to cart'),
+                duration: const Duration(seconds: 1),
+                action: SnackBarAction(
+                  label: 'View Cart',
+                  onPressed: () => context.push('/cart'),
+                ),
+              ),
+            );
+          },
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 44),
             side: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.2)),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          child: const Text('+ Add'),
+          child: const Text('+ Add to Cart'),
         ),
       ],
     );

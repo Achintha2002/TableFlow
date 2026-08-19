@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 
 class ReservationDetailsScreen extends StatefulWidget {
   final String tableId;
-  const ReservationDetailsScreen({super.key, required this.tableId});
+  final int dbId;
+  final String date;
+  final String time;
+  final int seats;
+  
+  const ReservationDetailsScreen({
+    super.key, 
+    required this.tableId,
+    required this.dbId,
+    required this.date,
+    required this.time,
+    required this.seats,
+  });
 
   @override
   State<ReservationDetailsScreen> createState() => _ReservationDetailsScreenState();
@@ -15,48 +28,70 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
   bool _isLoading = false;
 
   void _confirmReservation() async {
-    setState(() => _isLoading = true);
-    // Simulate API delay
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isLoading = false);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in')));
+      return;
+    }
     
-    // Show success dialog
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Icon(Icons.check_circle, color: Colors.green, size: 50),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Reservation Confirmed',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFamily: 'Playfair Display',
+    setState(() => _isLoading = true);
+    
+    try {
+      final date = DateTime.parse(widget.date);
+      final parts = widget.time.split(':');
+      final reservationTime = DateTime(date.year, date.month, date.day, int.parse(parts[0]), int.parse(parts[1]));
+      
+      await Supabase.instance.client.from('reservations').insert({
+        'user_id': user.id,
+        'table_id': widget.dbId,
+        'reservation_time': reservationTime.toIso8601String(),
+        'party_size': widget.seats,
+        'special_requests': _specialRequestsController.text,
+        'status': 'confirmed',
+      });
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Icon(Icons.check_circle, color: Colors.green, size: 50),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Reservation Confirmed',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontFamily: 'Playfair Display',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Table ${widget.tableId} is booked for tonight at 7:00 PM.',
-                textAlign: TextAlign.center,
+                const SizedBox(height: 16),
+                Text(
+                  'Table ${widget.tableId} is booked for ${date.day}/${date.month}/${date.year} at ${widget.time}.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.go('/home');
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+                child: const Text('Back to Home'),
               ),
             ],
           ),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                context.go('/home');
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 44),
-              ),
-              child: const Text('Back to Home'),
-            ),
-          ],
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      debugPrint('Reservation error: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -93,11 +128,11 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _buildSummaryRow(Icons.calendar_today, 'Date', 'Today, 18 Aug'),
+                  _buildSummaryRow(Icons.calendar_today, 'Date', '${DateTime.parse(widget.date).day}/${DateTime.parse(widget.date).month}/${DateTime.parse(widget.date).year}'),
                   const SizedBox(height: 12),
-                  _buildSummaryRow(Icons.access_time, 'Time', '7:00 PM'),
+                  _buildSummaryRow(Icons.access_time, 'Time', widget.time),
                   const SizedBox(height: 12),
-                  _buildSummaryRow(Icons.people, 'Guests', '2 People'),
+                  _buildSummaryRow(Icons.people, 'Guests', '${widget.seats} People'),
                 ],
               ),
             ),

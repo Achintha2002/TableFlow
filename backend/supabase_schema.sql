@@ -174,6 +174,7 @@ CREATE POLICY "Admins full access to queue" ON queue_entries FOR ALL USING (
   EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin')
 );
 CREATE POLICY "Users can view own queue entries" ON queue_entries FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Anyone can view waiting queue entries" ON queue_entries FOR SELECT USING (status = 'waiting');
 CREATE POLICY "Users can join queue" ON queue_entries FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can leave queue" ON queue_entries FOR UPDATE
   USING (auth.uid() = user_id)
@@ -194,6 +195,9 @@ CREATE POLICY "Users can create own orders" ON orders FOR INSERT WITH CHECK (aut
 
 -- ORDER ITEMS: follow parent order's ownership
 CREATE POLICY "Users can view own order items" ON order_items FOR SELECT USING (
+  EXISTS (SELECT 1 FROM orders WHERE orders.id = order_items.order_id AND orders.user_id = auth.uid())
+);
+CREATE POLICY "Users can create own order items" ON order_items FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM orders WHERE orders.id = order_items.order_id AND orders.user_id = auth.uid())
 );
 CREATE POLICY "Admins full access to order items" ON order_items FOR ALL USING (

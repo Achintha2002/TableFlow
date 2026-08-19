@@ -168,7 +168,14 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             ),
             child: ElevatedButton(
               onPressed: _selectedTableId == null ? null : () {
-                context.push('/reservation-details', extra: _selectedTableId);
+                final table = _tables.firstWhere((t) => t['id'] == _selectedTableId);
+                context.push('/reservation-details', extra: {
+                  'tableId': _selectedTableId,
+                  'dbId': table['dbId'],
+                  'date': _selectedDate.toIso8601String(),
+                  'time': '${_selectedTime.hour}:${_selectedTime.minute.toString().padLeft(2, '0')}',
+                  'seats': table['seats'],
+                });
               },
               child: const Text('Proceed to Details'),
             ),
