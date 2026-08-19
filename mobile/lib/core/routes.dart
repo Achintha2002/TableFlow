@@ -7,7 +7,12 @@ import '../screens/customer/cart_screen.dart';
 import '../screens/customer/reservation_details_screen.dart';
 import '../screens/customer/qr_checkin_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
+import '../screens/customer/home_screen.dart';
+import '../screens/customer/menu_screen.dart';
+import '../screens/customer/queue_screen.dart';
+import '../screens/customer/table_selection_screen.dart';
 import '../screens/shared/main_shell.dart';
+import '../screens/shared/profile_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -47,9 +52,17 @@ class AppRoutes {
       ),
 
       // Main shell (with bottom nav) — all authenticated screens
-      GoRoute(
-        path: home,
-        builder: (context, state) => const MainShell(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(routes: [GoRoute(path: home, builder: (context, state) => const HomeScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/menu', builder: (context, state) => const MenuScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/table-selection', builder: (context, state) => const TableSelectionScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/queue', builder: (context, state) => const QueueScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen())]),
+        ],
       ),
 
       // Full-page screens pushed on top of shell

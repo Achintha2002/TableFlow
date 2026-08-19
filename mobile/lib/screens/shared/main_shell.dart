@@ -1,37 +1,16 @@
 import 'package:flutter/material.dart';
-
+import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
-import '../customer/home_screen.dart';
-import '../customer/menu_screen.dart';
-import '../customer/queue_screen.dart';
-import '../customer/table_selection_screen.dart';
-import '../shared/profile_screen.dart';
 
-class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+class MainShell extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int _currentIndex = 0;
-
-  final List<Widget> _screens = [
-    const HomeScreen(),
-    const MenuScreen(),
-    const TableSelectionScreen(),
-    const QueueScreen(),
-    const ProfileScreen(),
-  ];
+  const MainShell({super.key, required this.navigationShell});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
+      body: navigationShell,
       bottomNavigationBar: _buildBottomNav(),
     );
   }
@@ -69,11 +48,16 @@ class _MainShellState extends State<MainShell> {
   }
 
   Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
-    final isActive = _currentIndex == index;
+    final isActive = navigationShell.currentIndex == index;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => setState(() => _currentIndex = index),
+        onTap: () {
+          navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
+          );
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
