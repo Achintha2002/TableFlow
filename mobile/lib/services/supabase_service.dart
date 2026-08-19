@@ -27,11 +27,26 @@ class SupabaseService {
     required String fullName,
     required String phone,
   }) async {
-    return await _client.auth.signUp(
+    final response = await _client.auth.signUp(
       email: email,
       password: password,
       data: {'full_name': fullName, 'phone': phone},
     );
+    
+    if (response.user != null) {
+      try {
+        await _client.from('users').insert({
+          'id': response.user!.id,
+          'email': email,
+          'full_name': fullName,
+          'phone_number': phone,
+        });
+      } catch (e) {
+        debugPrint('Failed to insert user profile: $e');
+      }
+    }
+    
+    return response;
   }
 
   /// Sign in with email and password

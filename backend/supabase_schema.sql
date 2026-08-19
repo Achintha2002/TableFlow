@@ -18,7 +18,28 @@ CREATE TABLE users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Accessibility Settings
+-- 2. Create trigger function for new users
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (id, email, full_name, phone_number)
+  VALUES (
+    new.id, 
+    new.email, 
+    COALESCE(new.raw_user_meta_data->>'full_name', ''), 
+    COALESCE(new.raw_user_meta_data->>'phone', '')
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to call the function after signup
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 3. Accessibility Settings
 CREATE TABLE accessibility_settings (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE PRIMARY KEY,
     font_size TEXT DEFAULT 'medium',
@@ -138,6 +159,7 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- USERS: users can read/update their own profile; admins can read all
 CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Admins can view all users" ON users FOR SELECT USING (
   EXISTS (SELECT 1 FROM users u WHERE u.id = auth.uid() AND u.role = 'admin')
