@@ -120,11 +120,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     fullName: nameController.text,
                     phone: phoneController.text,
                   );
-                  if (mounted) {
-                    setState(() {
-                      _fullName = nameController.text;
-                      _phone = phoneController.text;
-                    });
+                  if (context.mounted) {
+                    if (mounted) {
+                      setState(() {
+                        _fullName = nameController.text;
+                        _phone = phoneController.text;
+                      });
+                    }
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Profile updated successfully')),
@@ -404,7 +406,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppTheme.primary,
+            activeThumbColor: AppTheme.primary,
           ),
         ],
       ),
