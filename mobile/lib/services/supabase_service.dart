@@ -33,18 +33,8 @@ class SupabaseService {
       data: {'full_name': fullName, 'phone': phone},
     );
     
-    if (response.user != null) {
-      try {
-        await _client.from('users').insert({
-          'id': response.user!.id,
-          'email': email,
-          'full_name': fullName,
-          'phone_number': phone,
-        });
-      } catch (e) {
-        debugPrint('Failed to insert user profile: $e');
-      }
-    }
+    // The user record is automatically inserted into public.users via a Supabase trigger
+    // on the auth.users table (handle_new_user).
     
     return response;
   }
