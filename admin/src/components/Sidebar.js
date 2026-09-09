@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed } from 'lucide-react';
+import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck } from 'lucide-react';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -42,6 +42,11 @@ export default function Sidebar() {
         <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
           <UtensilsCrossed size={20} />
           Menu
+        </Link>
+        <div className="nav-section-label">Management</div>
+        <Link href="/users" className={`nav-item ${isActive('/users')}`}>
+          <ShieldCheck size={20} />
+          Users & Admins
         </Link>
       </nav>
       <div className="sidebar-footer">
