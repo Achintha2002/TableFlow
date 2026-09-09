@@ -18,6 +18,11 @@ function fmtTime(iso) {
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Add Admin Form State
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newAdmin, setNewAdmin] = useState({ full_name: '', email: '', password: '' });
+  const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -39,6 +44,45 @@ export default function UsersPage() {
     }
   }
 
+  async function handleSyncUsers() {
+    try {
+      const res = await fetch('http://localhost:3000/api/admin/sync-users', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message);
+        loadUsers();
+      } else {
+        alert("Sync failed: " + data.error);
+      }
+    } catch (e) {
+      alert("Error syncing users: " + e.message);
+    }
+  }
+
+  async function handleAddAdmin(e) {
+    e.preventDefault();
+    setFormLoading(true);
+    try {
+      const res = await fetch('http://localhost:3000/api/admin/create-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAdmin)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Admin created successfully!");
+        setShowAddForm(false);
+        setNewAdmin({ full_name: '', email: '', password: '' });
+        loadUsers();
+      } else {
+        alert("Failed to create admin: " + data.error);
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+    setFormLoading(false);
+  }
+
   const admins = users.filter(u => u.role === 'admin');
 
   return (
@@ -46,6 +90,38 @@ export default function UsersPage() {
       <Topbar title="Users & Admins" subtitle="Manage registered users and assign admin roles" />
       
       <div className="page-content">
+        <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+          <button className="btn btn-primary" onClick={() => setShowAddForm(!showAddForm)}>
+            {showAddForm ? 'Cancel' : '+ Add New Admin'}
+          </button>
+          <button className="btn btn-secondary" onClick={handleSyncUsers} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+            Sync Missing Users
+          </button>
+        </div>
+
+        {showAddForm && (
+          <div className="full-data-card" style={{ marginBottom: 32, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>Add New Admin</h3>
+            <form onSubmit={handleAddAdmin} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
+                <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Full Name</label>
+                <input required type="text" value={newAdmin.full_name} onChange={e => setNewAdmin({...newAdmin, full_name: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
+                <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Email</label>
+                <input required type="email" value={newAdmin.email} onChange={e => setNewAdmin({...newAdmin, email: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
+                <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Password (Min 6 chars)</label>
+                <input required type="password" minLength={6} value={newAdmin.password} onChange={e => setNewAdmin({...newAdmin, password: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
+              </div>
+              <button disabled={formLoading} type="submit" className="btn btn-primary" style={{ padding: '9px 24px', height: 38 }}>
+                {formLoading ? 'Creating...' : 'Create Admin'}
+              </button>
+            </form>
+          </div>
+        )}
+
         {loading ? (
           <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
         ) : (
