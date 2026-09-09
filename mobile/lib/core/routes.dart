@@ -10,6 +10,7 @@ import '../screens/customer/queue_screen.dart';
 import '../screens/customer/table_selection_screen.dart';
 import '../screens/customer/reservation_details_screen.dart';
 import '../screens/shared/profile_screen.dart';
+import '../screens/shared/main_shell.dart';
 
 class AppRoutes {
   static const splash = '/';
@@ -46,11 +47,9 @@ class AppRoutes {
       GoRoute(path: splash, builder: (context, state) => const SplashScreen()),
       GoRoute(path: login, builder: (context, state) => const LoginScreen()),
       GoRoute(path: register, builder: (context, state) => const RegisterScreen()),
-      GoRoute(path: home, builder: (context, state) => const HomeScreen()),
-      GoRoute(path: menu, builder: (context, state) => const MenuScreen()),
+      
+      // Screens that are NOT in the bottom navigation bar
       GoRoute(path: cart, builder: (context, state) => const CartScreen()),
-      GoRoute(path: queue, builder: (context, state) => const QueueScreen()),
-      GoRoute(path: tableSelection, builder: (context, state) => const TableSelectionScreen()),
       GoRoute(
         path: reservationDetails,
         builder: (context, state) {
@@ -64,7 +63,20 @@ class AppRoutes {
           );
         },
       ),
-      GoRoute(path: profile, builder: (context, state) => const ProfileScreen()),
+
+      // The Shell Route that provides the Bottom Navigation Bar
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainShell(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(routes: [GoRoute(path: home, builder: (context, state) => const HomeScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: menu, builder: (context, state) => const MenuScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: tableSelection, builder: (context, state) => const TableSelectionScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: queue, builder: (context, state) => const QueueScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: profile, builder: (context, state) => const ProfileScreen())]),
+        ],
+      ),
     ],
   );
 }
