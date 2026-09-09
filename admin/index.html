@@ -48,6 +48,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2"/><path d="M18 2c0 4.4-3.6 8-8 8"/></svg>
         Menu
       </div>
+      <div class="nav-section-label">Management</div>
+      <div class="nav-item" data-page="users" onclick="navigate('users', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Users & Admins
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div class="sidebar-footer-avatar">A</div>
@@ -106,6 +111,7 @@ function loadCurrentPage() {
     case 'orders': renderOrders(); break;
     case 'reservations': renderReservations(); break;
     case 'menu': renderMenu(); break;
+    case 'users': renderUsers(); break;
   }
 }
 
@@ -132,7 +138,7 @@ async function renderDashboard() {
     sb.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
     sb.from('orders').select('*', { count: 'exact', head: true }).in('status', ['pending', 'preparing']),
     sb.from('reservations').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
-    sb.from('profiles').select('*', { count: 'exact', head: true }),
+    sb.from('users').select('*', { count: 'exact', head: true }),
   ]);
 
   // Fetch recent orders
@@ -431,6 +437,78 @@ async function toggleMenuItem(id, current) {
   await sb.from('menu_items').update({ is_available: !current }).eq('id', id);
   renderMenu();
 }
+
+// ─────────── USERS & ADMINS ───────────
+async function renderUsers() {
+  document.getElementById('page-title').textContent = 'Users & Admins';
+  document.getElementById('page-subtitle').textContent = 'Manage registered users and assign admin roles';
+  document.getElementById('page-content').innerHTML = '<p style="color:var(--text-muted)">Loading...</p>';
+
+  const { data } = await sb.from('users').select('*').order('created_at', { ascending: false });
+
+  const admins = data?.filter(u => u.role === 'admin') || [];
+  const others = data?.filter(u => u.role !== 'admin') || [];
+
+  document.getElementById('page-content').innerHTML = `
+    <!-- Admins Section -->
+    <div style="margin-bottom: 32px">
+      <h3 style="margin-bottom: 16px; color: var(--text-primary)">Admin Profiles</h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+        ${admins.length ? admins.map(a => `
+          <div class="stat-card" style="display: flex; align-items: center; gap: 16px; padding: 20px;">
+            <div style="width: 48px; height: 48px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold;">
+              ${(a.full_name || 'A')[0].toUpperCase()}
+            </div>
+            <div style="flex: 1; overflow: hidden;">
+              <h4 style="margin: 0; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${a.full_name || 'Admin'}</h4>
+              <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 13px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">${a.email}</p>
+            </div>
+            ${badge('success', 'Admin')}
+          </div>
+        `).join('') : '<p style="color:var(--text-muted)">No admins found.</p>'}
+      </div>
+    </div>
+
+    <!-- All Users Section -->
+    <div class="full-data-card">
+      <div class="data-card-header">
+        <h3>All Registered Users (${data?.length ?? 0})</h3>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Joined</th><th>Role</th></tr></thead>
+        <tbody>
+          ${data?.length ? data.map(u => `
+            <tr>
+              <td style="color:var(--text-primary);font-weight:500">${u.full_name || '—'}</td>
+              <td>${u.email}</td>
+              <td>${u.phone_number || '—'}</td>
+              <td>${fmtTime(u.created_at)}</td>
+              <td>
+                <select class="role-select" onchange="updateUserRole('${u.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary);">
+                  <option value="customer" ${u.role === 'customer' ? 'selected' : ''}>Customer</option>
+                  <option value="staff" ${u.role === 'staff' ? 'selected' : ''}>Staff</option>
+                  <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                </select>
+              </td>
+            </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:32px">No users found</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+window.updateUserRole = async function(userId, newRole) {
+  // Try to update user role
+  const { error } = await sb.from('users').update({ role: newRole }).eq('id', userId);
+  
+  if (error) {
+    alert("Failed to update user role. Make sure you ran the SQL command to allow Admins to update users! Error: " + error.message);
+  } else {
+    // Re-render
+    renderUsers();
+  }
+}
+
 
 // ─────────── INIT ───────────
 renderDashboard();
