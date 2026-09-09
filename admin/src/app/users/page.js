@@ -148,7 +148,7 @@ export default function UsersPage() {
           <>
             {/* Admins Section */}
             <div style={{ marginBottom: 32 }}>
-              <h3 style={{ marginBottom: 16, color: 'var(--text-primary)' }}>Admin Profiles</h3>
+              <h3 style={{ marginBottom: 16, color: 'var(--text-primary)' }}>Admin Profiles ({admins.length})</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                 {admins.length > 0 ? admins.map(a => (
                   <div key={a.id} className="stat-card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20 }}>

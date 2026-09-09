@@ -16,24 +16,37 @@ function fmtTime(iso) {
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ queue: 0, orders: 0, reservations: 0, users: 0 });
+  const [stats, setStats] = useState({ queue: 0, orders: 0, reservations: 0, customers: 0, admins: 0 });
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentQueue, setRecentQueue] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
-      const [{ count: queueCount }, { count: orderCount }, { count: reservCount }, { count: userCount }] = await Promise.all([
+      const [
+        { count: queueCount }, 
+        { count: orderCount }, 
+        { count: reservCount }, 
+        { count: customerCount },
+        { count: adminCount }
+      ] = await Promise.all([
         supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
         supabase.from('orders').select('*', { count: 'exact', head: true }).in('status', ['pending', 'preparing']),
         supabase.from('reservations').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
-        supabase.from('users').select('*', { count: 'exact', head: true }),
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'customer'),
+        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
       ]);
 
       const { data: oData } = await supabase.from('orders').select('id, status, total_amount, created_at').order('created_at', { ascending: false }).limit(5);
       const { data: qData } = await supabase.from('queue_entries').select('id, party_size, status, created_at').order('created_at', { ascending: false }).limit(5);
 
-      setStats({ queue: queueCount || 0, orders: orderCount || 0, reservations: reservCount || 0, users: userCount || 0 });
+      setStats({ 
+        queue: queueCount || 0, 
+        orders: orderCount || 0, 
+        reservations: reservCount || 0, 
+        customers: customerCount || 0,
+        admins: adminCount || 0
+      });
       setRecentOrders(oData || []);
       setRecentQueue(qData || []);
       setLoading(false);
@@ -45,7 +58,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="stats-grid">
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
         <div className="stat-card">
           <div className="stat-card-header">
             <div className="stat-card-label">Waiting Queue</div>
@@ -72,11 +85,19 @@ export default function Dashboard() {
         </div>
         <div className="stat-card">
           <div className="stat-card-header">
-            <div className="stat-card-label">Total Users</div>
+            <div className="stat-card-label">Total Admins</div>
+            <div className="stat-card-icon" style={{ background: 'rgba(75, 192, 192, 0.15)' }}>🛡️</div>
+          </div>
+          <div className="stat-card-value">{stats.admins}</div>
+          <div className="stat-card-change">● Managers</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-header">
+            <div className="stat-card-label">Registered Customers</div>
             <div className="stat-card-icon" style={{ background: 'rgba(212,175,55,0.15)' }}>⭐</div>
           </div>
-          <div className="stat-card-value">{stats.users}</div>
-          <div className="stat-card-change">● Registered</div>
+          <div className="stat-card-value">{stats.customers}</div>
+          <div className="stat-card-change">● App Users</div>
         </div>
       </div>
 
