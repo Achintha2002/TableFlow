@@ -70,7 +70,7 @@ export default function OrdersPage() {
           {orders.length > 0 ? orders.map(o => (
             <tr key={o.id}>
               <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
-              <td>${(o.total_amount ?? 0).toFixed(2)}</td>
+              <td>LKR {(o.total_amount ?? 0).toFixed(2)}</td>
               <td>{badge(o.status === 'served' ? 'success' : o.status === 'preparing' ? 'info' : o.status === 'pending' ? 'warning' : 'muted', o.status)}</td>
               <td>{fmtTime(o.created_at)}</td>
               <td>

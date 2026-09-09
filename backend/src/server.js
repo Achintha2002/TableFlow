@@ -1,6 +1,7 @@
 // Backend server entry point
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 require('dotenv').config();
 
 const authMiddleware = require('./middleware/auth');
@@ -11,6 +12,49 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Set up Multer for memory storage
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Admin Image Upload
+app.post('/api/admin/upload-image', upload.single('image'), async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const fileBuffer = req.file.buffer;
+    const originalName = req.file.originalname;
+    const fileExt = originalName.split('.').pop();
+    const fileName = `${Date.now()}_${Math.round(Math.random() * 1000)}.${fileExt}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabaseAdmin.storage
+      .from('menu-images')
+      .upload(fileName, fileBuffer, {
+        contentType: req.file.mimetype,
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) throw error;
+
+    // Get public URL
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from('menu-images')
+      .getPublicUrl(fileName);
+
+    res.json({ url: publicUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Basic health check route
 app.get('/health', (req, res) => {
