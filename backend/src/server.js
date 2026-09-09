@@ -50,14 +50,18 @@ app.post('/api/admin/sync-users', async (req, res) => {
         // Insert into public.users
         const fullName = user.user_metadata?.full_name || 'User';
         const phone = user.user_metadata?.phone || '';
-        await supabaseAdmin.from('users').insert({
+        const { error: insertError } = await supabaseAdmin.from('users').insert({
           id: user.id,
           email: user.email,
           full_name: fullName,
           phone_number: phone,
           role: 'customer'
         });
-        synced++;
+        if (insertError) {
+          console.error("Failed to insert user:", user.email, insertError);
+        } else {
+          synced++;
+        }
       }
     }
     res.json({ message: `Successfully synced ${synced} missing users.` });
@@ -101,6 +105,28 @@ app.post('/api/admin/create-admin', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+app.delete('/api/admin/users/:id', async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
+    }
+
+    const userId = req.params.id;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    // Delete user from auth (this cascades to public.users because of ON DELETE CASCADE)
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    
+    if (error) throw error;
+
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

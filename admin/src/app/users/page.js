@@ -83,12 +83,32 @@ export default function UsersPage() {
     setFormLoading(false);
   }
 
+  async function handleDeleteUser(userId, userName) {
+    if (!confirm(`Are you sure you want to permanently delete user: ${userName || 'Unknown'}? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(`http://localhost:3000/api/admin/users/${userId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert("User deleted successfully!");
+        loadUsers();
+      } else {
+        alert("Failed to delete user: " + data.error);
+      }
+    } catch (e) {
+      alert("Error: " + e.message);
+    }
+  }
+
   const admins = users.filter(u => u.role === 'admin');
 
   return (
     <>
-      <Topbar title="Users & Admins" subtitle="Manage registered users and assign admin roles" />
-      
       <div className="page-content">
         <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
           <button className="btn btn-primary" onClick={() => setShowAddForm(!showAddForm)}>
@@ -164,6 +184,7 @@ export default function UsersPage() {
                     <th>Phone</th>
                     <th>Joined</th>
                     <th>Role</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -185,10 +206,19 @@ export default function UsersPage() {
                           <option value="admin">Admin</option>
                         </select>
                       </td>
+                      <td>
+                        <button 
+                          className="btn" 
+                          onClick={() => handleDeleteUser(u.id, u.full_name || u.email)}
+                          style={{ padding: '4px 12px', fontSize: 12, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                        >
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>
+                      <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>
                         No users found
                       </td>
                     </tr>
