@@ -1,0 +1,324 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+class SupabaseService {
+  static final SupabaseClient _client = Supabase.instance.client;
+
+  static SupabaseClient get client => _client;
+
+  /// Initialize Supabase — called once in main()
+  static Future<void> initialize() async {
+    await Supabase.initialize(
+      url: 'https://azjjndqecpemltvdbkvy.supabase.co',
+      publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6ampuZHFlY3BlbWx0dmRia3Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3OTA3ODEsImV4cCI6MjEwMjM2Njc4MX0.grBF4XJu0696MnrvKC-ZccppLGxPEM9KIHED8viZELc',
+    );
+    debugPrint('SupabaseService: Initialized');
+  }
+
+  // ─────────────────────────────────────────
+  // AUTH
+  // ─────────────────────────────────────────
+
+  /// Sign up with email and password
+  static Future<AuthResponse> signUp({
+    required String email,
+    required String password,
+    required String fullName,
+    required String phone,
+  }) async {
+    final response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {'full_name': fullName, 'phone': phone},
+    );
+
+    // The user record is automatically inserted into public.users via a Supabase trigger
+    // on the auth.users table (handle_new_user).
+
+    return response;
+  }
+
+  /// Sign in with email and password
+  static Future<AuthResponse> signIn({
+    required String email,
+    required String password,
+  }) async {
+    return await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+  }
+
+  /// Sign in with Google
+  static Future<AuthResponse?> signInWithGoogle() async {
+    // TODO: Replace with your actual Web Client ID from Google Cloud Console
+    const webClientId =
+        '878569392531-9uv232dv0r3h7n4aflmt3joncj5f43hs.apps.googleusercontent.com';
+    // TODO: Replace with your actual iOS Client ID from Google Cloud Console (if supporting iOS)
+    const iosClientId = 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
+
+    await GoogleSignIn.instance.initialize(
+      serverClientId: webClientId,
+      clientId: iosClientId,
+    );
+    final googleUser = await GoogleSignIn.instance.authenticate();
+    final googleAuth = googleUser.authentication;
+    final idToken = googleAuth.idToken;
+
+    if (idToken == null) {
+      throw 'No ID Token found.';
+    }
+
+    return _client.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+    );
+  }
+
+  /// Sign out
+  static Future<void> signOut() async {
+    await _client.auth.signOut();
+  }
+
+  /// Get current user
+  static User? get currentUser => _client.auth.currentUser;
+
+  // ─────────────────────────────────────────
+  // PROFILE & SETTINGS
+  // ─────────────────────────────────────────
+
+  /// Get current user profile
+  static Future<Map<String, dynamic>?> getUserProfile() async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('users')
+        .select()
+        .eq('id', userId)
+        .maybeSingle();
+    return response;
+  }
+
+  /// Get accessibility settings
+  static Future<Map<String, dynamic>?> getAccessibilitySettings() async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('accessibility_settings')
+        .select()
+        .eq('user_id', userId)
+        .maybeSingle();
+    return response;
+  }
+
+  /// Update user profile
+  static Future<void> updateUserProfile({
+    required String fullName,
+    required String phone,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+
+    await _client
+        .from('users')
+        .update({'full_name': fullName, 'phone_number': phone})
+        .eq('id', userId);
+  }
+
+  /// Update accessibility settings
+  static Future<void> updateAccessibilitySettings({
+    required bool highContrast,
+    required String fontSize,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('accessibility_settings').upsert({
+      'user_id': userId,
+      'high_contrast': highContrast,
+      'font_size': fontSize,
+    });
+  }
+
+  // ─────────────────────────────────────────
+  // QUEUE — Real-time
+  // ─────────────────────────────────────────
+
+  /// Join the waitlist queue
+  static Future<Map<String, dynamic>?> joinQueue({
+    required String restaurantId,
+    required int partySize,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('queue_entries')
+        .insert({
+          'user_id': userId,
+          'restaurant_id': restaurantId,
+          'party_size': partySize,
+          'status': 'waiting',
+        })
+        .select()
+        .single();
+    return response;
+  }
+
+  /// Leave the queue
+  static Future<void> leaveQueue(String queueEntryId) async {
+    await _client
+        .from('queue_entries')
+        .update({'status': 'cancelled'})
+        .eq('id', queueEntryId);
+  }
+
+  /// Subscribe to live queue position updates for a user
+  static RealtimeChannel subscribeToQueue({
+    required String userId,
+    required void Function(Map<String, dynamic> payload) onUpdate,
+  }) {
+    return _client
+        .channel('queue_updates_$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'queue_entries',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (payload) => onUpdate(payload.newRecord),
+        )
+        .subscribe();
+  }
+
+  // ─────────────────────────────────────────
+  // ORDERS — Real-time
+  // ─────────────────────────────────────────
+
+  /// Place a pre-order
+  static Future<Map<String, dynamic>?> placeOrder({
+    required String tableId,
+    required List<Map<String, dynamic>> items,
+    required double totalAmount,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('orders')
+        .insert({
+          'user_id': userId,
+          'table_id': tableId,
+          'items': items,
+          'total_amount': totalAmount,
+          'status': 'pending',
+        })
+        .select()
+        .single();
+    return response;
+  }
+
+  /// Subscribe to live order status updates
+  static RealtimeChannel subscribeToOrder({
+    required String orderId,
+    required void Function(String status) onStatusChange,
+  }) {
+    return _client
+        .channel('order_status_$orderId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: orderId,
+          ),
+          callback: (payload) {
+            final newStatus = payload.newRecord['status'] as String?;
+            if (newStatus != null) onStatusChange(newStatus);
+          },
+        )
+        .subscribe();
+  }
+
+  // ─────────────────────────────────────────
+  // RESERVATIONS
+  // ─────────────────────────────────────────
+
+  /// Book a table reservation
+  static Future<Map<String, dynamic>?> createReservation({
+    required String tableId,
+    required String restaurantId,
+    required DateTime reservationTime,
+    required int partySize,
+    String? specialRequests,
+  }) async {
+    final userId = currentUser?.id;
+    if (userId == null) return null;
+
+    final response = await _client
+        .from('reservations')
+        .insert({
+          'user_id': userId,
+          'table_id': tableId,
+          'restaurant_id': restaurantId,
+          'reservation_time': reservationTime.toIso8601String(),
+          'party_size': partySize,
+          'status': 'confirmed',
+          'special_requests': specialRequests,
+        })
+        .select()
+        .single();
+    return response;
+  }
+
+  /// Get user's reservations
+  static Future<List<Map<String, dynamic>>> getUserReservations() async {
+    final userId = currentUser?.id;
+    if (userId == null) return [];
+
+    final response = await _client
+        .from('reservations')
+        .select()
+        .eq('user_id', userId)
+        .order('reservation_time', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────
+  // MENU
+  // ─────────────────────────────────────────
+
+  /// Get all available menu items
+  static Future<List<Map<String, dynamic>>> getMenuItems() async {
+    final response = await _client
+        .from('menu_items')
+        .select()
+        .eq('is_available', true)
+        .order('category');
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // ─────────────────────────────────────────
+  // TABLES
+  // ─────────────────────────────────────────
+
+  /// Get all restaurant tables
+  static Future<List<Map<String, dynamic>>> getTables() async {
+    final response = await _client
+        .from('restaurant_tables')
+        .select('*, table_categories(name)')
+        .order('table_number');
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+}
