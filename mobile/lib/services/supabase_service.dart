@@ -59,9 +59,10 @@ class SupabaseService {
     const iosClientId = 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
 
     await GoogleSignIn.instance.initialize(
+      clientId: kIsWeb ? webClientId : iosClientId,
       serverClientId: webClientId,
-      clientId: iosClientId,
     );
+
     final googleUser = await GoogleSignIn.instance.authenticate();
     final googleAuth = googleUser.authentication;
     final idToken = googleAuth.idToken;
