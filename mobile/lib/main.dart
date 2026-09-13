@@ -4,6 +4,7 @@ import 'providers/cart_provider.dart';
 import 'core/theme.dart';
 import 'core/routes.dart';
 import 'services/supabase_service.dart';
+import 'widgets/notification_wrapper.dart';
 
 import 'providers/settings_provider.dart';
 
@@ -38,7 +39,7 @@ class TableFlowApp extends StatelessWidget {
                 data: MediaQuery.of(context).copyWith(
                   textScaler: TextScaler.linear(scale),
                 ),
-                child: child!,
+                child: NotificationWrapper(child: child!),
               );
             },
             routerConfig: AppRoutes.router,
