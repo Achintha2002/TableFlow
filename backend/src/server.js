@@ -163,10 +163,10 @@ app.get('/api/admin/my-role', async (req, res) => {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
     
-    const { data: userRecord, error: dbError } = await supabaseAdmin.from('users').select('role').eq('id', user.id).single();
+    const { data: userRecord, error: dbError } = await supabaseAdmin.from('users').select('role, full_name').eq('id', user.id).single();
     if (dbError) throw dbError;
     
-    res.json({ role: userRecord.role });
+    res.json({ role: userRecord.role, full_name: userRecord.full_name, email: user.email });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

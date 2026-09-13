@@ -6,49 +6,61 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-export async function GET() {
+export async function GET(request) {
   try {
-    // 1. Fetch orders for the last 7 days to calculate daily revenue
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
+    const { searchParams } = new URL(request.url);
+    const startDateParam = searchParams.get('startDate');
+    const endDateParam = searchParams.get('endDate');
+
+    let startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+    if (startDateParam) startDate = new Date(startDateParam);
+
+    let endDate = new Date();
+    if (endDateParam) {
+      endDate = new Date(endDateParam);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
-      .select('created_at, total_amount')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .in('status', ['served', 'ready', 'pending', 'preparing']); // include all active for demo purposes
+      .select('created_at, total_amount, status')
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString());
 
     if (ordersError) throw ordersError;
 
     // Aggregate revenue by date
     const revenueByDay = {};
-    // Initialize last 7 days with 0
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      revenueByDay[dateStr] = 0;
-    }
+    const statusCounts = {};
 
     orders.forEach(o => {
+      // Revenue
       const dateStr = o.created_at.split('T')[0];
-      if (revenueByDay[dateStr] !== undefined) {
+      if (!revenueByDay[dateStr]) revenueByDay[dateStr] = 0;
+      if (['served', 'ready', 'pending', 'preparing'].includes(o.status)) {
         revenueByDay[dateStr] += Number(o.total_amount);
       }
+
+      // Status
+      statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
     });
 
     const revenueData = Object.keys(revenueByDay).map(date => ({
-      date: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+      date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       revenue: revenueByDay[date]
-    }));
+    })).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    // 2. Fetch popular items
+    // 2. Fetch popular items for this date range
     const { data: orderItems, error: itemsError } = await supabase
       .from('order_items')
       .select(`
         quantity,
+        orders!inner(created_at),
         menu_items ( name )
-      `);
+      `)
+      .gte('orders.created_at', startDate.toISOString())
+      .lte('orders.created_at', endDate.toISOString());
       
     if (itemsError) throw itemsError;
 
@@ -61,11 +73,20 @@ export async function GET() {
     const popularItemsData = Object.keys(itemCounts)
       .map(name => ({ name, count: itemCounts[name] }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5); // top 5
+      .slice(0, 10); // top 10
+
+    // Provide raw orders for CSV export
+    const rawOrders = orders.map(o => ({
+      date: o.created_at,
+      amount: o.total_amount,
+      status: o.status
+    }));
 
     return NextResponse.json({
       revenue: revenueData,
-      popularItems: popularItemsData
+      popularItems: popularItemsData,
+      statusCounts,
+      rawOrders
     });
   } catch (error) {
     console.error('Analytics Error:', error);

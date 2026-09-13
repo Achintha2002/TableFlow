@@ -15,20 +15,27 @@ export default function Sidebar() {
     async function loadProfile() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        const { data: userRecord } = await supabase.from('users').select('full_name, role').eq('id', session.user.id).single();
-        if (userRecord) {
-          const roleLabels = {
-            'admin': 'Administrator',
-            'manager': 'Manager',
-            'cashier': 'Cashier',
-            'kitchen': 'Kitchen Staff',
-            'staff': 'Staff Member'
-          };
-          setProfile({
-            name: userRecord.full_name || session.user.email.split('@')[0],
-            role: roleLabels[userRecord.role] || 'Staff',
-            rawRole: userRecord.role
+        try {
+          const res = await fetch('http://localhost:3000/api/admin/my-role', {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
           });
+          if (res.ok) {
+            const data = await res.json();
+            const roleLabels = {
+              'admin': 'Administrator',
+              'manager': 'Manager',
+              'cashier': 'Cashier',
+              'kitchen': 'Kitchen Staff',
+              'staff': 'Staff Member'
+            };
+            setProfile({
+              name: data.full_name || data.email.split('@')[0],
+              role: roleLabels[data.role] || 'Staff',
+              rawRole: data.role
+            });
+          }
+        } catch (e) {
+          console.error("Failed to load profile in sidebar", e);
         }
       }
     }
@@ -107,6 +114,13 @@ export default function Sidebar() {
               Menu
             </Link>
           </>
+        )}
+        
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
+          <Link href="/reports" className={`nav-item ${isActive('/reports')}`}>
+            <Grid size={20} />
+            Reports & Analytics
+          </Link>
         )}
         
         {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
