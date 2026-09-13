@@ -59,6 +59,9 @@ class SupabaseService {
       await _client.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: '${Uri.base.origin}/',
+        queryParams: {
+          'prompt': 'select_account',
+        },
       );
       // The browser will redirect to Google and then back to the app, so we return null.
       return null;
