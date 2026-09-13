@@ -1,0 +1,1 @@
+-- We can execute arbitrary SQL on Supabase using the REST API if we create an RPC. But we don't have one that returns generic query results.
