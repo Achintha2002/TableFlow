@@ -179,12 +179,17 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                       width: 400,
                       height: 500,
                       decoration: BoxDecoration(
-                        color: AppTheme.white.withValues(alpha: 0.5),
+                        color: AppTheme.secondary.withValues(alpha: 0.03), // Subtle contrast against white tables
                         borderRadius: BorderRadius.circular(32),
-                        border: Border.all(color: AppTheme.white, width: 2),
+                        border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.1), width: 1),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.secondary.withValues(alpha: 0.05),
+                            color: AppTheme.white.withValues(alpha: 0.8),
+                            blurRadius: 20,
+                            spreadRadius: -5,
+                          ),
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: 0.05),
                             blurRadius: 30,
                             offset: const Offset(0, 15),
                           ),
@@ -331,30 +336,65 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             }
           },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutQuart,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.elasticOut,
+            transform: isSelected ? Matrix4.diagonal3Values(1.05, 1.05, 1.0) : Matrix4.identity(),
+            transformAlignment: Alignment.center,
             decoration: BoxDecoration(
-              color: bgColor,
+              gradient: isSelected 
+                  ? LinearGradient(
+                      colors: [AppTheme.primary, AppTheme.primary.withValues(alpha: 0.8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : !isAvailable
+                      ? LinearGradient(
+                          colors: [Colors.grey.shade300, Colors.grey.shade400],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : const LinearGradient(
+                          colors: [Colors.white, Color(0xFFFAFAFA)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
               borderRadius: BorderRadius.circular(isSelected ? 24 : 16),
               border: Border.all(
-                color: isSelected ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.1),
-                width: isSelected ? 0 : 1,
+                color: isSelected 
+                    ? Colors.transparent 
+                    : (isAvailable ? AppTheme.primary.withValues(alpha: 0.3) : Colors.transparent),
+                width: isSelected ? 0 : 1.5,
               ),
               boxShadow: isSelected 
                   ? [
                       BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.4),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
+                        color: AppTheme.primary.withValues(alpha: 0.6),
+                        blurRadius: 25,
+                        offset: const Offset(0, 12),
+                        spreadRadius: 2,
                       )
                     ]
                   : !isAvailable 
-                      ? []
+                      ? [
+                          // Inset-like look for booked
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
                       : [
                           BoxShadow(
-                            color: AppTheme.secondary.withValues(alpha: 0.05),
+                            color: AppTheme.secondary.withValues(alpha: 0.12),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                            spreadRadius: -2,
+                          ),
+                          BoxShadow(
+                            color: Colors.white,
                             blurRadius: 10,
-                            offset: const Offset(0, 4),
+                            spreadRadius: 2,
+                            offset: const Offset(-2, -2),
                           )
                         ],
             ),
