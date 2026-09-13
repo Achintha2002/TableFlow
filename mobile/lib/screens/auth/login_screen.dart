@@ -43,8 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
-    } catch (e) {
-      setState(() => _errorMessage = 'Google Sign In failed or was canceled.');
+    } catch (e, stacktrace) {
+      print('Google Sign In Error: $e');
+      print('Stacktrace: $stacktrace');
+      setState(() => _errorMessage = 'Google Sign In Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
