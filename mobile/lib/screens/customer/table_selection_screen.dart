@@ -34,8 +34,8 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           _tables = data.map((t) => {
             'id': 'T${t['table_number']}',
             'dbId': t['id'],
-            'x': (t['x_coordinate'] ?? 0.0) as double,
-            'y': (t['y_coordinate'] ?? 0.0) as double,
+            'x': 0.0, // Will be calculated below
+            'y': 0.0, // Will be calculated below
             'w': 80.0,
             'h': 80.0,
             'isAvailable': t['status'] == 'available',
@@ -43,9 +43,33 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             'isVIP': t['table_categories']?['name'] == 'VIP Lounge',
           }).toList();
           
-          for (var table in _tables) {
+          // Neatly arrange tables in a grid instead of using messy DB coordinates
+          int cols = 2;
+          double startY = 40.0;
+          double gapY = 130.0;
+          double containerWidth = 400.0;
+
+          for (int i = 0; i < _tables.length; i++) {
+            var table = _tables[i];
+            
             if (table['seats'] >= 6) table['w'] = 120.0;
             if (table['seats'] >= 8) table['w'] = 180.0;
+
+            int row = i ~/ cols;
+            int col = i % cols;
+            
+            // Center the last item if it's the only one on its row
+            if (i == _tables.length - 1 && _tables.length % 2 != 0) {
+              table['x'] = (containerWidth - table['w']) / 2;
+            } else {
+              if (col == 0) {
+                table['x'] = 60.0;
+              } else {
+                table['x'] = containerWidth - 60.0 - table['w'];
+              }
+            }
+            
+            table['y'] = startY + (row * gapY);
           }
           _isLoading = false;
         });
