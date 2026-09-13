@@ -78,17 +78,27 @@ export default function OrdersPage() {
               <td>{badge(o.status === 'served' ? 'success' : o.status === 'preparing' ? 'info' : o.status === 'pending' ? 'warning' : 'muted', o.status)}</td>
               <td>{fmtTime(o.created_at)}</td>
               <td>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {o.status === 'pending' && (
-                    <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => updateStatus(o.id, 'preparing')}>Prep</button>
-                  )}
-                  {o.status === 'preparing' && (
-                    <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => updateStatus(o.id, 'ready')}>Ready</button>
-                  )}
-                  {o.status === 'ready' && (
-                    <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px', background: 'var(--success-green)' }} onClick={() => updateStatus(o.id, 'served')}>Serve</button>
-                  )}
-                </div>
+                <select 
+                  className="status-dropdown" 
+                  value={o.status}
+                  onChange={(e) => updateStatus(o.id, e.target.value)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-light)',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="pending" style={{ color: '#000' }}>Pending</option>
+                  <option value="preparing" style={{ color: '#000' }}>Preparing</option>
+                  <option value="ready" style={{ color: '#000' }}>Ready</option>
+                  <option value="served" style={{ color: '#000' }}>Served</option>
+                  <option value="cancelled" style={{ color: '#000' }}>Cancelled</option>
+                </select>
               </td>
             </tr>
           )) : <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No orders found</td></tr>}
