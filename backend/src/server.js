@@ -171,6 +171,19 @@ app.get('/api/admin/my-role', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
+    }
+    const { data, error } = await supabaseAdmin.from('users').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 app.delete('/api/admin/users/:id', async (req, res) => {
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {

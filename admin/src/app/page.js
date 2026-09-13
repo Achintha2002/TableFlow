@@ -32,17 +32,18 @@ export default function Dashboard() {
         { count: queueCount }, 
         { count: orderCount }, 
         { count: reservCount }, 
-        { count: customerCount },
-        { count: adminCount },
+        usersRes,
         analyticsRes
       ] = await Promise.all([
         supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
         supabase.from('orders').select('*', { count: 'exact', head: true }).in('status', ['pending', 'preparing']),
         supabase.from('reservations').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'customer'),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
+        fetch('http://localhost:3000/api/admin/users').then(res => res.json()).catch(() => []),
         fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] }))
       ]);
+
+      const customerCount = usersRes.filter(u => u.role === 'customer').length;
+      const adminCount = usersRes.filter(u => u.role === 'admin').length;
 
       const { data: oData } = await supabase.from('orders').select('id, status, total_amount, created_at').order('created_at', { ascending: false }).limit(5);
       const { data: qData } = await supabase.from('queue_entries').select('id, pax, status, joined_at').order('joined_at', { ascending: false }).limit(5);

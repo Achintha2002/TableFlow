@@ -30,8 +30,15 @@ export default function UsersPage() {
 
   async function loadUsers() {
     setLoading(true);
-    const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false });
-    setUsers(data || []);
+    try {
+      const res = await fetch('http://localhost:3000/api/admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data || []);
+      }
+    } catch (error) {
+      console.error(error);
+    }
     setLoading(false);
   }
 
