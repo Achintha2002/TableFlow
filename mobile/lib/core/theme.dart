@@ -115,4 +115,114 @@ class AppTheme {
       ),
     );
   }
+
+  // The High Contrast Theme
+  static ThemeData get highContrastTheme {
+    return ThemeData(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: Colors.white, // Pure white background
+      primaryColor: const Color(0xFF8B4513), // Saddle brown (darker)
+      colorScheme: const ColorScheme.light(
+        primary: Color(0xFF8B4513),
+        secondary: Colors.black, // Pure black for highest contrast
+        tertiary: Color(0xFF8B6508), // Dark goldenrod
+        surface: Colors.white,
+      ),
+      
+      // Typography
+      textTheme: TextTheme(
+        displayLarge: GoogleFonts.playfairDisplay(
+          fontSize: 32,
+          fontWeight: FontWeight.w900,
+          color: Colors.black,
+        ),
+        displayMedium: GoogleFonts.playfairDisplay(
+          fontSize: 28,
+          fontWeight: FontWeight.w800,
+          color: Colors.black,
+        ),
+        titleLarge: GoogleFonts.inter(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: Colors.black,
+        ),
+        bodyLarge: GoogleFonts.inter(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Colors.black,
+        ),
+        bodyMedium: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
+        labelLarge: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
+          color: Colors.black,
+        ),
+      ),
+
+      // App Bar
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.white,
+        elevation: 1, // Add shadow for contrast
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black, size: 28),
+        titleTextStyle: GoogleFonts.playfairDisplay(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: Colors.black,
+        ),
+      ),
+
+      // Elevated Button (Primary)
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4), // Sharper edges
+            side: const BorderSide(color: Colors.black, width: 2),
+          ),
+          textStyle: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ),
+
+      // Outlined Button (Secondary)
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.black,
+          side: const BorderSide(color: Colors.black, width: 3),
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+          ),
+          textStyle: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
+          ),
+        ),
+      ),
+
+      // Text Button
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: const Color(0xFF0000EE), // Classic blue link color for high contrast
+          textStyle: GoogleFonts.inter(
+            fontWeight: FontWeight.w800,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      ),
+    );
+  }
 }

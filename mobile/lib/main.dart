@@ -5,6 +5,8 @@ import 'core/theme.dart';
 import 'core/routes.dart';
 import 'services/supabase_service.dart';
 
+import 'providers/settings_provider.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -22,12 +24,26 @@ class TableFlowApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
-      child: MaterialApp.router(
-        title: 'TableFlow',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        routerConfig: AppRoutes.router,
+      child: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          return MaterialApp.router(
+            title: 'TableFlow',
+            debugShowCheckedModeBanner: false,
+            theme: settings.isHighContrast ? AppTheme.highContrastTheme : AppTheme.lightTheme,
+            builder: (context, child) {
+              final scale = settings.isLargeFont ? 1.3 : 1.0;
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                ),
+                child: child!,
+              );
+            },
+            routerConfig: AppRoutes.router,
+          );
+        },
       ),
     );
   }

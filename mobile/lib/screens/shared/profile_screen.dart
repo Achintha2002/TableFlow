@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 import '../../services/api_service.dart';
+import 'package:provider/provider.dart';
+import '../../providers/settings_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,8 +20,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _phone = '';
   String _loyaltyTier = 'Bronze';
   
-  bool _highContrast = false;
-  bool _largeFont = false;
   bool _promoEmails = true;
 
   @override
@@ -40,11 +40,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _phone = profile?['phone_number'] ?? '';
           _loyaltyTier = profile?['loyalty_tier'] ?? 'Bronze';
           
-          if (settings != null) {
-            _highContrast = settings['high_contrast'] ?? false;
-            _largeFont = settings['font_size'] == 'large';
-          }
-          
           _isLoading = false;
         });
       }
@@ -54,21 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _updateSettings() async {
-    try {
-      await SupabaseService.updateAccessibilitySettings(
-        highContrast: _highContrast,
-        fontSize: _largeFont ? 'large' : 'medium',
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Preferences saved successfully')),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error updating settings: $e');
-    }
-  }
 
   void _showEditProfileDialog() {
     final nameController = TextEditingController(text: _fullName);
@@ -278,26 +258,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 16),
                 _buildSettingsCard(
                   children: [
-                    _buildSwitchTile(
-                      icon: Icons.contrast,
-                      title: 'High Contrast Mode',
-                      subtitle: 'Enhances visibility across the app.',
-                      value: _highContrast,
-                      onChanged: (val) {
-                        setState(() => _highContrast = val);
-                        _updateSettings();
-                      },
+                    Consumer<SettingsProvider>(
+                      builder: (context, settings, _) {
+                        return _buildSwitchTile(
+                          icon: Icons.contrast,
+                          title: 'High Contrast Mode',
+                          subtitle: 'Enhances visibility across the app.',
+                          value: settings.isHighContrast,
+                          onChanged: (val) {
+                            settings.updateSettings(
+                              highContrast: val,
+                              largeFont: settings.isLargeFont,
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Preferences saved successfully')),
+                            );
+                          },
+                        );
+                      }
                     ),
                     const Divider(height: 1),
-                    _buildSwitchTile(
-                      icon: Icons.format_size,
-                      title: 'Large Font',
-                      subtitle: 'Increases text size throughout.',
-                      value: _largeFont,
-                      onChanged: (val) {
-                        setState(() => _largeFont = val);
-                        _updateSettings();
-                      },
+                    Consumer<SettingsProvider>(
+                      builder: (context, settings, _) {
+                        return _buildSwitchTile(
+                          icon: Icons.format_size,
+                          title: 'Large Font',
+                          subtitle: 'Increases text size throughout.',
+                          value: settings.isLargeFont,
+                          onChanged: (val) {
+                            settings.updateSettings(
+                              highContrast: settings.isHighContrast,
+                              largeFont: val,
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Preferences saved successfully')),
+                            );
+                          },
+                        );
+                      }
                     ),
                   ],
                 ),
