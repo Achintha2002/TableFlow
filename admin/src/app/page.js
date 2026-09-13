@@ -2,6 +2,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import Link from 'next/link';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  BarChart, Bar
+} from 'recharts';
 
 function badge(type, text) {
   return <span className={`badge badge-${type}`}>{text}</span>;
@@ -19,6 +23,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ queue: 0, orders: 0, reservations: 0, customers: 0, admins: 0 });
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentQueue, setRecentQueue] = useState([]);
+  const [analytics, setAnalytics] = useState({ revenue: [], popularItems: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,13 +33,15 @@ export default function Dashboard() {
         { count: orderCount }, 
         { count: reservCount }, 
         { count: customerCount },
-        { count: adminCount }
+        { count: adminCount },
+        analyticsRes
       ] = await Promise.all([
         supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
         supabase.from('orders').select('*', { count: 'exact', head: true }).in('status', ['pending', 'preparing']),
         supabase.from('reservations').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'customer'),
         supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
+        fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] }))
       ]);
 
       const { data: oData } = await supabase.from('orders').select('id, status, total_amount, created_at').order('created_at', { ascending: false }).limit(5);
@@ -49,6 +56,7 @@ export default function Dashboard() {
       });
       setRecentOrders(oData || []);
       setRecentQueue(qData || []);
+      setAnalytics(analyticsRes);
       setLoading(false);
     }
     loadData();
@@ -101,7 +109,56 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="data-grid">
+      <div className="data-grid" style={{ marginTop: '24px' }}>
+        <div className="data-card">
+          <div className="data-card-header">
+            <h3>Revenue (Last 7 Days)</h3>
+          </div>
+          <div style={{ height: '300px', width: '100%', padding: '16px 0' }}>
+            {analytics.revenue && analytics.revenue.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analytics.revenue}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                  <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `LKR ${val}`} />
+                  <RechartsTooltip 
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                    itemStyle={{ color: 'var(--primary-gold)' }}
+                  />
+                  <Line type="monotone" dataKey="revenue" stroke="var(--primary-gold)" strokeWidth={3} dot={{ r: 4, fill: 'var(--primary-gold)' }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>No revenue data</div>
+            )}
+          </div>
+        </div>
+        <div className="data-card">
+          <div className="data-card-header">
+            <h3>Popular Items</h3>
+          </div>
+          <div style={{ height: '300px', width: '100%', padding: '16px 0' }}>
+            {analytics.popularItems && analytics.popularItems.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.popularItems} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                  <XAxis type="number" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis dataKey="name" type="category" stroke="var(--text-light)" fontSize={12} tickLine={false} axisLine={false} width={100} />
+                  <RechartsTooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                  />
+                  <Bar dataKey="count" fill="var(--primary-gold)" radius={[0, 4, 4, 0]} barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>No items data</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="data-grid" style={{ marginTop: '24px' }}>
         <div className="data-card">
           <div className="data-card-header">
             <h3>Recent Orders</h3>

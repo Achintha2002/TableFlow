@@ -19,7 +19,8 @@ export default function Sidebar() {
         if (userRecord) {
           setProfile({
             name: userRecord.full_name || session.user.email.split('@')[0],
-            role: userRecord.role === 'admin' ? 'Administrator' : 'Staff Member'
+            role: userRecord.role === 'admin' ? 'Administrator' : userRecord.role === 'kitchen' ? 'Kitchen Staff' : 'Staff Member',
+            rawRole: userRecord.role
           });
         }
       }
@@ -41,38 +42,65 @@ export default function Sidebar() {
         <p>Admin Console</p>
       </div>
       <nav className="sidebar-nav">
-        <div className="nav-section-label">Overview</div>
-        <Link href="/" className={`nav-item ${isActive('/')}`}>
-          <LayoutDashboard size={20} />
-          Dashboard
-        </Link>
+        {profile.rawRole !== 'kitchen' && (
+          <>
+            <div className="nav-section-label">Overview</div>
+            <Link href="/" className={`nav-item ${isActive('/')}`}>
+              <LayoutDashboard size={20} />
+              Dashboard
+            </Link>
+          </>
+        )}
+        
+        {profile.rawRole === 'kitchen' && (
+          <>
+            <div className="nav-section-label">Kitchen Display</div>
+            <Link href="/kds" className={`nav-item ${isActive('/kds')}`}>
+              <LayoutDashboard size={20} />
+              KDS Screen
+            </Link>
+          </>
+        )}
+
         <div className="nav-section-label">Live</div>
-        <Link href="/queue" className={`nav-item ${isActive('/queue')}`}>
-          <Users size={20} />
-          Live Queue
-        </Link>
-        <Link href="/tables" className={`nav-item ${isActive('/tables')}`}>
-          <Grid size={20} />
-          Tables & Floor
-        </Link>
+        {profile.rawRole !== 'kitchen' && (
+          <Link href="/queue" className={`nav-item ${isActive('/queue')}`}>
+            <Users size={20} />
+            Live Queue
+          </Link>
+        )}
+        {profile.rawRole !== 'kitchen' && (
+          <Link href="/tables" className={`nav-item ${isActive('/tables')}`}>
+            <Grid size={20} />
+            Tables & Floor
+          </Link>
+        )}
         <div className="nav-section-label">Operations</div>
         <Link href="/orders" className={`nav-item ${isActive('/orders')}`}>
           <Receipt size={20} />
           Orders
         </Link>
-        <Link href="/reservations" className={`nav-item ${isActive('/reservations')}`}>
-          <CalendarDays size={20} />
-          Reservations
-        </Link>
-        <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
-          <UtensilsCrossed size={20} />
-          Menu
-        </Link>
-        <div className="nav-section-label">Management</div>
-        <Link href="/users" className={`nav-item ${isActive('/users')}`}>
-          <ShieldCheck size={20} />
-          Users & Admins
-        </Link>
+        {profile.rawRole !== 'kitchen' && (
+          <Link href="/reservations" className={`nav-item ${isActive('/reservations')}`}>
+            <CalendarDays size={20} />
+            Reservations
+          </Link>
+        )}
+        {profile.rawRole !== 'kitchen' && (
+          <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
+            <UtensilsCrossed size={20} />
+            Menu
+          </Link>
+        )}
+        {profile.rawRole !== 'kitchen' && (
+          <>
+            <div className="nav-section-label">Management</div>
+            <Link href="/users" className={`nav-item ${isActive('/users')}`}>
+              <ShieldCheck size={20} />
+              Users & Admins
+            </Link>
+          </>
+        )}
       </nav>
       <div className="sidebar-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
