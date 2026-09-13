@@ -22,7 +22,7 @@ export default function QueuePage() {
     const { data: qData } = await supabase
       .from('queue_entries')
       .select('*')
-      .order('created_at', { ascending: true });
+      .order('joined_at', { ascending: true });
     setData(qData || []);
     setLoading(false);
   }
@@ -56,9 +56,9 @@ export default function QueuePage() {
             <tr key={q.id}>
               <td style={{ color: 'var(--text-muted)' }}>{i+1}</td>
               <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{q.id.slice(0,8)}</td>
-              <td>👥 {q.party_size} people</td>
+              <td>👥 {q.pax} people</td>
               <td>{badge(q.status === 'seated' ? 'success' : q.status === 'waiting' ? 'warning' : 'muted', q.status)}</td>
-              <td>{fmtTime(q.created_at)}</td>
+              <td>{fmtTime(q.joined_at)}</td>
               <td>
                 {q.status === 'waiting' && (
                   <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => seatQueue(q.id)}>

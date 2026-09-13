@@ -36,12 +36,22 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
+    
+    // Attempt Supabase Realtime (requires replication enabled in DB)
     const channel = supabase.channel('admin_orders').on('postgres_changes', 
       { event: '*', schema: 'public', table: 'orders' }, 
       () => { fetchOrders(); }
     ).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Fallback: Poll every 3 seconds to guarantee real-time updates
+    const intervalId = setInterval(() => {
+      fetchOrders();
+    }, 3000);
+
+    return () => { 
+      supabase.removeChannel(channel); 
+      clearInterval(intervalId);
+    };
   }, []);
 
   async function updateStatus(id, newStatus) {

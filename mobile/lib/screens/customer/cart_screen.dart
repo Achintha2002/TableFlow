@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
@@ -14,6 +15,60 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   String _orderStatus = 'none';
+  String? _activeOrderId;
+  StreamSubscription? _orderSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActiveOrder();
+  }
+
+  @override
+  void dispose() {
+    _orderSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkActiveOrder() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('orders')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .inFilter('status', ['pending', 'preparing', 'ready'])
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+          
+      if (data != null && mounted) {
+        setState(() {
+          _activeOrderId = data['id'];
+          _orderStatus = data['status'];
+        });
+        _listenToOrder(data['id']);
+      }
+    } catch (e) {
+      debugPrint('Error checking active order: $e');
+    }
+  }
+
+  void _listenToOrder(String orderId) {
+    _orderSub?.cancel();
+    _orderSub = Supabase.instance.client
+        .from('orders')
+        .stream(primaryKey: ['id'])
+        .eq('id', orderId)
+        .listen((data) {
+      if (data.isNotEmpty && mounted) {
+        setState(() {
+          _orderStatus = data.first['status'];
+        });
+      }
+    });
+  }
 
   void _submitOrder() async {
     setState(() {
@@ -43,7 +98,7 @@ class _CartScreenState extends State<CartScreen> {
           .select('id')
           .eq('user_id', user.id)
           .eq('status', 'waiting')
-          .order('created_at', ascending: false)
+          .order('joined_at', ascending: false)
           .limit(1);
 
       if (resData.isEmpty && queueData.isEmpty) {
@@ -68,10 +123,11 @@ class _CartScreenState extends State<CartScreen> {
       }).select().single();
 
       final orderId = orderResponse['id'];
+      _activeOrderId = orderId;
 
       final orderItems = cart.itemsList.map((item) => {
         'order_id': orderId,
-        'menu_item_id': item.id,
+        'menu_item_id': int.tryParse(item.id) ?? item.id,
         'quantity': item.quantity,
         'unit_price': item.price,
       }).toList();
@@ -87,12 +143,13 @@ class _CartScreenState extends State<CartScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
+        _listenToOrder(orderId);
       }
     } catch (e) {
       debugPrint('Error submitting order: $e');
       if (mounted) {
         setState(() => _orderStatus = 'none');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to submit order.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     }
   }

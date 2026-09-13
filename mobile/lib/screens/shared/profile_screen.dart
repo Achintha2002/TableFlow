@@ -299,23 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           );
                         }
                       ),
-                      const Divider(height: 1, indent: 64),
-                      Consumer<SettingsProvider>(
-                        builder: (context, settings, _) {
-                          return _buildSwitchTile(
-                            icon: Icons.format_size,
-                            title: 'Large Font',
-                            subtitle: 'Increases text size throughout.',
-                            value: settings.isLargeFont,
-                            onChanged: (val) {
-                              settings.updateSettings(
-                                highContrast: settings.isHighContrast,
-                                largeFont: val,
-                              );
-                            },
-                          );
-                        }
-                      ),
+
                     ],
                   ),
                   const SizedBox(height: 32),

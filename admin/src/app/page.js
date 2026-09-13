@@ -38,7 +38,7 @@ export default function Dashboard() {
       ]);
 
       const { data: oData } = await supabase.from('orders').select('id, status, total_amount, created_at').order('created_at', { ascending: false }).limit(5);
-      const { data: qData } = await supabase.from('queue_entries').select('id, party_size, status, created_at').order('created_at', { ascending: false }).limit(5);
+      const { data: qData } = await supabase.from('queue_entries').select('id, pax, status, joined_at').order('joined_at', { ascending: false }).limit(5);
 
       setStats({ 
         queue: queueCount || 0, 
@@ -132,9 +132,9 @@ export default function Dashboard() {
               {recentQueue.length > 0 ? recentQueue.map(q => (
                 <tr key={q.id}>
                   <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{q.id.slice(0,8)}</td>
-                  <td>👥 {q.party_size}</td>
+                  <td>{q.pax}</td>
                   <td>{badge(q.status === 'seated' ? 'success' : q.status === 'waiting' ? 'warning' : 'muted', q.status)}</td>
-                  <td>{fmtTime(q.created_at)}</td>
+                  <td>{fmtTime(q.joined_at)}</td>
                 </tr>
               )) : <tr><td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Queue is empty</td></tr>}
             </tbody>

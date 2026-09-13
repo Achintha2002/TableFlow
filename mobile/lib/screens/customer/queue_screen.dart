@@ -55,14 +55,14 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           .select()
           .eq('user_id', user.id)
           .inFilter('status', ['waiting', 'seated'])
-          .order('created_at', ascending: false)
+          .order('joined_at', ascending: false)
           .limit(1)
           .maybeSingle();
 
       if (activeEntry != null && activeEntry['status'] == 'waiting') {
         _inQueue = true;
         _queueId = activeEntry['id'];
-        await _calculatePosition(activeEntry['created_at']);
+        await _calculatePosition(activeEntry['joined_at']);
         _setupSubscription();
       } else {
         _inQueue = false;
@@ -98,7 +98,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           .from('queue_entries')
           .select('id')
           .eq('status', 'waiting')
-          .lt('created_at', joinedAt);
+          .lt('joined_at', joinedAt);
       if (mounted) {
         setState(() {
           _position = res.length + 1;
@@ -121,7 +121,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           if (_inQueue && _queueId != null) {
              try {
                final myEntry = data.firstWhere((e) => e['id'] == _queueId);
-               _calculatePosition(myEntry['created_at']);
+               _calculatePosition(myEntry['joined_at']);
              } catch(e) {
                _checkQueueStatus();
              }
@@ -142,13 +142,13 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     try {
       final res = await Supabase.instance.client.from('queue_entries').insert({
         'user_id': user.id,
-        'party_size': 2,
+        'pax': 2,
         'status': 'waiting'
       }).select().single();
       
       _inQueue = true;
       _queueId = res['id'];
-      await _calculatePosition(res['created_at']);
+      await _calculatePosition(res['joined_at']);
       _setupSubscription();
     } catch (e) {
        debugPrint('Failed to join queue: $e');
