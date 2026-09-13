@@ -1,26 +1,27 @@
 :root {
-  /* TableFlow Admin Color System */
-  --bg-primary: #0f0e0d;
-  --bg-secondary: #1a1815;
-  --bg-card: #211f1c;
-  --bg-card-hover: #2a2724;
-  --border: #2e2b27;
+  /* Ultra-Modern Crisp Light Theme */
+  --bg-primary: #f8fafc; /* Crisp light slate background */
+  --bg-secondary: #ffffff; /* Pure white sidebar */
+  --bg-surface: #f1f5f9;
+  --bg-card: #ffffff; /* Pure white cards */
+  --bg-card-hover: #f8fafc;
+  --border: #e2e8f0; /* Soft, clean border */
   
-  --primary: #B87F5C;
-  --primary-hover: #c99070;
+  --primary: #B87F5C; /* TableFlow Brand Color */
+  --primary-hover: #9c6848;
   --gold: #D4AF37;
-  --cream: #F5F5F0;
+  --cream: #ffffff;
   
-  --text-primary: #f0ede8;
-  --text-secondary: #8a7f74;
-  --text-muted: #5a5248;
+  --text-primary: #0f172a; /* Slate 900 (almost black) */
+  --text-secondary: #475569; /* Slate 600 */
+  --text-muted: #94a3b8; /* Slate 400 */
 
-  --success: #4caf7d;
-  --warning: #e6a817;
-  --danger: #e05c5c;
-  --info: #5b9bd5;
+  --success: #10b981; 
+  --warning: #f59e0b;
+  --danger: #ef4444; 
+  --info: #3b82f6; 
 
-  --sidebar-width: 240px;
+  --sidebar-width: 260px;
   --font-body: 'Inter', sans-serif;
   --font-serif: 'Playfair Display', serif;
 }
@@ -247,13 +248,16 @@ a {
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 24px;
-  transition: border-color 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 .stat-card:hover {
   border-color: var(--primary);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  transform: translateY(-3px);
 }
 
 .stat-card-header {
@@ -310,8 +314,9 @@ a {
 .data-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 .data-card-header {
@@ -415,9 +420,10 @@ a {
 .full-data-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
   margin-bottom: 32px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* ───────── SCROLLBAR ───────── */

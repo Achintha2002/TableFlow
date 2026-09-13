@@ -86,21 +86,21 @@ export default function KDS() {
                 onClick={() => updateStatus(o.id, 'preparing')}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold',
-                  background: o.status === 'preparing' ? 'var(--info-blue)' : 'rgba(255,255,255,0.05)',
+                  background: o.status === 'preparing' ? 'var(--info-blue)' : 'rgba(0,0,0,0.05)',
                   color: o.status === 'preparing' ? '#000' : 'var(--text-light)'
                 }}>PREP</button>
               <button 
                 onClick={() => updateStatus(o.id, 'ready')}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold',
-                  background: o.status === 'ready' ? 'var(--success-green)' : 'rgba(255,255,255,0.05)',
+                  background: o.status === 'ready' ? 'var(--success-green)' : 'rgba(0,0,0,0.05)',
                   color: o.status === 'ready' ? '#000' : 'var(--text-light)'
                 }}>READY</button>
               <button 
                 onClick={() => updateStatus(o.id, 'served')}
                 style={{ 
                   flex: 1, padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold',
-                  background: 'rgba(255,255,255,0.05)', color: 'var(--text-light)'
+                  background: 'rgba(0,0,0,0.05)', color: 'var(--text-light)'
                 }}>SERVE</button>
             </div>
           </div>

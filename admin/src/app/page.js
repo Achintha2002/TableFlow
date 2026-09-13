@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import Link from 'next/link';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar
 } from 'recharts';
 
@@ -117,16 +117,22 @@ export default function Dashboard() {
           <div style={{ height: '300px', width: '100%', padding: '16px 0' }}>
             {analytics.revenue && analytics.revenue.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={analytics.revenue}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                <AreaChart data={analytics.revenue}>
+                  <defs>
+                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#B87F5C" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#B87F5C" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `LKR ${val}`} />
                   <RechartsTooltip 
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                    itemStyle={{ color: 'var(--primary-gold)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                    itemStyle={{ color: 'var(--primary)' }}
                   />
-                  <Line type="monotone" dataKey="revenue" stroke="var(--primary-gold)" strokeWidth={3} dot={{ r: 4, fill: 'var(--primary-gold)' }} activeDot={{ r: 6 }} />
-                </LineChart>
+                  <Area type="monotone" dataKey="revenue" stroke="#B87F5C" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" activeDot={{ r: 6, fill: '#B87F5C' }} />
+                </AreaChart>
               </ResponsiveContainer>
             ) : (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>No revenue data</div>
@@ -141,14 +147,14 @@ export default function Dashboard() {
             {analytics.popularItems && analytics.popularItems.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={analytics.popularItems} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                   <XAxis type="number" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis dataKey="name" type="category" stroke="var(--text-light)" fontSize={12} tickLine={false} axisLine={false} width={100} />
+                  <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} width={100} />
                   <RechartsTooltip 
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                    cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--text-primary)' }}
                   />
-                  <Bar dataKey="count" fill="var(--primary-gold)" radius={[0, 4, 4, 0]} barSize={24} />
+                  <Bar dataKey="count" fill="#B87F5C" radius={[0, 6, 6, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
