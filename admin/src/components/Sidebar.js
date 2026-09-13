@@ -17,9 +17,16 @@ export default function Sidebar() {
       if (session) {
         const { data: userRecord } = await supabase.from('users').select('full_name, role').eq('id', session.user.id).single();
         if (userRecord) {
+          const roleLabels = {
+            'admin': 'Administrator',
+            'manager': 'Manager',
+            'cashier': 'Cashier',
+            'kitchen': 'Kitchen Staff',
+            'staff': 'Staff Member'
+          };
           setProfile({
             name: userRecord.full_name || session.user.email.split('@')[0],
-            role: userRecord.role === 'admin' ? 'Administrator' : userRecord.role === 'kitchen' ? 'Kitchen Staff' : 'Staff Member',
+            role: roleLabels[userRecord.role] || 'Staff',
             rawRole: userRecord.role
           });
         }
@@ -42,7 +49,7 @@ export default function Sidebar() {
         <p>Admin Console</p>
       </div>
       <nav className="sidebar-nav">
-        {profile.rawRole !== 'kitchen' && (
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
           <>
             <div className="nav-section-label">Overview</div>
             <Link href="/" className={`nav-item ${isActive('/')}`}>
@@ -62,42 +69,52 @@ export default function Sidebar() {
           </>
         )}
 
-        <div className="nav-section-label">Live</div>
-        {profile.rawRole !== 'kitchen' && (
-          <Link href="/queue" className={`nav-item ${isActive('/queue')}`}>
-            <Users size={20} />
-            Live Queue
-          </Link>
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
+          <>
+            <div className="nav-section-label">Live</div>
+            <Link href="/queue" className={`nav-item ${isActive('/queue')}`}>
+              <Users size={20} />
+              Live Queue
+            </Link>
+          </>
         )}
-        {profile.rawRole !== 'kitchen' && (
+        
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
           <Link href="/tables" className={`nav-item ${isActive('/tables')}`}>
             <Grid size={20} />
             Tables & Floor
           </Link>
         )}
-        <div className="nav-section-label">Operations</div>
-        <Link href="/orders" className={`nav-item ${isActive('/orders')}`}>
-          <Receipt size={20} />
-          Orders
-        </Link>
-        {profile.rawRole !== 'kitchen' && (
-          <Link href="/reservations" className={`nav-item ${isActive('/reservations')}`}>
-            <CalendarDays size={20} />
-            Reservations
-          </Link>
+        
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
+          <>
+            <div className="nav-section-label">Operations</div>
+            <Link href="/orders" className={`nav-item ${isActive('/orders')}`}>
+              <Receipt size={20} />
+              Orders
+            </Link>
+          </>
         )}
-        {profile.rawRole !== 'kitchen' && (
-          <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
-            <UtensilsCrossed size={20} />
-            Menu
-          </Link>
+        
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
+          <>
+            <Link href="/reservations" className={`nav-item ${isActive('/reservations')}`}>
+              <CalendarDays size={20} />
+              Reservations
+            </Link>
+            <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
+              <UtensilsCrossed size={20} />
+              Menu
+            </Link>
+          </>
         )}
-        {profile.rawRole !== 'kitchen' && (
+        
+        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
           <>
             <div className="nav-section-label">Management</div>
             <Link href="/users" className={`nav-item ${isActive('/users')}`}>
               <ShieldCheck size={20} />
-              Users & Admins
+              Users & Staff
             </Link>
           </>
         )}

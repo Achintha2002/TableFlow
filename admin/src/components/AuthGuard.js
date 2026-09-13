@@ -42,14 +42,24 @@ export default function AuthGuard({ children }) {
           router.push('/login');
         }
       } else {
-        // Verify role
-        const { data: userRecord } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
+        // Verify role securely via backend to bypass RLS recursion
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (!currentSession) throw new Error('Session lost');
 
-        if (userRecord && (userRecord.role === 'admin' || userRecord.role === 'staff')) {
+        const res = await fetch('http://localhost:3000/api/admin/my-role', {
+          headers: {
+            'Authorization': `Bearer ${currentSession.access_token}`
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error('Failed to fetch role');
+        }
+        
+        const { role } = await res.json();
+
+        const allowedRoles = ['admin', 'manager', 'cashier', 'kitchen', 'staff'];
+        if (role && allowedRoles.includes(role)) {
           setAuthorized(true);
           if (pathname === '/login') {
             router.push('/');

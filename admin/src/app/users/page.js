@@ -19,9 +19,9 @@ export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Add Admin Form State
+  // Add Staff Form State
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newAdmin, setNewAdmin] = useState({ full_name: '', email: '', password: '' });
+  const [newStaff, setNewStaff] = useState({ full_name: '', email: '', password: '', role: 'cashier' });
   const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
@@ -59,23 +59,23 @@ export default function UsersPage() {
     }
   }
 
-  async function handleAddAdmin(e) {
+  async function handleAddStaff(e) {
     e.preventDefault();
     setFormLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/api/admin/create-admin', {
+      const res = await fetch('http://localhost:3000/api/admin/create-staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAdmin)
+        body: JSON.stringify(newStaff)
       });
       const data = await res.json();
       if (res.ok) {
-        alert("Admin created successfully!");
+        alert("Staff created successfully!");
         setShowAddForm(false);
-        setNewAdmin({ full_name: '', email: '', password: '' });
+        setNewStaff({ full_name: '', email: '', password: '', role: 'cashier' });
         loadUsers();
       } else {
-        alert("Failed to create admin: " + data.error);
+        alert("Failed to create staff: " + data.error);
       }
     } catch (e) {
       alert("Error: " + e.message);
@@ -105,14 +105,14 @@ export default function UsersPage() {
     }
   }
 
-  const admins = users.filter(u => u.role === 'admin');
+  const admins = users.filter(u => u.role === 'admin' || u.role === 'manager');
 
   return (
     <>
       <div className="page-content">
         <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
           <button className="btn btn-primary" onClick={() => setShowAddForm(!showAddForm)}>
-            {showAddForm ? 'Cancel' : '+ Add New Admin'}
+            {showAddForm ? 'Cancel' : '+ Add New Staff'}
           </button>
           <button className="btn btn-secondary" onClick={handleSyncUsers} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
             Sync Missing Users
@@ -121,22 +121,31 @@ export default function UsersPage() {
 
         {showAddForm && (
           <div className="full-data-card" style={{ marginBottom: 32, padding: 24 }}>
-            <h3 style={{ marginBottom: 16 }}>Add New Admin</h3>
-            <form onSubmit={handleAddAdmin} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <h3 style={{ marginBottom: 16 }}>Add New Staff</h3>
+            <form onSubmit={handleAddStaff} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 150 }}>
+                <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Role</label>
+                <select value={newStaff.role} onChange={e => setNewStaff({...newStaff, role: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }}>
+                  <option value="cashier">Cashier</option>
+                  <option value="kitchen">Kitchen</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
                 <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Full Name</label>
-                <input required type="text" value={newAdmin.full_name} onChange={e => setNewAdmin({...newAdmin, full_name: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
+                <input required type="text" value={newStaff.full_name} onChange={e => setNewStaff({...newStaff, full_name: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
                 <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Email</label>
-                <input required type="email" value={newAdmin.email} onChange={e => setNewAdmin({...newAdmin, email: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
+                <input required type="email" value={newStaff.email} onChange={e => setNewStaff({...newStaff, email: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 200 }}>
                 <label style={{ fontSize: 13, color: 'var(--text-muted)' }}>Password (Min 6 chars)</label>
-                <input required type="password" minLength={6} value={newAdmin.password} onChange={e => setNewAdmin({...newAdmin, password: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
+                <input required type="password" minLength={6} value={newStaff.password} onChange={e => setNewStaff({...newStaff, password: e.target.value})} style={{ padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 4 }} />
               </div>
               <button disabled={formLoading} type="submit" className="btn btn-primary" style={{ padding: '9px 24px', height: 38 }}>
-                {formLoading ? 'Creating...' : 'Create Admin'}
+                {formLoading ? 'Creating...' : 'Create Staff'}
               </button>
             </form>
           </div>
@@ -148,25 +157,25 @@ export default function UsersPage() {
           <>
             {/* Admins Section */}
             <div style={{ marginBottom: 32 }}>
-              <h3 style={{ marginBottom: 16, color: 'var(--text-primary)' }}>Admin Profiles ({admins.length})</h3>
+              <h3 style={{ marginBottom: 16, color: 'var(--text-primary)' }}>Admin & Manager Profiles ({admins.length})</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                 {admins.length > 0 ? admins.map(a => (
                   <div key={a.id} className="stat-card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20 }}>
                     <div style={{ width: 48, height: 48, background: 'var(--primary)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 'bold' }}>
-                      {(a.full_name || 'A')[0].toUpperCase()}
+                      {(a.full_name || 'S')[0].toUpperCase()}
                     </div>
                     <div style={{ flex: 1, overflow: 'hidden' }}>
                       <h4 style={{ margin: 0, color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {a.full_name || 'Admin'}
+                        {a.full_name || 'Staff'}
                       </h4>
                       <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: 13, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                         {a.email}
                       </p>
                     </div>
-                    {badge('success', 'Admin')}
+                    {badge(a.role === 'admin' ? 'success' : 'primary', a.role.charAt(0).toUpperCase() + a.role.slice(1))}
                   </div>
                 )) : (
-                  <p style={{ color: 'var(--text-muted)' }}>No admins found.</p>
+                  <p style={{ color: 'var(--text-muted)' }}>No admins or managers found.</p>
                 )}
               </div>
             </div>

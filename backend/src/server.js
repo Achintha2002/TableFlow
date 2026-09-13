@@ -114,15 +114,20 @@ app.post('/api/admin/sync-users', async (req, res) => {
   }
 });
 
-app.post('/api/admin/create-admin', async (req, res) => {
+app.post('/api/admin/create-staff', async (req, res) => {
   try {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
     }
 
-    const { email, password, full_name } = req.body;
-    if (!email || !password || !full_name) {
-      return res.status(400).json({ error: 'Email, password, and full name are required' });
+    const { email, password, full_name, role } = req.body;
+    if (!email || !password || !full_name || !role) {
+      return res.status(400).json({ error: 'Email, password, full name, and role are required' });
+    }
+
+    // Validate role
+    if (!['admin', 'manager', 'cashier', 'kitchen', 'staff'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role specified' });
     }
 
     // Create auth user
@@ -137,14 +142,31 @@ app.post('/api/admin/create-admin', async (req, res) => {
     // The database trigger might run, but let's wait a second just in case
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Force role to admin
+    // Force role to selected role
     const { error: dbError } = await supabaseAdmin.from('users')
-      .update({ role: 'admin' })
+      .update({ role: role })
       .eq('id', authData.user.id);
       
     if (dbError) throw dbError;
 
-    res.json({ message: 'Admin user created successfully!', user: authData.user });
+    res.json({ message: 'Staff user created successfully!', user: authData.user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/my-role', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: 'Missing token' });
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
+    
+    const { data: userRecord, error: dbError } = await supabaseAdmin.from('users').select('role').eq('id', user.id).single();
+    if (dbError) throw dbError;
+    
+    res.json({ role: userRecord.role });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
