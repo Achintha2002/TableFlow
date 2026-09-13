@@ -63,7 +63,7 @@ class _CartScreenState extends State<CartScreen> {
 
       final orderResponse = await Supabase.instance.client.from('orders').insert({
         'user_id': user.id,
-        if (reservationId != null) 'reservation_id': reservationId,
+        ? 'reservation_id': reservationId,
         if (reservationId == null && queueEntryId != null) 'queue_entry_id': queueEntryId,
         'total_amount': cart.totalAmount * 1.08,
         'status': 'pending',
