@@ -37,8 +37,8 @@ export default function QueuePage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  async function seatQueue(id) {
-    await supabase.from('queue_entries').update({ status: 'seated' }).eq('id', id);
+  async function updateStatus(id, newStatus) {
+    await supabase.from('queue_entries').update({ status: newStatus }).eq('id', id);
     fetchQueue();
   }
 
@@ -60,11 +60,27 @@ export default function QueuePage() {
               <td>{badge(q.status === 'seated' ? 'success' : q.status === 'waiting' ? 'warning' : 'muted', q.status)}</td>
               <td>{fmtTime(q.joined_at)}</td>
               <td>
-                {q.status === 'waiting' && (
-                  <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => seatQueue(q.id)}>
-                    Seat Now
-                  </button>
-                )}
+                <select 
+                  className="status-dropdown" 
+                  value={q.status}
+                  onChange={(e) => updateStatus(q.id, e.target.value)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-light)',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="waiting" style={{ color: '#000' }}>Waiting</option>
+                  <option value="notified" style={{ color: '#000' }}>Notified</option>
+                  <option value="seated" style={{ color: '#000' }}>Seated</option>
+                  <option value="no_show" style={{ color: '#000' }}>No Show</option>
+                  <option value="cancelled" style={{ color: '#000' }}>Cancelled</option>
+                </select>
               </td>
             </tr>
           )) : <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>Queue is empty</td></tr>}

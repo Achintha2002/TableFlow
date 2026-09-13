@@ -54,11 +54,26 @@ export default function ReservationsPage() {
               <td>{r.pax}</td>
               <td>{badge(r.status === 'confirmed' ? 'success' : r.status === 'pending' ? 'warning' : 'muted', r.status)}</td>
               <td>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {r.status === 'pending' && <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => updateStatus(r.id, 'confirmed')}>Confirm</button>}
-                  {(r.status === 'pending' || r.status === 'confirmed') && <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '12px', color: 'red' }} onClick={() => updateStatus(r.id, 'cancelled')}>Cancel</button>}
-                  {r.status === 'confirmed' && <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => updateStatus(r.id, 'completed')}>Complete</button>}
-                </div>
+                <select 
+                  className="status-dropdown" 
+                  value={r.status}
+                  onChange={(e) => updateStatus(r.id, e.target.value)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-light)',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="pending" style={{ color: '#000' }}>Pending</option>
+                  <option value="confirmed" style={{ color: '#000' }}>Confirmed</option>
+                  <option value="cancelled" style={{ color: '#000' }}>Cancelled</option>
+                  <option value="completed" style={{ color: '#000' }}>Completed</option>
+                </select>
               </td>
             </tr>
           )) : <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No reservations found</td></tr>}
