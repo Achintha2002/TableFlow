@@ -80,62 +80,24 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 60),
               
               // Email Field
-              Text(
-                'Email',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
+              Text('Email Address', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 8),
-              TextField(
+              _buildTextField(
                 controller: _emailController,
+                hintText: 'john@example.com',
+                icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  hintText: 'Enter your email',
-                  filled: true,
-                  fillColor: AppTheme.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-                  ),
-                ),
               ),
               const SizedBox(height: 24),
               
               // Password Field
-              Text(
-                'Password',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
+              Text('Password', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 8),
-              TextField(
+              _buildTextField(
                 controller: _passwordController,
+                hintText: 'Enter your password',
+                icon: Icons.lock_outline,
                 obscureText: true,
-                decoration: InputDecoration(
-                  hintText: 'Enter your password',
-                  filled: true,
-                  fillColor: AppTheme.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: AppTheme.primary, width: 2),
-                  ),
-                ),
               ),
               const SizedBox(height: 16),
               
@@ -143,8 +105,33 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {},
-                  child: const Text('Forgot Password?'),
+                  onPressed: () async {
+                    final email = _emailController.text.trim();
+                    if (email.isEmpty) {
+                      setState(() => _errorMessage = 'Please enter your email address to reset your password.');
+                      return;
+                    }
+                    setState(() { _isLoading = true; _errorMessage = null; });
+                    try {
+                      await SupabaseService.resetPassword(email);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Password reset link sent to $email'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setState(() => _errorMessage = 'Failed to send reset email: $e');
+                    } finally {
+                      if (mounted) setState(() => _isLoading = false);
+                    }
+                  },
+                  child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w600)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primary.withValues(alpha: 0.8),
+                  ),
                 ),
               ),
               // Error Message
@@ -232,6 +219,39 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType? keyboardType,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        hintText: hintText,
+        prefixIcon: Icon(icon, color: AppTheme.secondary.withValues(alpha: 0.4)),
+        filled: true,
+        fillColor: AppTheme.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
         ),
       ),
     );

@@ -50,6 +50,14 @@ class SupabaseService {
     );
   }
 
+  /// Request password reset email
+  static Future<void> resetPassword(String email) async {
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: kIsWeb ? '${Uri.base.origin}/reset-password' : null,
+    );
+  }
+
   static bool _isGoogleSignInInitialized = false;
 
   static Future<AuthResponse?> signInWithGoogle() async {
