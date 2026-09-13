@@ -202,8 +202,11 @@ export default function UsersPage() {
                           style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
                         >
                           <option value="customer">Customer</option>
-                          <option value="staff">Staff</option>
                           <option value="admin">Admin</option>
+                          <option value="manager">Manager</option>
+                          <option value="cashier">Cashier</option>
+                          <option value="kitchen">Kitchen</option>
+                          <option value="staff">Staff (Legacy)</option>
                         </select>
                       </td>
                       <td>
