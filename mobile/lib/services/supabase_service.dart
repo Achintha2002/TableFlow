@@ -52,8 +52,16 @@ class SupabaseService {
 
   static bool _isGoogleSignInInitialized = false;
 
-  /// Sign in with Google
   static Future<AuthResponse?> signInWithGoogle() async {
+    // On Web, the google_sign_in plugin's interactive authenticate() method is unsupported.
+    // We use Supabase's built-in OAuth flow which redirects to Google securely.
+    if (kIsWeb) {
+      await _client.auth.signInWithOAuth(OAuthProvider.google);
+      // The browser will redirect to Google and then back to the app, so we return null.
+      return null;
+    }
+
+    // On Mobile (Android/iOS), use the native google_sign_in plugin
     // TODO: Replace with your actual Web Client ID from Google Cloud Console
     const webClientId =
         '878569392531-9uv232dv0r3h7n4aflmt3joncj5f43hs.apps.googleusercontent.com';
@@ -62,8 +70,8 @@ class SupabaseService {
 
     if (!_isGoogleSignInInitialized) {
       await GoogleSignIn.instance.initialize(
-        clientId: kIsWeb ? webClientId : iosClientId,
-        serverClientId: kIsWeb ? null : webClientId,
+        clientId: iosClientId,
+        serverClientId: webClientId,
       );
       _isGoogleSignInInitialized = true;
     }
