@@ -50,6 +50,8 @@ class SupabaseService {
     );
   }
 
+  static bool _isGoogleSignInInitialized = false;
+
   /// Sign in with Google
   static Future<AuthResponse?> signInWithGoogle() async {
     // TODO: Replace with your actual Web Client ID from Google Cloud Console
@@ -58,10 +60,13 @@ class SupabaseService {
     // TODO: Replace with your actual iOS Client ID from Google Cloud Console (if supporting iOS)
     const iosClientId = 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
 
-    await GoogleSignIn.instance.initialize(
-      clientId: kIsWeb ? webClientId : iosClientId,
-      serverClientId: webClientId,
-    );
+    if (!_isGoogleSignInInitialized) {
+      await GoogleSignIn.instance.initialize(
+        clientId: kIsWeb ? webClientId : iosClientId,
+        serverClientId: webClientId,
+      );
+      _isGoogleSignInInitialized = true;
+    }
 
     final googleUser = await GoogleSignIn.instance.authenticate();
     final googleAuth = googleUser.authentication;
