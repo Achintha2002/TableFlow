@@ -128,10 +128,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (mounted) setState(() => _isLoading = false);
                     }
                   },
-                  child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w600)),
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.primary.withValues(alpha: 0.8),
                   ),
+                  child: const Text('Forgot Password?', style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
               // Error Message

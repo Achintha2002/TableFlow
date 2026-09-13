@@ -1,8 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
-import '../../services/api_service.dart';
+
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -31,7 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchProfileData() async {
     try {
       final profile = await SupabaseService.getUserProfile();
-      final settings = await SupabaseService.getAccessibilitySettings();
+
       
       if (mounted) {
         setState(() {
@@ -59,25 +60,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: AppTheme.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Edit Profile', style: TextStyle(fontFamily: 'Playfair Display')),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Edit Profile', style: TextStyle(fontFamily: 'Playfair Display', fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Full Name',
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primary)),
+                  filled: true,
+                  fillColor: AppTheme.background,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
                 cursorColor: AppTheme.primary,
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: phoneController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Phone Number',
-                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.primary)),
+                  filled: true,
+                  fillColor: AppTheme.background,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
                 keyboardType: TextInputType.phone,
                 cursorColor: AppTheme.primary,
@@ -110,7 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Profile updated successfully')),
+                      const SnackBar(content: Text('Profile updated successfully'), behavior: SnackBarBehavior.floating),
                     );
                   }
                 } catch (e) {
@@ -128,221 +133,240 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+      return const Scaffold(backgroundColor: AppTheme.background, body: Center(child: CircularProgressIndicator(color: AppTheme.primary)));
     }
     
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Elegant Header Gradient
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primary.withValues(alpha: 0.1),
-                  AppTheme.tertiary.withValues(alpha: 0.2),
-                ],
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Premium Glassmorphism Header
+            Container(
+              height: 380,
+              decoration: const BoxDecoration(
+                image: DecorationImage(
+                  image: NetworkImage('https://images.unsplash.com/photo-1544148103-0773bf10d330?q=80&w=1000&auto=format&fit=crop'), // Elegant restaurant/wine image
+                  fit: BoxFit.cover,
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(40),
+                  bottomRight: Radius.circular(40),
+                ),
               ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(40),
-                bottomRight: Radius.circular(40),
-              ),
-            ),
-            padding: const EdgeInsets.only(top: 40, bottom: 40, left: 24, right: 24),
-            child: Column(
-              children: [
-                Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: AppTheme.white,
-                      child: Text(
-                        _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontFamily: 'Playfair Display',
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      decoration: const BoxDecoration(
-                        color: AppTheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.edit, color: AppTheme.white, size: 20),
-                        onPressed: _showEditProfileDialog,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  _fullName,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontFamily: 'Playfair Display',
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(40),
+                    bottomRight: Radius.circular(40),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _email,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontSize: 16,
-                  ),
-                ),
-                if (_phone.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    _phone,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontSize: 14,
-                      color: AppTheme.secondary.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.secondary.withValues(alpha: 0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      AppTheme.secondary.withValues(alpha: 0.8),
                     ],
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      const Icon(Icons.star, color: AppTheme.tertiary, size: 18),
-                      const SizedBox(width: 8),
+                      Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppTheme.white.withValues(alpha: 0.5), width: 3),
+                              boxShadow: [
+                                BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.3), blurRadius: 20)
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 50,
+                              backgroundColor: AppTheme.white.withValues(alpha: 0.9),
+                              child: Text(
+                                _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
+                                style: const TextStyle(
+                                  fontSize: 40,
+                                  fontFamily: 'Playfair Display',
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppTheme.white, width: 2),
+                            ),
+                            child: IconButton(
+                              icon: const Icon(Icons.edit, color: AppTheme.white, size: 18),
+                              onPressed: _showEditProfileDialog,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       Text(
-                        '$_loyaltyTier Member',
-                        style: const TextStyle(
-                          color: AppTheme.tertiary,
+                        _fullName,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontFamily: 'Playfair Display',
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
+                          color: AppTheme.white,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _email,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.white.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppTheme.white.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.star, color: AppTheme.tertiary, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '$_loyaltyTier Member',
+                                  style: const TextStyle(
+                                    color: AppTheme.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-          
-          const SizedBox(height: 32),
-          
-          // Settings Section
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Preferences',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontFamily: 'Playfair Display',
-                    fontSize: 22,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildSettingsCard(
-                  children: [
-                    Consumer<SettingsProvider>(
-                      builder: (context, settings, _) {
-                        return _buildSwitchTile(
-                          icon: Icons.contrast,
-                          title: 'High Contrast Mode',
-                          subtitle: 'Enhances visibility across the app.',
-                          value: settings.isHighContrast,
-                          onChanged: (val) {
-                            settings.updateSettings(
-                              highContrast: val,
-                              largeFont: settings.isLargeFont,
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Preferences saved successfully')),
-                            );
-                          },
-                        );
-                      }
-                    ),
-                    const Divider(height: 1),
-                    Consumer<SettingsProvider>(
-                      builder: (context, settings, _) {
-                        return _buildSwitchTile(
-                          icon: Icons.format_size,
-                          title: 'Large Font',
-                          subtitle: 'Increases text size throughout.',
-                          value: settings.isLargeFont,
-                          onChanged: (val) {
-                            settings.updateSettings(
-                              highContrast: settings.isHighContrast,
-                              largeFont: val,
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Preferences saved successfully')),
-                            );
-                          },
-                        );
-                      }
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Notifications',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontFamily: 'Playfair Display',
-                    fontSize: 22,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _buildSettingsCard(
-                  children: [
-                    _buildSwitchTile(
-                      icon: Icons.campaign_outlined,
-                      title: 'Promotional Offers',
-                      subtitle: 'Receive updates about special menus.',
-                      value: _promoEmails,
-                      onChanged: (val) => setState(() => _promoEmails = val),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 32),
-                
-
-                
-                // Logout Button
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      await SupabaseService.signOut();
-                      if (context.mounted) context.go('/login');
-                    },
-                    icon: const Icon(Icons.logout, color: Colors.red),
-                    label: const Text(
-                      'Log Out',
-                      style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold),
+            
+            const SizedBox(height: 32),
+            
+            // Settings Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Preferences',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontFamily: 'Playfair Display',
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-                const SizedBox(height: 40),
-              ],
+                  const SizedBox(height: 16),
+                  _buildSettingsCard(
+                    children: [
+                      Consumer<SettingsProvider>(
+                        builder: (context, settings, _) {
+                          return _buildSwitchTile(
+                            icon: Icons.contrast,
+                            title: 'High Contrast Mode',
+                            subtitle: 'Enhances visibility across the app.',
+                            value: settings.isHighContrast,
+                            onChanged: (val) {
+                              settings.updateSettings(
+                                highContrast: val,
+                                largeFont: settings.isLargeFont,
+                              );
+                            },
+                          );
+                        }
+                      ),
+                      const Divider(height: 1, indent: 64),
+                      Consumer<SettingsProvider>(
+                        builder: (context, settings, _) {
+                          return _buildSwitchTile(
+                            icon: Icons.format_size,
+                            title: 'Large Font',
+                            subtitle: 'Increases text size throughout.',
+                            value: settings.isLargeFont,
+                            onChanged: (val) {
+                              settings.updateSettings(
+                                highContrast: settings.isHighContrast,
+                                largeFont: val,
+                              );
+                            },
+                          );
+                        }
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Notifications',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontFamily: 'Playfair Display',
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSettingsCard(
+                    children: [
+                      _buildSwitchTile(
+                        icon: Icons.campaign_outlined,
+                        title: 'Promotional Offers',
+                        subtitle: 'Receive updates about special menus.',
+                        value: _promoEmails,
+                        onChanged: (val) => setState(() => _promoEmails = val),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 48),
+                  
+                  // Logout Button
+                  Center(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await SupabaseService.signOut();
+                        if (context.mounted) context.go('/login');
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        side: const BorderSide(color: Colors.redAccent),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: const Icon(Icons.logout, color: Colors.redAccent),
+                      label: const Text(
+                        'Sign Out',
+                        style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 100), // padding for bottom nav
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -351,13 +375,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.1)),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: AppTheme.secondary.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -373,16 +396,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required ValueChanged<bool> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.secondary.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: AppTheme.secondary),
+            child: Icon(icon, color: AppTheme.primary),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -407,7 +430,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: AppTheme.primary,
+            activeThumbColor: AppTheme.white,
+            activeTrackColor: AppTheme.primary,
           ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
@@ -50,59 +51,83 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-            child: Text(
-              'Explore our seasonal offerings, crafted with intention and presented with care.',
-              style: Theme.of(context).textTheme.bodyMedium,
+      backgroundColor: AppTheme.background,
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Text(
+                'Explore our seasonal offerings, crafted with intention and presented with care.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontSize: 16,
+                  height: 1.5,
+                  color: AppTheme.secondary.withValues(alpha: 0.7),
+                ),
+              ),
             ),
           ),
           
-          // Categories Filter
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-            child: Row(
-              children: [
-                _buildCategoryChip('All'),
-                const SizedBox(width: 12),
-                _buildCategoryChip('Starters'),
-                const SizedBox(width: 12),
-                _buildCategoryChip('Mains'),
-                const SizedBox(width: 12),
-                _buildCategoryChip('Desserts'),
-                const SizedBox(width: 12),
-                _buildCategoryChip('Drinks'),
-              ],
+          // Sticky Categories Filter
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _StickyCategoryDelegate(
+              child: Container(
+                color: AppTheme.background.withValues(alpha: 0.95),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                  child: Row(
+                    children: [
+                      _buildCategoryChip('All'),
+                      const SizedBox(width: 12),
+                      _buildCategoryChip('Starters'),
+                      const SizedBox(width: 12),
+                      _buildCategoryChip('Mains'),
+                      const SizedBox(width: 12),
+                      _buildCategoryChip('Desserts'),
+                      const SizedBox(width: 12),
+                      _buildCategoryChip('Drinks'),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
           
           // Menu Items List
-          Expanded(
-            child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredItems.isEmpty
-                    ? const Center(child: Text("No items available"))
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-                        itemCount: _filteredItems.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 24),
-                        itemBuilder: (context, index) {
-                          final item = _filteredItems[index];
-                          return _buildMenuItem(
-                            context,
-                            id: item['id'].toString(),
-                            title: item['name'] ?? '',
-                            description: item['description'] ?? '',
-                            price: (item['price'] as num?)?.toDouble() ?? 0.0,
-                            imageUrl: item['image_url'] ?? 'https://via.placeholder.com/500',
-                          );
-                        },
+          _isLoading 
+              ? const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+                )
+              : _filteredItems.isEmpty
+                  ? const SliverFillRemaining(
+                      child: Center(child: Text("No items available in this category.")),
+                    )
+                  : SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final item = _filteredItems[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 24.0),
+                              child: _buildMenuItem(
+                                context,
+                                id: item['id'].toString(),
+                                title: item['name'] ?? '',
+                                description: item['description'] ?? '',
+                                price: (item['price'] as num?)?.toDouble() ?? 0.0,
+                                imageUrl: item['image_url'] ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop',
+                              ),
+                            );
+                          },
+                          childCount: _filteredItems.length,
+                        ),
                       ),
-          ),
+                    ),
+          // Padding for floating bottom nav
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
@@ -118,22 +143,37 @@ class _MenuScreenState extends State<MenuScreen> {
             _selectedCategory = label;
           });
         },
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.primary : AppTheme.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: isSelected 
+                ? [
+                    BoxShadow(
+                      color: AppTheme.primary.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : [
+                    BoxShadow(
+                      color: AppTheme.secondary.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    )
+                  ],
             border: Border.all(
-              color: isSelected ? AppTheme.primary : AppTheme.secondary.withValues(alpha: 0.2),
+              color: isSelected ? Colors.transparent : AppTheme.secondary.withValues(alpha: 0.1),
             ),
           ),
           child: Text(
             label,
             style: TextStyle(
               color: isSelected ? AppTheme.white : AppTheme.secondary,
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
             ),
           ),
         ),
@@ -148,85 +188,151 @@ class _MenuScreenState extends State<MenuScreen> {
     required double price,
     required String imageUrl,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            imageUrl,
-            height: 200,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                height: 200,
-                width: double.infinity,
-                color: AppTheme.secondary.withValues(alpha: 0.1),
-                child: const Icon(
-                  Icons.restaurant,
-                  size: 50,
-                  color: AppTheme.secondary,
-                ),
-              );
-            },
+    return Container(
+      height: 280,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.secondary.withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+        image: DecorationImage(
+          image: NetworkImage(imageUrl),
+          fit: BoxFit.cover,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              AppTheme.secondary.withValues(alpha: 0.9),
+            ],
+            stops: const [0.4, 1.0],
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        padding: const EdgeInsets.all(20),
+        alignment: Alignment.bottomCenter,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFamily: 'Playfair Display',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontFamily: 'Playfair Display',
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.white.withValues(alpha: 0.8),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(width: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.white.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        'LKR ${price.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: AppTheme.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            Text(
-              'LKR ${price.toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: AppTheme.primary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  context.read<CartProvider>().addItem(id, title, price, imageUrl);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('$title added to cart'),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      action: SnackBarAction(
+                        label: 'View Cart',
+                        textColor: AppTheme.primary,
+                        onPressed: () => context.push('/cart'),
+                      ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: AppTheme.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text('Add to Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          description,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 16),
-        OutlinedButton(
-          onPressed: () {
-            context.read<CartProvider>().addItem(id, title, price, imageUrl);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$title added to cart'),
-                duration: const Duration(seconds: 1),
-                action: SnackBarAction(
-                  label: 'View Cart',
-                  onPressed: () => context.push('/cart'),
-                ),
-              ),
-            );
-          },
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 44),
-            side: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.2)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          child: const Text('+ Add to Cart'),
-        ),
-      ],
+      ),
     );
+  }
+}
+
+class _StickyCategoryDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _StickyCategoryDelegate({required this.child});
+
+  @override
+  double get minExtent => 70.0;
+  
+  @override
+  double get maxExtent => 70.0;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(_StickyCategoryDelegate oldDelegate) {
+    return false;
   }
 }
