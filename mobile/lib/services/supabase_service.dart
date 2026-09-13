@@ -63,7 +63,7 @@ class SupabaseService {
     if (!_isGoogleSignInInitialized) {
       await GoogleSignIn.instance.initialize(
         clientId: kIsWeb ? webClientId : iosClientId,
-        serverClientId: webClientId,
+        serverClientId: kIsWeb ? null : webClientId,
       );
       _isGoogleSignInInitialized = true;
     }
