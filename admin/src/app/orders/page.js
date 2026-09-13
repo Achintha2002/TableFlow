@@ -25,6 +25,7 @@ export default function OrdersPage() {
         id, 
         total_amount, 
         status, 
+        payment_status,
         created_at
       `)
       .order('created_at', { ascending: false });
@@ -53,6 +54,11 @@ export default function OrdersPage() {
     fetchOrders();
   }
 
+  async function updatePaymentStatus(id, newStatus) {
+    await supabase.from('orders').update({ payment_status: newStatus }).eq('id', id);
+    fetchOrders();
+  }
+
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Loading orders...</p>;
 
   return (
@@ -66,6 +72,7 @@ export default function OrdersPage() {
             <th>Order ID</th>
             <th>Total Amount</th>
             <th>Status</th>
+            <th>Payment</th>
             <th>Time Ordered</th>
             <th>Actions</th>
           </tr>
@@ -76,6 +83,22 @@ export default function OrdersPage() {
               <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
               <td>LKR {(o.total_amount ?? 0).toFixed(2)}</td>
               <td>{badge(o.status === 'served' ? 'success' : o.status === 'preparing' ? 'info' : o.status === 'pending' ? 'warning' : 'muted', o.status)}</td>
+              <td>
+                <button 
+                  onClick={() => o.payment_status !== 'paid' ? updatePaymentStatus(o.id, 'paid') : null}
+                  style={{
+                    backgroundColor: o.payment_status === 'paid' ? 'var(--success-green)' : 'var(--primary-gold)',
+                    border: 'none',
+                    color: o.payment_status === 'paid' ? '#000' : 'var(--white)',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    cursor: o.payment_status === 'paid' ? 'default' : 'pointer'
+                  }}
+                >
+                  {o.payment_status === 'paid' ? 'PAID' : 'Mark as Paid'}
+                </button>
+              </td>
               <td>{fmtTime(o.created_at)}</td>
               <td>
                 <select 
