@@ -195,7 +195,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         hintText: hintText,
-        prefixIcon: Icon(icon, color: AppTheme.secondary.withValues(alpha: 0.5)),
+        hintStyle: TextStyle(
+          color: AppTheme.secondary.withValues(alpha: 0.4),
+          fontWeight: FontWeight.normal,
+          fontSize: 15,
+        ),
+        prefixIcon: Icon(icon, color: AppTheme.secondary.withValues(alpha: 0.4)),
         filled: true,
         fillColor: AppTheme.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
