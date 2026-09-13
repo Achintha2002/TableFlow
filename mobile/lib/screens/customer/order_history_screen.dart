@@ -56,9 +56,11 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         'rating': rating,
         'comment': comment,
       });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Review submitted!')));
       _fetchOrders();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
@@ -80,7 +82,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<int>(
-                    value: selectedItemId,
+                    initialValue: selectedItemId,
                     decoration: const InputDecoration(labelText: 'Item to rate'),
                     items: items.map((item) {
                       return DropdownMenuItem<int>(
@@ -188,7 +190,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: order['status'] == 'served' ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                                    color: order['status'] == 'served' ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(

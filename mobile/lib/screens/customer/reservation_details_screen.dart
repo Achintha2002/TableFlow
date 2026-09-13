@@ -39,7 +39,6 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
     try {
       final date = DateTime.parse(widget.date);
       final parts = widget.time.split(':');
-      final reservationTime = DateTime(date.year, date.month, date.day, int.parse(parts[0]), int.parse(parts[1]));
       
       await Supabase.instance.client.from('reservations').insert({
         'user_id': user.id,

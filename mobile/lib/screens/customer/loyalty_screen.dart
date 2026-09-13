@@ -1,260 +1,249 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 
-class LoyaltyScreen extends StatelessWidget {
+class LoyaltyScreen extends StatefulWidget {
   const LoyaltyScreen({super.key});
+
+  @override
+  State<LoyaltyScreen> createState() => _LoyaltyScreenState();
+}
+
+class _LoyaltyScreenState extends State<LoyaltyScreen> {
+  bool _isLoading = true;
+  int _points = 0;
+  String _tier = 'Bronze';
+  StreamSubscription? _userSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLoyaltyData();
+    _listenToRealtime();
+  }
+
+  void _listenToRealtime() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    
+    // Listen to real-time updates (if enabled in DB)
+    _userSub = Supabase.instance.client
+        .from('users')
+        .stream(primaryKey: ['id'])
+        .eq('id', userId)
+        .listen((data) {
+      if (data.isNotEmpty && mounted) {
+        setState(() {
+          _points = data.first['loyalty_points'] ?? 0;
+          _tier = data.first['loyalty_tier'] ?? 'Bronze';
+          _isLoading = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchLoyaltyData() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final data = await Supabase.instance.client
+          .from('users')
+          .select('loyalty_points, loyalty_tier')
+          .eq('id', userId)
+          .single();
+
+      if (mounted) {
+        setState(() {
+          _points = data['loyalty_points'] ?? 0;
+          _tier = data['loyalty_tier'] ?? 'Bronze';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  double _calculateProgress() {
+    if (_tier == 'Bronze') return _points / 500;
+    if (_tier == 'Silver') return (_points - 500) / 1500;
+    if (_tier == 'Gold') return (_points - 2000) / 3000;
+    return 1.0; // Platinum
+  }
+
+  String _nextTierName() {
+    if (_tier == 'Bronze') return 'Silver';
+    if (_tier == 'Silver') return 'Gold';
+    if (_tier == 'Gold') return 'Platinum';
+    return 'Max Tier';
+  }
+
+  int _pointsToNextTier() {
+    if (_tier == 'Bronze') return 500 - _points;
+    if (_tier == 'Silver') return 2000 - _points;
+    if (_tier == 'Gold') return 5000 - _points;
+    return 0;
+  }
+
+  Color _getTierColor() {
+    if (_tier == 'Bronze') return const Color(0xFFCD7F32);
+    if (_tier == 'Silver') return const Color(0xFFC0C0C0);
+    if (_tier == 'Gold') return const Color(0xFFFFD700);
+    return const Color(0xFFE5E4E2); // Platinum
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios, color: AppTheme.secondary),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Loyalty & VIP'),
+        title: Text(
+          'TableFlow Rewards',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontFamily: 'Playfair Display',
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // VIP Card Hero
-            Container(
-              margin: const EdgeInsets.all(24),
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF3A2E28), Color(0xFF5C4A3A)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.secondary.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _fetchLoyaltyData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'TABLEFLOW',
-                        style: TextStyle(
-                          color: AppTheme.tertiary,
-                          letterSpacing: 3,
-                          fontWeight: FontWeight.bold,
+                  const SizedBox(height: 20),
+                  Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _getTierColor().withValues(alpha: 0.1),
+                      border: Border.all(color: _getTierColor(), width: 4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _getTierColor().withValues(alpha: 0.3),
+                          blurRadius: 30,
+                          spreadRadius: 5,
                         ),
-                      ),
-                      Icon(Icons.star, color: AppTheme.tertiary),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Eleanor Vance',
-                    style: TextStyle(
-                      color: AppTheme.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Playfair Display',
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Platinum Member',
-                    style: TextStyle(color: AppTheme.tertiary, fontSize: 12),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text(
-                            '1,240',
-                            style: TextStyle(
-                              color: AppTheme.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Icon(Icons.star, color: _getTierColor(), size: 40),
+                          const SizedBox(height: 4),
                           Text(
-                            'POINTS',
+                            _tier,
                             style: TextStyle(
-                              color: AppTheme.white.withValues(alpha: 0.5),
-                              fontSize: 11,
-                              letterSpacing: 2,
+                              color: _getTierColor(),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
                             ),
-                          ),
+                          )
                         ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.tertiary,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Redeem',
-                          style: TextStyle(
-                            color: AppTheme.secondary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  Text(
+                    '$_points',
+                    style: const TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Playfair Display',
+                    ),
+                  ),
+                  const Text(
+                    'Total Points',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 16,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  if (_tier != 'Platinum') ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(_tier, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(_nextTierName(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: _calculateProgress().clamp(0.0, 1.0),
+                        minHeight: 12,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(_getTierColor()),
                       ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Progress to next tier
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Progress to Diamond',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontFamily: 'Playfair Display',
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '760 more points needed',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: 0.62,
-                      minHeight: 8,
-                      backgroundColor: AppTheme.secondary.withValues(alpha: 0.1),
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.tertiary),
+                    const SizedBox(height: 16),
+                    Text(
+                      '${_pointsToNextTier()} points away from ${_nextTierName()}',
+                      style: TextStyle(color: Colors.grey.shade600),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  Text(
-                    'Your Rewards',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontFamily: 'Playfair Display',
+                  ] else ...[
+                    const Text(
+                      'You have reached the highest tier!',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                    ),
+                  ],
+                  const SizedBox(height: 40),
+                  const Divider(),
+                  const SizedBox(height: 20),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'How it works',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(height: 16),
+                  _buildRuleRow('Earn 1 point for every 100 LKR spent.'),
+                  _buildRuleRow('Silver (500 pts) - Free drink every month.'),
+                  _buildRuleRow('Gold (2000 pts) - 10% off on all orders.'),
+                  _buildRuleRow('Platinum (5000 pts) - Priority booking & 20% off.'),
                 ],
               ),
             ),
-
-            // Rewards List
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  _buildRewardTile(
-                    context,
-                    icon: Icons.local_drink,
-                    title: 'Complimentary Appetizer',
-                    points: '200 pts',
-                    isUnlocked: true,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRewardTile(
-                    context,
-                    icon: Icons.wine_bar,
-                    title: 'Sommelier Wine Pairing',
-                    points: '500 pts',
-                    isUnlocked: true,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRewardTile(
-                    context,
-                    icon: Icons.cake,
-                    title: 'Dessert Tasting Platter',
-                    points: '350 pts',
-                    isUnlocked: false,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRewardTile(
-                    context,
-                    icon: Icons.event_seat,
-                    title: 'Priority Table Reservation',
-                    points: '800 pts',
-                    isUnlocked: false,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
-  Widget _buildRewardTile(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String points,
-    required bool isUnlocked,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isUnlocked ? AppTheme.tertiary.withValues(alpha: 0.3) : AppTheme.secondary.withValues(alpha: 0.1),
-        ),
-      ),
+  Widget _buildRuleRow(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isUnlocked ? AppTheme.tertiary.withValues(alpha: 0.15) : AppTheme.secondary.withValues(alpha: 0.05),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: isUnlocked ? AppTheme.tertiary : AppTheme.secondary.withValues(alpha: 0.3),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: isUnlocked ? AppTheme.secondary : AppTheme.secondary.withValues(alpha: 0.4),
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: isUnlocked ? AppTheme.tertiary : AppTheme.secondary.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              points,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isUnlocked ? AppTheme.secondary : AppTheme.secondary.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
+          const Icon(Icons.check_circle_outline, color: AppTheme.primary, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 15, height: 1.4))),
         ],
       ),
     );

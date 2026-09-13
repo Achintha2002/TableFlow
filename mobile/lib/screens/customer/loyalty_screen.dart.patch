@@ -1,0 +1,61 @@
+--- lib/screens/customer/loyalty_screen.dart
++++ lib/screens/customer/loyalty_screen.dart
+@@ -10,31 +10,33 @@
+ 
+ class _LoyaltyScreenState extends State<LoyaltyScreen> {
+   bool _isLoading = true;
+   int _points = 0;
+   String _tier = 'Bronze';
++  StreamSubscription? _userSub;
+ 
+   @override
+   void initState() {
+     super.initState();
+-    _fetchLoyaltyData();
++    _listenToLoyaltyData();
+   }
+ 
+-  Future<void> _fetchLoyaltyData() async {
++  void _listenToLoyaltyData() {
+     try {
+       final userId = Supabase.instance.client.auth.currentUser?.id;
+       if (userId == null) return;
+ 
+-      final data = await Supabase.instance.client
++      _userSub = Supabase.instance.client
+           .from('users')
+-          .select('loyalty_points, loyalty_tier')
+-          .eq('id', userId)
+-          .single();
+-
+-      if (mounted) {
+-        setState(() {
+-          _points = data['loyalty_points'] ?? 0;
+-          _tier = data['loyalty_tier'] ?? 'Bronze';
+-          _isLoading = false;
+-        });
+-      }
++          .stream(primaryKey: ['id'])
++          .eq('id', userId)
++          .listen((List<Map<String, dynamic>> data) {
++        if (data.isNotEmpty && mounted) {
++          setState(() {
++            _points = data.first['loyalty_points'] ?? 0;
++            _tier = data.first['loyalty_tier'] ?? 'Bronze';
++            _isLoading = false;
++          });
++        }
++      });
+     } catch (e) {
+       if (mounted) {
+@@ -43,4 +45,10 @@
+     }
+   }
++
++  @override
++  void dispose() {
++    _userSub?.cancel();
++    super.dispose();
++  }
+ 
+   double _calculateProgress() {

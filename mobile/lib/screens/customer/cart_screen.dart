@@ -15,7 +15,6 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   String _orderStatus = 'none';
-  String? _activeOrderId;
   StreamSubscription? _orderSub;
 
   @override
@@ -45,7 +44,6 @@ class _CartScreenState extends State<CartScreen> {
           
       if (data != null && mounted) {
         setState(() {
-          _activeOrderId = data['id'];
           _orderStatus = data['status'];
         });
         _listenToOrder(data['id']);
@@ -123,7 +121,6 @@ class _CartScreenState extends State<CartScreen> {
       }).select().single();
 
       final orderId = orderResponse['id'];
-      _activeOrderId = orderId;
 
       final orderItems = cart.itemsList.map((item) => {
         'order_id': orderId,
