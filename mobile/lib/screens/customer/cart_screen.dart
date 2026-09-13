@@ -132,7 +132,9 @@ class _CartScreenState extends State<CartScreen> {
         'unit_price': item.price,
       }).toList();
 
-      await Supabase.instance.client.from('order_items').insert(orderItems);
+      for (final item in orderItems) {
+        await Supabase.instance.client.from('order_items').insert(item);
+      }
 
       if (mounted) {
         cart.clear();
