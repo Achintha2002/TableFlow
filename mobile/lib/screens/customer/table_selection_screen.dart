@@ -313,117 +313,120 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             });
           }
         },
-        child: AnimatedContainer(
+        child: AnimatedScale(
           duration: const Duration(milliseconds: 400),
           curve: Curves.elasticOut,
-          width: 100,
-          height: 100,
-          transform: isSelected ? Matrix4.diagonal3Values(1.05, 1.05, 1.0) : Matrix4.identity(),
-          transformAlignment: Alignment.center,
-          decoration: BoxDecoration(
-            gradient: isSelected 
-                ? LinearGradient(
-                    colors: [AppTheme.primary, AppTheme.primary.withValues(alpha: 0.8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : !isAvailable
-                    ? LinearGradient(
-                        colors: [Colors.grey.shade300, Colors.grey.shade400],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
-                    : const LinearGradient(
-                        colors: [Colors.white, Color(0xFFFAFAFA)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-            borderRadius: BorderRadius.circular(isSelected ? 24 : 16),
-            border: Border.all(
-              color: isSelected 
-                  ? Colors.transparent 
-                  : (isAvailable ? AppTheme.primary.withValues(alpha: 0.3) : Colors.transparent),
-              width: isSelected ? 0 : 1.5,
-            ),
-            boxShadow: isSelected 
-                ? [
-                    BoxShadow(
-                      color: AppTheme.primary.withValues(alpha: 0.6),
-                      blurRadius: 25,
-                      offset: const Offset(0, 12),
-                      spreadRadius: 2,
+          scale: isSelected ? 1.05 : 1.0,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              gradient: isSelected 
+                  ? LinearGradient(
+                      colors: [AppTheme.primary, AppTheme.primary.withValues(alpha: 0.8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     )
-                  ]
-                : !isAvailable 
-                    ? [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+                  : !isAvailable
+                      ? LinearGradient(
+                          colors: [Colors.grey.shade300, Colors.grey.shade400],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         )
-                      ]
-                    : [
-                        BoxShadow(
-                          color: AppTheme.secondary.withValues(alpha: 0.12),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                          spreadRadius: -2,
+                      : const LinearGradient(
+                          colors: [Colors.white, Color(0xFFFAFAFA)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        BoxShadow(
-                          color: Colors.white,
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                          offset: const Offset(-2, -2),
-                        )
-                      ],
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      table['id'],
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.black.withValues(alpha: 0.1) : AppTheme.secondary.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.person, size: 14, color: textColor.withValues(alpha: 0.8)),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${table['seats']}',
-                            style: TextStyle(fontSize: 13, color: textColor.withValues(alpha: 0.9), fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              borderRadius: BorderRadius.circular(isSelected ? 24 : 16),
+              border: Border.all(
+                color: isSelected 
+                    ? Colors.transparent 
+                    : (isAvailable ? AppTheme.primary.withValues(alpha: 0.3) : Colors.transparent),
+                width: isSelected ? 0 : 1.5,
               ),
-              if (isVIP)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Icon(
-                    Icons.star,
-                    size: 16,
-                    color: isSelected ? AppTheme.white : AppTheme.tertiary,
+              boxShadow: isSelected 
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primary.withValues(alpha: 0.6),
+                        blurRadius: 25,
+                        offset: const Offset(0, 12),
+                        spreadRadius: 2,
+                      )
+                    ]
+                  : !isAvailable 
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      : [
+                          BoxShadow(
+                            color: AppTheme.secondary.withValues(alpha: 0.12),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                            spreadRadius: -2,
+                          ),
+                          BoxShadow(
+                            color: Colors.white,
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                            offset: const Offset(-2, -2),
+                          )
+                        ],
+            ),
+            child: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        table['id'],
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.black.withValues(alpha: 0.1) : AppTheme.secondary.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person, size: 14, color: textColor.withValues(alpha: 0.8)),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${table['seats']}',
+                              style: TextStyle(fontSize: 13, color: textColor.withValues(alpha: 0.9), fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-            ],
+                if (isVIP)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Icon(
+                      Icons.star,
+                      size: 16,
+                      color: isSelected ? AppTheme.white : AppTheme.tertiary,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
