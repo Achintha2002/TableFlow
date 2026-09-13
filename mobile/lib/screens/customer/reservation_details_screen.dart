@@ -44,9 +44,9 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
       await Supabase.instance.client.from('reservations').insert({
         'user_id': user.id,
         'table_id': widget.dbId,
-        'reservation_time': reservationTime.toIso8601String(),
-        'party_size': widget.seats,
-        'special_requests': _specialRequestsController.text,
+        'reservation_date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+        'reservation_time': '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}:00',
+        'pax': widget.seats,
         'status': 'confirmed',
       });
       

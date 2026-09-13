@@ -187,8 +187,7 @@ class SupabaseService {
         .from('queue_entries')
         .insert({
           'user_id': userId,
-          'restaurant_id': restaurantId,
-          'party_size': partySize,
+          'pax': partySize,
           'status': 'waiting',
         })
         .select()
@@ -296,11 +295,10 @@ class SupabaseService {
         .insert({
           'user_id': userId,
           'table_id': tableId,
-          'restaurant_id': restaurantId,
-          'reservation_time': reservationTime.toIso8601String(),
-          'party_size': partySize,
+          'reservation_date': '${reservationTime.year}-${reservationTime.month.toString().padLeft(2, '0')}-${reservationTime.day.toString().padLeft(2, '0')}',
+          'reservation_time': '${reservationTime.hour.toString().padLeft(2, '0')}:${reservationTime.minute.toString().padLeft(2, '0')}:00',
+          'pax': partySize,
           'status': 'confirmed',
-          'special_requests': specialRequests,
         })
         .select()
         .single();

@@ -43,14 +43,8 @@ export default function OrdersPage() {
       () => { fetchOrders(); }
     ).subscribe();
 
-    // Fallback: Poll every 3 seconds to guarantee real-time updates
-    const intervalId = setInterval(() => {
-      fetchOrders();
-    }, 3000);
-
     return () => { 
       supabase.removeChannel(channel); 
-      clearInterval(intervalId);
     };
   }, []);
 
