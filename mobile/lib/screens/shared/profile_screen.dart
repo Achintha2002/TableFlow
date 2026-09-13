@@ -324,42 +324,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 
                 const SizedBox(height: 32),
                 
-                // Test Backend Connection Button
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
-                      try {
-                        final result = await ApiService.testConnection();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Success: ${result['message']}'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed: $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.cloud_sync, color: AppTheme.white),
-                    label: const Text('Test Backend Connection'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: AppTheme.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 32),
+
                 
                 // Logout Button
                 Center(
