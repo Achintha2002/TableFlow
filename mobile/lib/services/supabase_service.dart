@@ -56,7 +56,10 @@ class SupabaseService {
     // On Web, the google_sign_in plugin's interactive authenticate() method is unsupported.
     // We use Supabase's built-in OAuth flow which redirects to Google securely.
     if (kIsWeb) {
-      await _client.auth.signInWithOAuth(OAuthProvider.google);
+      await _client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: '${Uri.base.origin}/',
+      );
       // The browser will redirect to Google and then back to the app, so we return null.
       return null;
     }
