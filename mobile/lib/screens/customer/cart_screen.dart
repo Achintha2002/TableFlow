@@ -118,6 +118,7 @@ class _CartScreenState extends State<CartScreen> {
         if (reservationId == null && queueEntryId != null) 'queue_entry_id': queueEntryId,
         'total_amount': cart.totalAmount * 1.08,
         'status': 'pending',
+        'payment_status': 'pending',
       }).select().single();
 
       final orderId = orderResponse['id'];
@@ -325,7 +326,7 @@ class _CartScreenState extends State<CartScreen> {
                   elevation: 10,
                   shadowColor: AppTheme.primary.withValues(alpha: 0.5),
                 ),
-                child: const Text('Confirm Order', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: const Text('Confirm Order (Pay at Restaurant)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
