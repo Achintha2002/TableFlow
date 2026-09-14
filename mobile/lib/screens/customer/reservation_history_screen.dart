@@ -14,11 +14,40 @@ class ReservationHistoryScreen extends StatefulWidget {
 class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _reservations = [];
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
     _fetchReservations();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    _channel = Supabase.instance.client
+        .channel('public:reservations_history')
+        .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'reservations',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'user_id',
+              value: userId,
+            ),
+            callback: (payload) {
+              _fetchReservations();
+            })
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    _channel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _fetchReservations() async {
