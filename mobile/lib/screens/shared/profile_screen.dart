@@ -291,6 +291,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const Divider(height: 1),
                       _buildActionTile(
+                        icon: Icons.event_seat,
+                        title: 'My Reservations',
+                        subtitle: 'Manage your upcoming table bookings.',
+                        onTap: () => context.push('/reservations'),
+                      ),
+                      const Divider(height: 1),
+                      _buildActionTile(
                         icon: Icons.star_border,
                         title: 'Loyalty Program',
                         subtitle: 'Check your points and tier status.',
