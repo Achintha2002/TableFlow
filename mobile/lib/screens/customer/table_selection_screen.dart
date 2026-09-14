@@ -478,25 +478,6 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     );
   }
 
-  Widget _buildLegendItem(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.2)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(color: AppTheme.secondary, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
   Future<void> _showPremiumDatePicker() async {
     DateTime tempDate = _selectedDate;
     await showModalBottomSheet(
