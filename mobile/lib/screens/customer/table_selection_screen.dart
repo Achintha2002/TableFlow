@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TableSelectionScreen extends StatefulWidget {
   const TableSelectionScreen({super.key});
@@ -27,20 +28,58 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   }
 
   Future<void> _fetchTables() async {
+    setState(() => _isLoading = true);
     try {
       final data = await SupabaseService.getTables();
+      
+      final dateStr = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+      final reservationsData = await Supabase.instance.client
+          .from('reservations')
+          .select('table_id, reservation_time')
+          .eq('reservation_date', dateStr)
+          .inFilter('status', const ['pending', 'confirmed']);
+
       if (mounted) {
         setState(() {
-          _tables = data.map((t) => {
-            'id': 'T${t['table_number']}',
-            'dbId': t['id'],
-            'isAvailable': t['status'] == 'available',
-            'seats': t['capacity'],
-            'isVIP': t['table_categories']?['name'] == 'VIP Lounge',
+          _tables = data.map((t) {
+            final tableId = t['id'];
+            bool isAvailable = t['status'] == 'available';
+
+            if (isAvailable) {
+              final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+              
+              for (var res in reservationsData) {
+                if (res['table_id'] == tableId) {
+                  final resTimeStr = res['reservation_time'] as String;
+                  final parts = resTimeStr.split(':');
+                  final resMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+                  
+                  if ((selectedMinutes - resMinutes).abs() < 60) {
+                    isAvailable = false;
+                    break;
+                  }
+                }
+              }
+            }
+
+            return {
+              'id': 'T${t['table_number']}',
+              'dbId': tableId,
+              'isAvailable': isAvailable,
+              'seats': t['capacity'],
+              'isVIP': t['table_categories']?['name'] == 'VIP Lounge',
+            };
           }).toList();
           
-          // Sort tables by ID for a neat layout
           _tables.sort((a, b) => a['id'].compareTo(b['id']));
+          
+          // Deselect if currently selected table became unavailable
+          if (_selectedTableId != null) {
+            final selected = _tables.firstWhere((t) => t['id'] == _selectedTableId, orElse: () => {});
+            if (selected.isEmpty || !selected['isAvailable']) {
+              _selectedTableId = null;
+            }
+          }
           
           _isLoading = false;
         });
@@ -112,7 +151,10 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                               );
                             },
                           );
-                          if (date != null) setState(() => _selectedDate = date);
+                          if (date != null) {
+                            setState(() => _selectedDate = date);
+                            _fetchTables();
+                          }
                         },
                       ),
                     ),
@@ -136,7 +178,10 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                               );
                             },
                           );
-                          if (time != null) setState(() => _selectedTime = time);
+                          if (time != null) {
+                            setState(() => _selectedTime = time);
+                            _fetchTables();
+                          }
                         },
                       ),
                     ),

@@ -29,6 +29,14 @@ export default function ReservationsPage() {
     fetchReservations();
   }
 
+  async function handleReply(id, currentReply) {
+    const reply = window.prompt("Enter reply for the user:", currentReply || "");
+    if (reply !== null) {
+      await supabase.from('reservations').update({ admin_reply: reply }).eq('id', id);
+      fetchReservations();
+    }
+  }
+
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Loading reservations...</p>;
 
   return (
@@ -42,6 +50,7 @@ export default function ReservationsPage() {
             <th>Date & Time</th>
             <th>Table</th>
             <th>Pax</th>
+            <th>Special Requests</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -52,8 +61,20 @@ export default function ReservationsPage() {
               <td>{r.reservation_date} at {r.reservation_time.slice(0,5)}</td>
               <td>Table {r.restaurant_tables?.table_number ?? 'N/A'}</td>
               <td>{r.pax}</td>
-              <td>{badge(r.status === 'confirmed' ? 'success' : r.status === 'pending' ? 'warning' : 'muted', r.status)}</td>
               <td>
+                {r.special_requests ? (
+                  <div style={{ fontSize: '12px', maxWidth: '150px' }}>
+                    <i>"{r.special_requests}"</i>
+                  </div>
+                ) : <span style={{ color: 'var(--text-muted)' }}>None</span>}
+                {r.admin_reply && (
+                  <div style={{ fontSize: '12px', color: 'var(--primary-color)', marginTop: '4px' }}>
+                    <b>Reply:</b> {r.admin_reply}
+                  </div>
+                )}
+              </td>
+              <td>{badge(r.status === 'confirmed' ? 'success' : r.status === 'pending' ? 'warning' : 'muted', r.status)}</td>
+              <td style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <select 
                   className="status-dropdown" 
                   value={r.status}
@@ -74,9 +95,23 @@ export default function ReservationsPage() {
                   <option value="cancelled" style={{ color: '#000' }}>Cancelled</option>
                   <option value="completed" style={{ color: '#000' }}>Completed</option>
                 </select>
+                <button 
+                  onClick={() => handleReply(r.id, r.admin_reply)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    background: 'var(--card-bg-light)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    borderRadius: '4px'
+                  }}
+                >
+                  Reply
+                </button>
               </td>
             </tr>
-          )) : <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No reservations found</td></tr>}
+          )) : <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No reservations found</td></tr>}
         </tbody>
       </table>
     </div>

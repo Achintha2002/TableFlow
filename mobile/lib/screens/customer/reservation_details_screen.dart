@@ -47,6 +47,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
         'reservation_time': '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}:00',
         'pax': widget.seats,
         'status': 'confirmed',
+        'special_requests': _specialRequestsController.text.trim().isEmpty ? null : _specialRequestsController.text.trim(),
       });
       
       if (mounted) {
