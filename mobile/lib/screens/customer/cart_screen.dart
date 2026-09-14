@@ -5,6 +5,8 @@ import '../../core/theme.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -16,6 +18,7 @@ class CartScreen extends StatefulWidget {
 class _CartScreenState extends State<CartScreen> {
   String _orderStatus = 'none';
   StreamSubscription? _orderSub;
+  final TextEditingController _specialNotesController = TextEditingController();
 
   @override
   void initState() {
@@ -26,6 +29,7 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void dispose() {
     _orderSub?.cancel();
+    _specialNotesController.dispose();
     super.dispose();
   }
 
@@ -110,40 +114,47 @@ class _CartScreenState extends State<CartScreen> {
       }
 
       final reservationId = resData.isNotEmpty ? resData.first['id'] : null;
-      final queueEntryId = queueData.isNotEmpty ? queueData.first['id'] : null;
-
-      final orderResponse = await Supabase.instance.client.from('orders').insert({
-        'user_id': user.id,
-        if (reservationId != null) 'reservation_id': reservationId,
-        if (reservationId == null && queueEntryId != null) 'queue_entry_id': queueEntryId,
-        'total_amount': cart.totalAmount * 1.08,
-        'status': 'pending',
-        'payment_status': 'pending',
-      }).select().single();
-
-      final orderId = orderResponse['id'];
 
       final orderItems = cart.itemsList.map((item) => {
-        'order_id': orderId,
         'menu_item_id': int.tryParse(item.id) ?? item.id,
         'quantity': item.quantity,
         'unit_price': item.price,
+        'item_notes': item.itemNotes,
       }).toList();
 
-      for (final item in orderItems) {
-        await Supabase.instance.client.from('order_items').insert(item);
-      }
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
 
-      if (mounted) {
-        cart.clear();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Order sent to kitchen!'),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-        _listenToOrder(orderId);
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:3000/api/orders'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'reservation_id': reservationId,
+          'total_amount': cart.totalAmount * 1.08,
+          'special_notes': _specialNotesController.text,
+          'items': orderItems,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final respData = jsonDecode(response.body);
+        final orderId = respData['order']['id'];
+
+        if (mounted) {
+          cart.clear();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Order sent to kitchen!'),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+          _listenToOrder(orderId.toString());
+        }
+      } else {
+        throw Exception('Server error: ${response.body}');
       }
     } catch (e) {
       debugPrint('Error submitting order: $e');
