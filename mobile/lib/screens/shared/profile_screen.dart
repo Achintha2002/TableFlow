@@ -284,13 +284,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildSettingsCard(
                     children: [
                       _buildActionTile(
-                        icon: Icons.calendar_today_outlined,
-                        title: 'My Reservations',
-                        subtitle: 'View your table bookings & admin replies.',
-                        onTap: () => context.push('/reservation-history'),
-                      ),
-                      const Divider(height: 1),
-                      _buildActionTile(
                         icon: Icons.receipt_long,
                         title: 'Order History',
                         subtitle: 'View your past orders & write reviews.',

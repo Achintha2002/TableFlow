@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/customer/splash_screen.dart';
@@ -12,7 +11,6 @@ import '../screens/customer/table_selection_screen.dart';
 import '../screens/customer/reservation_details_screen.dart';
 import '../screens/shared/profile_screen.dart';
 import '../screens/shared/main_shell.dart';
-import '../screens/customer/reservation_history_screen.dart';
 import '../screens/customer/order_history_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
 
@@ -27,14 +25,10 @@ class AppRoutes {
   static const tableSelection = '/table-selection';
   static const reservationDetails = '/reservation-details';
   static const profile = '/profile';
-  static const reservationHistory = '/reservation-history';
   static const orderHistory = '/order-history';
   static const loyalty = '/loyalty';
 
-  static final rootNavigatorKey = GlobalKey<NavigatorState>();
-
   static final router = GoRouter(
-    navigatorKey: rootNavigatorKey,
     initialLocation: splash,
     redirect: (context, state) {
       final isAuth = Supabase.instance.client.auth.currentSession != null;
@@ -61,7 +55,6 @@ class AppRoutes {
       // Screens that are NOT in the bottom navigation bar
       GoRoute(path: cart, builder: (context, state) => const CartScreen()),
       GoRoute(path: orderHistory, builder: (context, state) => const OrderHistoryScreen()),
-      GoRoute(path: reservationHistory, builder: (context, state) => const ReservationHistoryScreen()),
       GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
       GoRoute(
         path: reservationDetails,
