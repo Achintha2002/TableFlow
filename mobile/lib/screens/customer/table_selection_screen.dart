@@ -21,10 +21,39 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   List<Map<String, dynamic>> _tables = [];
   bool _isLoading = true;
 
+  RealtimeChannel? _tablesChannel;
+  RealtimeChannel? _reservationsChannel;
+
   @override
   void initState() {
     super.initState();
     _fetchTables();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    _tablesChannel = Supabase.instance.client.channel('public:restaurant_tables')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all, 
+        schema: 'public', 
+        table: 'restaurant_tables', 
+        callback: (payload) => _fetchTables()
+      ).subscribe();
+
+    _reservationsChannel = Supabase.instance.client.channel('public:reservations')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all, 
+        schema: 'public', 
+        table: 'reservations', 
+        callback: (payload) => _fetchTables()
+      ).subscribe();
+  }
+
+  @override
+  void dispose() {
+    _tablesChannel?.unsubscribe();
+    _reservationsChannel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _fetchTables() async {
@@ -127,7 +156,16 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                Text(
+                  '* All reservations are limited to a 1-hour session.',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -359,6 +397,14 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             setState(() {
               _selectedTableId = _selectedTableId == table['id'] ? null : table['id'];
             });
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This table is already booked. Please choose an available one.'),
+                backgroundColor: Colors.redAccent,
+                duration: Duration(seconds: 2),
+              ),
+            );
           }
         },
         child: AnimatedScale(

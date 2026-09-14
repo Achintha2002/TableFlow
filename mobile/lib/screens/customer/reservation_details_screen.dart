@@ -67,8 +67,9 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Table ${widget.tableId} is booked for ${date.day}/${date.month}/${date.year} at ${widget.time}.',
+                  'Table ${widget.tableId} is booked for ${date.day}/${date.month}/${date.year} at ${widget.time}.\nThis booking is valid for a 1-hour session.',
                   textAlign: TextAlign.center,
+                  style: const TextStyle(height: 1.5),
                 ),
               ],
             ),
