@@ -201,6 +201,28 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionCard(
+                  title: 'My Reservations',
+                  subtitle: 'View bookings & admin replies',
+                  icon: Icons.history,
+                  onTap: () => context.go('/reservations'),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildActionCard(
+                  title: 'Order History',
+                  subtitle: 'Past orders & reviews',
+                  icon: Icons.receipt_long,
+                  onTap: () => context.go('/order-history'),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

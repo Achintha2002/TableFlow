@@ -209,10 +209,12 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   }
 
   Widget _buildJoinQueueView() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
         Container(
           padding: const EdgeInsets.all(40),
           decoration: BoxDecoration(
@@ -285,14 +287,17 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           child: const Text('Join Waitlist Now', style: TextStyle(fontSize: 18)),
         ),
       ],
+      ),
     );
   }
 
   Widget _buildInQueueView() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
         AnimatedBuilder(
           animation: _pulseController,
           builder: (context, child) {
@@ -408,6 +413,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           ],
         ),
       ],
+      ),
     );
   }
 }

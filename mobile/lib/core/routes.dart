@@ -12,6 +12,7 @@ import '../screens/customer/reservation_details_screen.dart';
 import '../screens/shared/profile_screen.dart';
 import '../screens/shared/main_shell.dart';
 import '../screens/customer/order_history_screen.dart';
+import '../screens/customer/reservation_history_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
 
 class AppRoutes {
@@ -26,6 +27,7 @@ class AppRoutes {
   static const reservationDetails = '/reservation-details';
   static const profile = '/profile';
   static const orderHistory = '/order-history';
+  static const reservations = '/reservations';
   static const loyalty = '/loyalty';
 
   static final router = GoRouter(
@@ -55,6 +57,7 @@ class AppRoutes {
       // Screens that are NOT in the bottom navigation bar
       GoRoute(path: cart, builder: (context, state) => const CartScreen()),
       GoRoute(path: orderHistory, builder: (context, state) => const OrderHistoryScreen()),
+      GoRoute(path: reservations, builder: (context, state) => const ReservationHistoryScreen()),
       GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
       GoRoute(
         path: reservationDetails,
