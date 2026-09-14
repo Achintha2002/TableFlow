@@ -95,6 +95,23 @@ class CartProvider extends ChangeNotifier {
     }
   }
 
+  void updateItemNotes(String productId, String notes) {
+    if (_items.containsKey(productId)) {
+      _items.update(
+        productId,
+        (existingCartItem) => CartItem(
+          id: existingCartItem.id,
+          name: existingCartItem.name,
+          price: existingCartItem.price,
+          imageUrl: existingCartItem.imageUrl,
+          quantity: existingCartItem.quantity,
+          itemNotes: notes.isEmpty ? null : notes,
+        ),
+      );
+      notifyListeners();
+    }
+  }
+
   void clear() {
     _items.clear();
     notifyListeners();

@@ -304,6 +304,19 @@ class _CartScreenState extends State<CartScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextField(
+              controller: _specialNotesController,
+              decoration: InputDecoration(
+                hintText: 'Add a special note for the kitchen...',
+                hintStyle: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.4)),
+                filled: true,
+                fillColor: AppTheme.background,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
             _buildSummaryRow('Subtotal', 'LKR ${cart.totalAmount.toStringAsFixed(2)}'),
             const SizedBox(height: 12),
             _buildSummaryRow('Taxes & Fees (8%)', 'LKR ${(cart.totalAmount * 0.08).toStringAsFixed(2)}'),
@@ -450,6 +463,14 @@ class _CartScreenState extends State<CartScreen> {
                   price,
                   style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15),
                 ),
+                if (cart.items[id]?.itemNotes != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      'Note: ${cart.items[id]!.itemNotes}',
+                      style: const TextStyle(color: Colors.red, fontSize: 13, fontStyle: FontStyle.italic),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 if (_orderStatus == 'none')
                   Row(
@@ -472,6 +493,34 @@ class _CartScreenState extends State<CartScreen> {
                           child: _buildQtyBtn(Icons.add),
                         ),
                       ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.note_add_outlined, size: 20, color: AppTheme.secondary),
+                        onPressed: () {
+                          final item = cart.items[id];
+                          final noteCtrl = TextEditingController(text: item?.itemNotes ?? '');
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Add Note'),
+                              content: TextField(
+                                controller: noteCtrl,
+                                decoration: const InputDecoration(hintText: 'E.g., No onions, extra spicy...'),
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                                TextButton(
+                                  onPressed: () {
+                                    cart.updateItemNotes(id, noteCtrl.text);
+                                    Navigator.pop(ctx);
+                                  },
+                                  child: const Text('Save'),
+                                )
+                              ],
+                            )
+                          );
+                        },
+                      )
                     ],
                   ),
               ],
