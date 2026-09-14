@@ -241,7 +241,7 @@ class _CartScreenState extends State<CartScreen> {
             ],
           ),
           
-          if (cartItems.isNotEmpty && _orderStatus == 'none')
+          if (cartItems.isNotEmpty)
             Positioned(
               left: 0,
               right: 0,
@@ -510,8 +510,7 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                if (_orderStatus == 'none')
-                  Row(
+                Row(
                     children: [
                       MouseRegion(
                         cursor: SystemMouseCursors.click,
