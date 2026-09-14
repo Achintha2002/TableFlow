@@ -39,7 +39,17 @@ class TableFlowApp extends StatelessWidget {
                 data: MediaQuery.of(context).copyWith(
                   textScaler: TextScaler.linear(scale),
                 ),
-                child: NotificationWrapper(child: child!),
+                child: ColoredBox(
+                  color: AppTheme.secondary.withValues(alpha: 0.1),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 500),
+                      child: ClipRect(
+                        child: NotificationWrapper(child: child!),
+                      ),
+                    ),
+                  ),
+                ),
               );
             },
             routerConfig: AppRoutes.router,
