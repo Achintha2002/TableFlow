@@ -206,7 +206,180 @@ app.delete('/api/admin/users/:id', async (req, res) => {
   }
 });
 
+// ==========================================
+// KDS & Orders Endpoints
+// ==========================================
+
+// Create a Supabase client that uses the user's JWT for RLS
+function getSupabaseClient(req) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return supabaseAdmin; // Fallback to admin (not recommended for user actions)
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } }
+  });
+}
+
+// 1. Customer places an order
+app.post('/api/orders', authMiddleware, async (req, res) => {
+  try {
+    const sb = getSupabaseClient(req);
+    const { items, total_amount, reservation_id, table_id, special_notes } = req.body;
+    
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: 'Order must contain items' });
+    }
+
+    // 1. Calculate Prep Time (MAX of item prep times)
+    const itemIds = items.map(i => i.menu_item_id);
+    const { data: menuItems, error: menuErr } = await sb
+      .from('menu_items')
+      .select('id, prep_time_minutes')
+      .in('id', itemIds);
+
+    if (menuErr) throw menuErr;
+
+    let maxPrepTime = 15; // default 15
+    if (menuItems && menuItems.length > 0) {
+      maxPrepTime = Math.max(...menuItems.map(m => m.prep_time_minutes || 15));
+    }
+
+    // 2. Calculate Target Serve Time
+    let targetServeTime = new Date();
+    targetServeTime.setMinutes(targetServeTime.getMinutes() + maxPrepTime); // Default: dine-in-now
+
+    if (reservation_id) {
+      // Fetch reservation time
+      const { data: resData, error: resErr } = await sb
+        .from('reservations')
+        .select('reservation_date, reservation_time')
+        .eq('id', reservation_id)
+        .single();
+      
+      if (!resErr && resData) {
+        // Construct target time from reservation date and time
+        const resDateTime = new Date(`${resData.reservation_date}T${resData.reservation_time}`);
+        if (!isNaN(resDateTime.getTime())) {
+          targetServeTime = resDateTime;
+        }
+      }
+    }
+
+    // 3. Create the Order
+    const { data: newOrder, error: orderErr } = await sb
+      .from('orders')
+      .insert({
+        user_id: req.user.id,
+        reservation_id: reservation_id || null,
+        table_id: table_id || null,
+        total_amount: total_amount,
+        status: 'pending',
+        payment_status: 'pending',
+        prep_time_minutes: maxPrepTime,
+        target_serve_time: targetServeTime.toISOString(),
+        special_notes: special_notes || null
+      })
+      .select()
+      .single();
+
+    if (orderErr) throw orderErr;
+
+    // 4. Create Order Items
+    const orderItems = items.map(item => ({
+      order_id: newOrder.id,
+      menu_item_id: item.menu_item_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      item_notes: item.item_notes || null
+    }));
+
+    const { error: itemsErr } = await sb
+      .from('order_items')
+      .insert(orderItems);
+
+    if (itemsErr) throw itemsErr;
+
+    res.status(201).json({ message: 'Order placed successfully', order: newOrder });
+  } catch (error) {
+    console.error('Order creation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Get active kitchen orders (Kitchen Staff only)
+app.get('/api/kitchen/orders', authMiddleware, async (req, res) => {
+  try {
+    const sb = getSupabaseClient(req);
+    
+    const { data, error } = await sb
+      .from('orders')
+      .select(`
+        *,
+        order_items(quantity, unit_price, item_notes, menu_items(name)),
+        users(full_name),
+        restaurant_tables(table_number)
+      `)
+      .in('status', ['pending', 'preparing', 'ready'])
+      .order('target_serve_time', { ascending: true }); // most urgent first
+
+    if (error) {
+      throw error; 
+    }
+
+    res.json(data || []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Update order status (Kitchen Staff only)
+app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => {
+  try {
+    const sb = getSupabaseClient(req);
+    const { status } = req.body;
+    const orderId = req.params.id;
+
+    if (!['pending', 'preparing', 'ready', 'served'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    // Fetch current status to validate transition
+    const { data: currentOrder, error: fetchErr } = await sb
+      .from('orders')
+      .select('status')
+      .eq('id', orderId)
+      .single();
+
+    if (fetchErr || !currentOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const currentStatus = currentOrder.status;
+    const isValidTransition = 
+      (currentStatus === 'pending' && status === 'preparing') ||
+      (currentStatus === 'preparing' && status === 'ready') ||
+      (currentStatus === 'ready' && status === 'served');
+
+    if (!isValidTransition && currentStatus !== status) {
+      return res.status(400).json({ error: `Invalid transition from ${currentStatus} to ${status}` });
+    }
+
+    const { data, error } = await sb
+      .from('orders')
+      .update({ status })
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+

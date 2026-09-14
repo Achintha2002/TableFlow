@@ -2,11 +2,60 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
-function fmtTimeOnly(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('en-US', {
-    hour: '2-digit', minute: '2-digit'
-  });
+// Helper to get token
+function getToken() {
+  // In a real app, you'd get the auth token from supabase session
+  return supabase.auth.getSession().then(({ data }) => data.session?.access_token);
+}
+
+function Timer({ targetServeTime, reservationId, createdAt }) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 10000); // update every 10s
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!targetServeTime) return <span>-</span>;
+  
+  const target = new Date(targetServeTime);
+  const created = new Date(createdAt);
+  
+  if (reservationId) {
+    // PRE-ORDER: COUNTDOWN (target - now)
+    const diffMs = target - now;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    let color = 'var(--success-green)';
+    let text = `Ready in ${diffMins} min`;
+    
+    if (diffMins <= 5) {
+      color = 'var(--danger-red)';
+      text = diffMins < 0 ? `OVERDUE by ${Math.abs(diffMins)}m` : `Urgent: ${diffMins} min`;
+    } else if (diffMins <= 15) {
+      color = 'var(--primary-gold)';
+    }
+
+    // Flashing effect if < 5 mins
+    const isFlashing = diffMins < 5;
+
+    return <div className={isFlashing ? 'flashing-text' : ''} style={{ color, fontWeight: 'bold', fontSize: '18px' }}>{text}</div>;
+  } else {
+    // DINE-IN NOW: ELAPSED TIME (now - created)
+    const elapsedMs = now - created;
+    const elapsedMins = Math.floor(elapsedMs / 60000);
+    
+    let color = 'var(--success-green)';
+    let text = `Waiting: ${elapsedMins} min`;
+    
+    if (elapsedMins >= 20) {
+      color = 'var(--danger-red)';
+    } else if (elapsedMins >= 10) {
+      color = 'var(--primary-gold)';
+    }
+
+    return <div style={{ color, fontWeight: 'bold', fontSize: '18px' }}>{text}</div>;
+  }
 }
 
 export default function KDS() {
@@ -14,14 +63,14 @@ export default function KDS() {
   const [loading, setLoading] = useState(true);
 
   async function fetchOrders() {
-    // In KDS, we only care about pending, preparing, and ready. Served are gone.
-    const { data } = await supabase
-      .from('orders')
-      .select('*, order_items(quantity, unit_price, menu_items(name))')
-      .in('status', ['pending', 'preparing', 'ready'])
-      .order('created_at', { ascending: true });
-    
-    setOrders(data || []);
+    const token = await getToken();
+    const res = await fetch('http://localhost:3000/api/kitchen/orders', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setOrders(data);
+    }
     setLoading(false);
   }
 
@@ -29,86 +78,168 @@ export default function KDS() {
     fetchOrders();
 
     const channel = supabase.channel('kds-orders-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchOrders();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
+        fetchOrders();
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   async function updateStatus(id, newStatus) {
-    await supabase.from('orders').update({ status: newStatus }).eq('id', id);
+    const token = await getToken();
+    await fetch(`http://localhost:3000/api/kitchen/orders/${id}/status`, {
+      method: 'PATCH',
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status: newStatus })
+    });
     fetchOrders();
   }
 
   if (loading) return <h2 style={{ color: 'var(--text-muted)' }}>Loading Kitchen Display...</h2>;
 
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-      {orders.map(o => {
-        let borderColor = 'var(--border-color)';
-        if (o.status === 'pending') borderColor = 'var(--primary-gold)';
-        if (o.status === 'preparing') borderColor = 'var(--info-blue)';
-        if (o.status === 'ready') borderColor = 'var(--success-green)';
+  const pendingOrders = orders.filter(o => o.status === 'pending');
+  const preparingOrders = orders.filter(o => o.status === 'preparing');
+  const readyOrders = orders.filter(o => o.status === 'ready');
 
-        return (
-          <div key={o.id} style={{ 
-            background: 'var(--bg-card)', 
-            border: `2px solid ${borderColor}`, 
-            borderRadius: '12px',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}>
+  const Column = ({ title, items, color, nextAction, nextStatus }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '16px', minHeight: '80vh' }}>
+      <h2 style={{ borderBottom: `2px solid ${color}`, paddingBottom: '12px', color: 'var(--text-light)', marginTop: 0 }}>
+        {title} ({items.length})
+      </h2>
+      {items.map(o => (
+        <div key={o.id} style={{ 
+          background: 'var(--bg-card)', 
+          borderLeft: `6px solid ${color}`, 
+          borderRadius: '12px',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h2 style={{ margin: 0, fontFamily: 'monospace', color: 'var(--text-light)' }}>#{o.id.slice(0,6)}</h2>
-                <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{fmtTimeOnly(o.created_at)}</span>
+              <h3 style={{ margin: '0 0 4px 0', fontSize: '24px', color: 'var(--text-light)' }}>
+                {o.restaurant_tables?.table_number ? `Table ${o.restaurant_tables.table_number}` : 'No Table'}
+              </h3>
+              <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                {o.users?.full_name || 'Guest'} • #{o.id.slice(0,5).toUpperCase()}
               </div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px 0' }}>
-                {o.order_items && o.order_items.map((item, idx) => (
-                  <li key={idx} style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    padding: '8px 0', 
-                    borderBottom: '1px solid var(--border-color)',
-                    fontSize: '16px',
-                    fontWeight: 500
-                  }}>
-                    <span>{item.quantity}x {item.menu_items?.name}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
-            
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button 
-                onClick={() => updateStatus(o.id, 'preparing')}
-                style={{ 
-                  flex: 1, padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold',
-                  background: o.status === 'preparing' ? 'var(--info-blue)' : 'rgba(0,0,0,0.05)',
-                  color: o.status === 'preparing' ? '#000' : 'var(--text-light)'
-                }}>PREP</button>
-              <button 
-                onClick={() => updateStatus(o.id, 'ready')}
-                style={{ 
-                  flex: 1, padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold',
-                  background: o.status === 'ready' ? 'var(--success-green)' : 'rgba(0,0,0,0.05)',
-                  color: o.status === 'ready' ? '#000' : 'var(--text-light)'
-                }}>READY</button>
-              <button 
-                onClick={() => updateStatus(o.id, 'served')}
-                style={{ 
-                  flex: 1, padding: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold',
-                  background: 'rgba(0,0,0,0.05)', color: 'var(--text-light)'
-                }}>SERVE</button>
+            <div style={{ textAlign: 'right' }}>
+              <Timer 
+                targetServeTime={o.target_serve_time} 
+                reservationId={o.reservation_id} 
+                createdAt={o.created_at} 
+              />
             </div>
           </div>
-        );
-      })}
-      {orders.length === 0 && (
-        <h2 style={{ color: 'var(--text-muted)' }}>No active orders. Kitchen is clear!</h2>
+
+          {/* Items */}
+          <div style={{ flex: 1, marginBottom: '16px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '12px' }}>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {o.order_items && o.order_items.map((item, idx) => (
+                <li key={idx} style={{ padding: '8px 0', borderBottom: idx < o.order_items.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 600, color: 'var(--text-light)' }}>
+                    <span><span style={{ color: color }}>{item.quantity}x</span> {item.menu_items?.name}</span>
+                  </div>
+                  {item.item_notes && (
+                    <div style={{ 
+                      marginTop: '4px', 
+                      display: 'inline-block',
+                      background: 'var(--danger-red)', 
+                      color: '#fff', 
+                      padding: '2px 8px', 
+                      borderRadius: '4px', 
+                      fontSize: '12px',
+                      fontWeight: 'bold' 
+                    }}>
+                      {item.item_notes}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Order Notes */}
+          {o.special_notes && (
+            <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(255, 193, 7, 0.1)', border: '1px solid var(--primary-gold)', borderRadius: '8px', color: 'var(--primary-gold)', fontSize: '14px' }}>
+              <strong>Note:</strong> {o.special_notes}
+            </div>
+          )}
+
+          {/* Action */}
+          {nextAction && (
+            <button 
+              onClick={() => updateStatus(o.id, nextStatus)}
+              style={{ 
+                padding: '16px', 
+                borderRadius: '8px', 
+                border: 'none', 
+                cursor: 'pointer', 
+                fontWeight: 'bold',
+                fontSize: '16px',
+                background: color,
+                color: '#000',
+                textTransform: 'uppercase',
+                letterSpacing: '1px'
+              }}>
+              {nextAction}
+            </button>
+          )}
+        </div>
+      ))}
+      {items.length === 0 && (
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '40px' }}>Empty</div>
       )}
+    </div>
+  );
+
+  return (
+    <div>
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes flash {
+          0% { opacity: 1; }
+          50% { opacity: 0.3; }
+          100% { opacity: 1; }
+        }
+        .flashing-text {
+          animation: flash 1s infinite;
+        }
+      `}} />
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ margin: 0, color: 'var(--text-light)' }}>Kitchen Display System</h1>
+        <div style={{ color: 'var(--text-muted)' }}>Live Updates Active 🟢</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+        <Column 
+          title="PENDING" 
+          items={pendingOrders} 
+          color="var(--primary-gold)" 
+          nextAction="Start Preparing"
+          nextStatus="preparing"
+        />
+        <Column 
+          title="PREPARING" 
+          items={preparingOrders} 
+          color="var(--info-blue)" 
+          nextAction="Mark as Ready"
+          nextStatus="ready"
+        />
+        <Column 
+          title="READY" 
+          items={readyOrders} 
+          color="var(--success-green)" 
+        />
+      </div>
     </div>
   );
 }
