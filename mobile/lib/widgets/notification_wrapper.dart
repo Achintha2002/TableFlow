@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
+import '../core/routes.dart';
 
 class NotificationWrapper extends StatefulWidget {
   final Widget child;
@@ -72,9 +73,13 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
 
   void _showReplyAlert(String reply) {
     if (!mounted) return;
+    
+    final ctx = AppRoutes.rootNavigatorKey.currentContext;
+    if (ctx == null) return;
+
     showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
+      context: ctx,
+      builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
@@ -86,7 +91,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
         content: Text(reply, style: const TextStyle(fontSize: 16)),
         actions: [
           ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: AppTheme.white,
@@ -102,38 +107,39 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
   void _showTurnAlert(Map<String, dynamic> entry) {
     if (!mounted) return;
     
+    final ctx = AppRoutes.rootNavigatorKey.currentContext;
+    if (ctx == null) return;
+
+    final partySize = entry['party_size'];
+    
     showDialog(
-      context: context,
+      context: ctx,
       barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.notifications_active, color: AppTheme.primary, size: 30),
-              SizedBox(width: 10),
-              Text('Your Table is Ready!'),
-            ],
-          ),
-          content: Text(
-            'Please head to the reception. We have prepared a table for ${entry['party_size']} people!',
-            style: const TextStyle(fontSize: 16),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: AppTheme.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('I am on my way'),
-            )
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.notifications_active, color: AppTheme.primary, size: 30),
+            SizedBox(width: 10),
+            Text('It\'s Your Turn!'),
           ],
-        );
-      },
+        ),
+        content: Text(
+          'Your table for $partySize is ready.\nPlease head to the host stand.',
+          style: const TextStyle(fontSize: 16),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: AppTheme.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('OK'),
+          )
+        ],
+      ),
     );
   }
 
