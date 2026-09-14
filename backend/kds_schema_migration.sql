@@ -6,7 +6,7 @@
 -- 1. Add new columns to `orders` table
 ALTER TABLE orders 
   ADD COLUMN IF NOT EXISTS reservation_id UUID REFERENCES reservations(id),
-  ADD COLUMN IF NOT EXISTS table_id UUID REFERENCES restaurant_tables(id),
+  ADD COLUMN IF NOT EXISTS table_id INTEGER REFERENCES restaurant_tables(id),
   ADD COLUMN IF NOT EXISTS target_serve_time TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS prep_time_minutes INTEGER,
   ADD COLUMN IF NOT EXISTS special_notes TEXT;
