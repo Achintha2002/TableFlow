@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildQuickActions(),
             const SizedBox(height: 32),
             _buildFeaturedSection(),
-            const SizedBox(height: 40),
+            const SizedBox(height: 120), // Increased to prevent overlap with the floating bottom navigation bar
           ],
         ),
       ),
