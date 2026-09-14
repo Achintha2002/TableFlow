@@ -25,32 +25,32 @@ class AppTheme {
       // Typography
       textTheme: TextTheme(
         displayLarge: GoogleFonts.playfairDisplay(
-          fontSize: 32,
+          fontSize: 28,
           fontWeight: FontWeight.bold,
           color: secondary,
         ),
         displayMedium: GoogleFonts.playfairDisplay(
-          fontSize: 28,
+          fontSize: 24,
           fontWeight: FontWeight.w600,
           color: secondary,
         ),
         titleLarge: GoogleFonts.inter(
-          fontSize: 22,
+          fontSize: 18,
           fontWeight: FontWeight.w600,
           color: secondary,
         ),
         bodyLarge: GoogleFonts.inter(
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: FontWeight.normal,
           color: secondary,
         ),
         bodyMedium: GoogleFonts.inter(
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: FontWeight.normal,
           color: secondary.withValues(alpha: 0.8),
         ),
         labelLarge: GoogleFonts.inter(
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.2,
         ),
@@ -63,7 +63,7 @@ class AppTheme {
         centerTitle: true,
         iconTheme: const IconThemeData(color: secondary),
         titleTextStyle: GoogleFonts.playfairDisplay(
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: FontWeight.w600,
           color: secondary,
         ),
@@ -80,7 +80,7 @@ class AppTheme {
             borderRadius: BorderRadius.circular(8),
           ),
           textStyle: GoogleFonts.inter(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.0,
           ),
@@ -97,7 +97,7 @@ class AppTheme {
             borderRadius: BorderRadius.circular(8),
           ),
           textStyle: GoogleFonts.inter(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.0,
           ),
@@ -132,32 +132,32 @@ class AppTheme {
       // Typography
       textTheme: TextTheme(
         displayLarge: GoogleFonts.playfairDisplay(
-          fontSize: 32,
+          fontSize: 28,
           fontWeight: FontWeight.w900,
           color: Colors.black,
         ),
         displayMedium: GoogleFonts.playfairDisplay(
-          fontSize: 28,
+          fontSize: 24,
           fontWeight: FontWeight.w800,
           color: Colors.black,
         ),
         titleLarge: GoogleFonts.inter(
-          fontSize: 22,
+          fontSize: 18,
           fontWeight: FontWeight.w800,
           color: Colors.black,
         ),
         bodyLarge: GoogleFonts.inter(
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
           color: Colors.black,
         ),
         bodyMedium: GoogleFonts.inter(
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: FontWeight.w600,
           color: Colors.black87,
         ),
         labelLarge: GoogleFonts.inter(
-          fontSize: 14,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.2,
           color: Colors.black,
@@ -171,7 +171,7 @@ class AppTheme {
         centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.black, size: 28),
         titleTextStyle: GoogleFonts.playfairDisplay(
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: FontWeight.w800,
           color: Colors.black,
         ),
@@ -189,7 +189,7 @@ class AppTheme {
             side: const BorderSide(color: Colors.black, width: 2),
           ),
           textStyle: GoogleFonts.inter(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.0,
           ),
@@ -206,7 +206,7 @@ class AppTheme {
             borderRadius: BorderRadius.circular(4),
           ),
           textStyle: GoogleFonts.inter(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.0,
           ),

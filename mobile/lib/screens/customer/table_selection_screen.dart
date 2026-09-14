@@ -194,13 +194,13 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           // Legend
           Padding(
             padding: const EdgeInsets.all(24.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 16,
+              runSpacing: 12,
               children: [
                 _buildLegendItem(AppTheme.white, 'Available'),
-                const SizedBox(width: 24),
                 _buildLegendItem(AppTheme.secondary.withValues(alpha: 0.1), 'Booked'),
-                const SizedBox(width: 24),
                 _buildLegendItem(AppTheme.primary, 'Selected'),
               ],
             ),
