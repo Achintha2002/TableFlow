@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
@@ -176,28 +177,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                       child: _buildPickerButton(
                         icon: Icons.calendar_today,
                         label: DateFormat('MMM d, yyyy').format(_selectedDate),
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: _selectedDate,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 30)),
-                            builder: (context, child) {
-                              return Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: AppTheme.primary,
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
-                          );
-                          if (date != null) {
-                            setState(() => _selectedDate = date);
-                            _fetchTables();
-                          }
-                        },
+                        onTap: _showPremiumDatePicker,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -205,26 +185,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                       child: _buildPickerButton(
                         icon: Icons.access_time,
                         label: _selectedTime.format(context),
-                        onTap: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime: _selectedTime,
-                            builder: (context, child) {
-                              return Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: AppTheme.primary,
-                                  ),
-                                ),
-                                child: child!,
-                              );
-                            },
-                          );
-                          if (time != null) {
-                            setState(() => _selectedTime = time);
-                            _fetchTables();
-                          }
-                        },
+                        onTap: _showPremiumTimePicker,
                       ),
                     ),
                   ],
@@ -347,6 +308,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
   Widget _buildLegendItem(Color color, String label) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,
@@ -355,14 +317,6 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             color: color,
             shape: BoxShape.circle,
             border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.2)),
-            boxShadow: [
-              if (color == AppTheme.primary)
-                BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.4),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                )
-            ],
           ),
         ),
         const SizedBox(width: 8),
@@ -441,9 +395,9 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               boxShadow: isSelected 
                   ? [
                       BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.6),
-                        blurRadius: 25,
-                        offset: const Offset(0, 12),
+                        color: AppTheme.primary.withValues(alpha: 0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
                         spreadRadius: 2,
                       )
                     ]
@@ -521,6 +475,141 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.2)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(color: AppTheme.secondary, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Future<void> _showPremiumDatePicker() async {
+    DateTime tempDate = _selectedDate;
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: 320,
+          decoration: BoxDecoration(
+            color: AppTheme.white,
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.secondary.withValues(alpha: 0.2),
+                blurRadius: 30,
+                offset: const Offset(0, -10),
+              )
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary, fontSize: 16))),
+                    const Text('Select Date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _selectedDate = tempDate);
+                        _fetchTables();
+                        Navigator.pop(context);
+                      }, 
+                      child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: _selectedDate,
+                  minimumDate: DateTime.now().subtract(const Duration(days: 1)),
+                  maximumDate: DateTime.now().add(const Duration(days: 30)),
+                  onDateTimeChanged: (DateTime newDate) {
+                    tempDate = newDate;
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showPremiumTimePicker() async {
+    DateTime tempTime = DateTime(2020, 1, 1, _selectedTime.hour, _selectedTime.minute);
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: 320,
+          decoration: BoxDecoration(
+            color: AppTheme.white,
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.secondary.withValues(alpha: 0.2),
+                blurRadius: 30,
+                offset: const Offset(0, -10),
+              )
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary, fontSize: 16))),
+                    const Text('Select Time', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _selectedTime = TimeOfDay(hour: tempTime.hour, minute: tempTime.minute));
+                        _fetchTables();
+                        Navigator.pop(context);
+                      }, 
+                      child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.time,
+                  initialDateTime: tempTime,
+                  use24hFormat: false,
+                  minuteInterval: 15,
+                  onDateTimeChanged: (DateTime newTime) {
+                    tempTime = newTime;
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
