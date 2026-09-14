@@ -26,7 +26,10 @@ export default function OrdersPage() {
         total_amount, 
         status, 
         payment_status,
-        created_at
+        created_at,
+        users (full_name),
+        restaurant_tables (table_number),
+        order_items (quantity, menu_items (name))
       `)
       .order('created_at', { ascending: false });
       
@@ -70,6 +73,9 @@ export default function OrdersPage() {
         <thead>
           <tr>
             <th>Order ID</th>
+            <th>Customer</th>
+            <th>Table</th>
+            <th>Items</th>
             <th>Total Amount</th>
             <th>Status</th>
             <th>Payment</th>
@@ -81,6 +87,11 @@ export default function OrdersPage() {
           {orders.length > 0 ? orders.map(o => (
             <tr key={o.id}>
               <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
+              <td>{o.users?.full_name || 'Guest'}</td>
+              <td>{o.restaurant_tables?.table_number ? `T-${o.restaurant_tables.table_number}` : '—'}</td>
+              <td style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '200px' }}>
+                {o.order_items?.map(item => `${item.quantity}x ${item.menu_items?.name}`).join(', ') || '—'}
+              </td>
               <td>LKR {(o.total_amount ?? 0).toFixed(2)}</td>
               <td>{badge(o.status === 'served' ? 'success' : o.status === 'preparing' ? 'info' : o.status === 'pending' ? 'warning' : 'muted', o.status)}</td>
               <td>
