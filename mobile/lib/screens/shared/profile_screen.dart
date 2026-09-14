@@ -144,7 +144,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             // Premium Glassmorphism Header
             Container(
-              height: 380,
+              constraints: const BoxConstraints(minHeight: 380),
               decoration: const BoxDecoration(
                 image: DecorationImage(
                   image: NetworkImage('https://images.unsplash.com/photo-1544148103-0773bf10d330?q=80&w=1000&auto=format&fit=crop'), // Elegant restaurant/wine image

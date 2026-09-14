@@ -61,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : 'Welcome to TableFlow';
 
     return Container(
-      height: 340,
+      constraints: const BoxConstraints(minHeight: 340),
       decoration: const BoxDecoration(
         color: AppTheme.secondary,
         borderRadius: BorderRadius.only(
