@@ -19,11 +19,31 @@ class _CartScreenState extends State<CartScreen> {
   String _orderStatus = 'none';
   StreamSubscription? _orderSub;
   final TextEditingController _specialNotesController = TextEditingController();
+  
+  List<Map<String, dynamic>> _tables = [];
+  int? _selectedTableId;
 
   @override
   void initState() {
     super.initState();
     _checkActiveOrder();
+    _fetchTables();
+  }
+
+  Future<void> _fetchTables() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('restaurant_tables')
+          .select('id, table_number')
+          .order('table_number', ascending: true);
+      if (mounted) {
+        setState(() {
+          _tables = List<Map<String, dynamic>>.from(data);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching tables: $e');
+    }
   }
 
   @override
@@ -95,25 +115,17 @@ class _CartScreenState extends State<CartScreen> {
           .order('created_at', ascending: false)
           .limit(1);
           
-      final queueData = await Supabase.instance.client
-          .from('queue_entries')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('status', 'waiting')
-          .order('joined_at', ascending: false)
-          .limit(1);
+      final reservationId = resData.isNotEmpty ? resData.first['id'] : null;
 
-      if (resData.isEmpty && queueData.isEmpty) {
+      if (reservationId == null && _selectedTableId == null) {
         if (mounted) {
           setState(() => _orderStatus = 'none');
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You must book a table or join the queue before ordering!')),
+            const SnackBar(content: Text('Please select a table or book a reservation first.')),
           );
         }
         return;
       }
-
-      final reservationId = resData.isNotEmpty ? resData.first['id'] : null;
 
       final orderItems = cart.itemsList.map((item) => {
         'menu_item_id': int.tryParse(item.id) ?? item.id,
@@ -132,6 +144,7 @@ class _CartScreenState extends State<CartScreen> {
         },
         body: jsonEncode({
           'reservation_id': reservationId,
+          'table_id': _selectedTableId,
           'total_amount': cart.totalAmount * 1.08,
           'special_notes': _specialNotesController.text,
           'items': orderItems,
@@ -304,6 +317,31 @@ class _CartScreenState extends State<CartScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_tables.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    isExpanded: true,
+                    value: _selectedTableId,
+                    hint: Text('Select Table (Dine-in)', style: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.6))),
+                    items: _tables.map((t) => DropdownMenuItem<int>(
+                      value: t['id'],
+                      child: Text('Table ${t['table_number']}'),
+                    )).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedTableId = val;
+                      });
+                    },
+                  ),
+                ),
+              ),
             TextField(
               controller: _specialNotesController,
               decoration: InputDecoration(
