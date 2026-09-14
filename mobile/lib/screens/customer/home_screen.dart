@@ -1,6 +1,8 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 
@@ -13,7 +15,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _firstName = '';
-
 
   @override
   void initState() {
@@ -55,8 +56,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeroSection() {
-    final greeting = _firstName.isNotEmpty ? 'Welcome back, $_firstName' : 'Welcome to TableFlow';
-    
+    final greeting = _firstName.isNotEmpty
+        ? 'Welcome back, $_firstName'
+        : 'Welcome to TableFlow';
+
     return Container(
       height: 340,
       decoration: const BoxDecoration(
@@ -73,7 +76,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
         image: DecorationImage(
-          image: NetworkImage('https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=1000&auto=format&fit=crop'), // Elegant restaurant interior
+          image: NetworkImage(
+            'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=1000&auto=format&fit=crop',
+          ), // Elegant restaurant interior
           fit: BoxFit.cover,
         ),
       ),
@@ -95,43 +100,50 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           padding: const EdgeInsets.all(24.0),
           alignment: Alignment.bottomLeft,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                decoration: BoxDecoration(
-                  color: AppTheme.secondary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.white.withValues(alpha: 0.15),
-                    width: 1.5,
+          child: SizedBox(
+            width: double.infinity,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
                   ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      greeting,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.white.withValues(alpha: 0.9),
-                        letterSpacing: 1.5,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.secondary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppTheme.white.withValues(alpha: 0.15),
+                      width: 1.5,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Experience fine dining\nat your fingertips.',
-                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                        color: AppTheme.white,
-                        fontSize: 28,
-                        height: 1.3,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.white.withValues(alpha: 0.9),
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Experience fine dining\nat your fingertips.',
+                        style: Theme.of(context).textTheme.displayMedium
+                            ?.copyWith(
+                              color: AppTheme.white,
+                              fontSize: 28,
+                              height: 1.3,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -156,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // Primary Action
           _buildActionCard(
             title: 'Book a Table',
@@ -166,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () => context.go('/table-selection'),
           ),
           const SizedBox(height: 16),
-          
+
           // Secondary Actions Row
           Row(
             children: [
@@ -203,12 +215,14 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Chef\'s Specialty',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFamily: 'Playfair Display',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24,
+              Expanded(
+                child: Text(
+                  'Chef\'s Specialty',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontFamily: 'Playfair Display',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 24,
+                  ),
                 ),
               ),
               TextButton(
@@ -227,7 +241,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
                   image: const DecorationImage(
-                    image: NetworkImage('https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1000&auto=format&fit=crop'),
+                    image: NetworkImage(
+                      'https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1000&auto=format&fit=crop',
+                    ),
                     fit: BoxFit.cover,
                   ),
                   boxShadow: [
@@ -256,44 +272,56 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'FEATURED',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: AppTheme.white,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.5,
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'FEATURED',
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(
+                                      color: AppTheme.white,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
+                                    ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Wagyu Beef Steak',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: AppTheme.white,
-                              fontFamily: 'Playfair Display',
-                              fontSize: 22,
+                            const SizedBox(height: 12),
+                            Text(
+                              'Wagyu Beef Steak',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    color: AppTheme.white,
+                                    fontFamily: 'Playfair Display',
+                                    fontSize: 22,
+                                  ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: AppTheme.white.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppTheme.white.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: AppTheme.white.withValues(alpha: 0.3),
+                          ),
                         ),
-                        child: const Icon(Icons.arrow_forward, color: AppTheme.white),
+                        child: const Icon(
+                          Icons.arrow_forward,
+                          color: AppTheme.white,
+                        ),
                       ),
                     ],
                   ),
@@ -322,7 +350,9 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: AppTheme.white,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.05)),
+            border: Border.all(
+              color: AppTheme.secondary.withValues(alpha: 0.05),
+            ),
             boxShadow: [
               BoxShadow(
                 color: AppTheme.secondary.withValues(alpha: 0.06),
@@ -349,17 +379,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
                           const SizedBox(height: 6),
                           Text(
                             subtitle,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppTheme.secondary.withValues(alpha: 0.6),
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: AppTheme.secondary.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
                           ),
                         ],
                       ),
@@ -381,10 +415,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 20),
                     Text(
                       title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 6),
                     Text(
