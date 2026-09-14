@@ -18,7 +18,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
   String? _lastNotifiedQueueId;
   
   StreamSubscription? _resSub;
-  Map<String, String> _notifiedReplies = {};
+  final Map<String, String> _notifiedReplies = {};
 
   @override
   void initState() {
@@ -85,7 +85,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
           children: [
             Icon(Icons.message, color: AppTheme.primary, size: 30),
             SizedBox(width: 10),
-            Text('Message from Admin'),
+            Expanded(child: Text('Message from Admin')),
           ],
         ),
         content: Text(reply, style: const TextStyle(fontSize: 16)),
@@ -121,7 +121,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
           children: [
             Icon(Icons.notifications_active, color: AppTheme.primary, size: 30),
             SizedBox(width: 10),
-            Text('It\'s Your Turn!'),
+            Expanded(child: Text('It\'s Your Turn!')),
           ],
         ),
         content: Text(

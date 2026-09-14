@@ -108,7 +108,7 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.1),
+                                    color: statusColor.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
@@ -159,9 +159,9 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.primary.withOpacity(0.05),
+                                  color: AppTheme.primary.withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+                                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2)),
                                 ),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
