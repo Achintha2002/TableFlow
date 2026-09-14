@@ -22,6 +22,7 @@ export default function QueuePage() {
     const { data: qData } = await supabase
       .from('queue_entries')
       .select('*')
+      .order('queue_number', { ascending: true, nullsFirst: false }) // fall back to joined_at if queue_number is null
       .order('joined_at', { ascending: true });
     setData(qData || []);
     setLoading(false);
@@ -50,11 +51,14 @@ export default function QueuePage() {
         <h3>All Queue Entries ({data.length})</h3>
       </div>
       <table className="data-table">
-        <thead><tr><th>#</th><th>Entry ID</th><th>Party Size</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Pos</th><th>Wait #</th><th>Entry ID</th><th>Party Size</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
         <tbody>
           {data.length > 0 ? data.map((q, i) => (
             <tr key={q.id}>
               <td style={{ color: 'var(--text-muted)' }}>{i+1}</td>
+              <td style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--primary-color)' }}>
+                #{q.queue_number || '?'}
+              </td>
               <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{q.id.slice(0,8)}</td>
               <td>👥 {q.pax} people</td>
               <td>{badge(q.status === 'seated' ? 'success' : q.status === 'waiting' ? 'warning' : 'muted', q.status)}</td>

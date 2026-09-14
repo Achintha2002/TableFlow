@@ -378,6 +378,42 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
   }
 });
 
+// ==========================================
+// Waitlist (Queue) Endpoints
+// ==========================================
+
+app.get('/api/queue/:id/position', async (req, res) => {
+  try {
+    // using the anon client or user client for queue is fine
+    const sb = getSupabaseClient(req);
+    const { id } = req.params;
+
+    // Get the queue_number of this entry
+    const { data: myEntry, error: err1 } = await sb
+      .from('queue_entries')
+      .select('queue_number')
+      .eq('id', id)
+      .single();
+    
+    if (err1 || !myEntry) return res.status(404).json({ error: 'Entry not found' });
+    if (myEntry.queue_number == null) return res.json({ position: 1, ahead: 0 }); // fallback
+
+    // Count how many are waiting before it
+    const { count, error: err2 } = await sb
+      .from('queue_entries')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'waiting')
+      .lt('queue_number', myEntry.queue_number);
+
+    if (err2) throw err2;
+
+    // position is people ahead + 1
+    res.json({ position: count + 1, ahead: count, queue_number: myEntry.queue_number });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

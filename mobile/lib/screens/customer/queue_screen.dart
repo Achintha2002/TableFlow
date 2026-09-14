@@ -17,6 +17,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   int _position = 0;
   int _estimatedWaitTime = 0;
   int _totalWaiting = 0;
+  int? _queueNumber;
   bool _isLoading = true;
   String? _queueId;
   StreamSubscription? _queueSubscription;
@@ -62,7 +63,8 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
       if (activeEntry != null && activeEntry['status'] == 'waiting') {
         _inQueue = true;
         _queueId = activeEntry['id'];
-        await _calculatePosition(activeEntry['joined_at']);
+        _queueNumber = activeEntry['queue_number'];
+        await _calculatePosition(_queueNumber ?? 0);
         _setupSubscription();
       } else {
         _inQueue = false;
@@ -92,13 +94,13 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     }
   }
 
-  Future<void> _calculatePosition(String joinedAt) async {
+  Future<void> _calculatePosition(int queueNumber) async {
     try {
       final res = await Supabase.instance.client
           .from('queue_entries')
           .select('id')
           .eq('status', 'waiting')
-          .lt('joined_at', joinedAt);
+          .lt('queue_number', queueNumber);
       if (mounted) {
         setState(() {
           _position = res.length + 1;
@@ -121,7 +123,8 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           if (_inQueue && _queueId != null) {
              try {
                final myEntry = data.firstWhere((e) => e['id'] == _queueId);
-               _calculatePosition(myEntry['joined_at']);
+               _queueNumber = myEntry['queue_number'];
+               _calculatePosition(_queueNumber ?? 0);
              } catch(e) {
                _checkQueueStatus();
              }
@@ -138,17 +141,74 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
       return;
     }
     
+    // Ask for pax
+    int pax = 2; // Default
+    final selectedPax = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        int tempPax = 2;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Party Size', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed: () => setSheetState(() => tempPax = tempPax > 1 ? tempPax - 1 : 1),
+                        icon: const Icon(Icons.remove_circle_outline, size: 40, color: AppTheme.secondary),
+                      ),
+                      const SizedBox(width: 24),
+                      Text('$tempPax', style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 24),
+                      IconButton(
+                        onPressed: () => setSheetState(() => tempPax = tempPax < 20 ? tempPax + 1 : 20),
+                        icon: const Icon(Icons.add_circle_outline, size: 40, color: AppTheme.primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, tempPax),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    child: const Text('Confirm', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+
+    if (selectedPax == null) return;
+    pax = selectedPax;
+
     setState(() => _isLoading = true);
     try {
       final res = await Supabase.instance.client.from('queue_entries').insert({
         'user_id': user.id,
-        'pax': 2,
+        'pax': pax,
         'status': 'waiting'
       }).select().single();
       
       _inQueue = true;
       _queueId = res['id'];
-      await _calculatePosition(res['joined_at']);
+      _queueNumber = res['queue_number'];
+      await _calculatePosition(_queueNumber ?? 0);
       _setupSubscription();
     } catch (e) {
        debugPrint('Failed to join queue: $e');
@@ -328,7 +388,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '$_position',
+                    _queueNumber != null ? '#$_queueNumber' : '#?',
                     style: const TextStyle(
                       fontSize: 72,
                       fontWeight: FontWeight.bold,
@@ -337,7 +397,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                     ),
                   ),
                   Text(
-                    'IN LINE',
+                    'YOUR NUMBER',
                     style: TextStyle(
                       color: AppTheme.secondary.withValues(alpha: 0.6),
                       fontWeight: FontWeight.w800,
@@ -358,7 +418,18 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
+        Text(
+          _position == 1 
+              ? 'You are next in line!' 
+              : 'There are ${_position - 1} people ahead of you',
+          style: const TextStyle(
+            color: AppTheme.secondary,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
