@@ -292,12 +292,15 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             children: [
               Icon(icon, size: 20, color: AppTheme.primary),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppTheme.secondary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.secondary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
                 ),
               ),
             ],
