@@ -145,6 +145,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     int pax = 2; // Default
     final selectedPax = await showModalBottomSheet<int>(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         int tempPax = 2;
@@ -186,6 +187,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                     ),
                     child: const Text('Confirm', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom),
                 ],
               ),
             );
@@ -222,7 +224,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     if (_queueId == null) return;
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.from('queue_entries').update({'status': 'left'}).eq('id', _queueId!);
+      await Supabase.instance.client.from('queue_entries').update({'status': 'cancelled'}).eq('id', _queueId!);
       _inQueue = false;
       _queueId = null;
       await _calculateTotalWaiting();
