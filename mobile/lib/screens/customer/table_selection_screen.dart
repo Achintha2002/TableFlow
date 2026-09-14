@@ -100,7 +100,11 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             };
           }).toList();
           
-          _tables.sort((a, b) => a['id'].compareTo(b['id']));
+          _tables.sort((a, b) {
+            int numA = int.parse((a['id'] as String).substring(1));
+            int numB = int.parse((b['id'] as String).substring(1));
+            return numA.compareTo(numB);
+          });
           
           // Deselect if currently selected table became unavailable
           if (_selectedTableId != null) {
@@ -248,31 +252,24 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-              : Padding(
+              : SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: Center(
-                    child: Container(
-                      width: 400,
-                      height: 500,
-                      decoration: BoxDecoration(
-                        color: AppTheme.secondary.withValues(alpha: 0.02), // Very subtle background
-                        borderRadius: BorderRadius.circular(32),
-                        border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.05), width: 1),
-                      ),
-                      child: Center(
-                        child: Wrap(
-                          spacing: 40,
-                          runSpacing: 40,
-                          alignment: WrapAlignment.center,
-                          children: _tables.map((table) => _buildTableWidget(table)).toList(),
-                        ),
-                      ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.secondary.withValues(alpha: 0.02),
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.05), width: 1),
+                    ),
+                    child: Wrap(
+                      spacing: 20,
+                      runSpacing: 20,
+                      alignment: WrapAlignment.center,
+                      children: _tables.map((table) => _buildTableWidget(table)).toList(),
                     ),
                   ),
                 ),
-              ),
           ),
           
           // Proceed Button Spacer for Bottom Nav
