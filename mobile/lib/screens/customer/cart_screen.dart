@@ -35,6 +35,7 @@ class _CartScreenState extends State<CartScreen> {
       final data = await Supabase.instance.client
           .from('restaurant_tables')
           .select('id, table_number')
+          .eq('status', 'available')
           .order('table_number', ascending: true);
       if (mounted) {
         setState(() {
