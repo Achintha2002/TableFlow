@@ -118,20 +118,25 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
         .from('queue_entries')
         .stream(primaryKey: ['id'])
         .eq('status', 'waiting')
-        .listen((data) {
-          if (!mounted) return;
-          if (_inQueue && _queueId != null) {
-             try {
-               final myEntry = data.firstWhere((e) => e['id'] == _queueId);
-               _queueNumber = myEntry['queue_number'];
-               _calculatePosition(_queueNumber ?? 0);
-             } catch(e) {
-               _checkQueueStatus();
-             }
-          } else {
-             _calculateTotalWaiting();
-          }
-        });
+        .listen(
+          (data) {
+            if (!mounted) return;
+            if (_inQueue && _queueId != null) {
+              try {
+                final myEntry = data.firstWhere((e) => e['id'] == _queueId);
+                _queueNumber = myEntry['queue_number'];
+                _calculatePosition(_queueNumber ?? 0);
+              } catch (e) {
+                _checkQueueStatus();
+              }
+            } else {
+              _calculateTotalWaiting();
+            }
+          },
+          onError: (error) {
+            debugPrint('QueueScreen stream error: $error');
+          },
+        );
   }
 
   Future<void> _joinQueue() async {
