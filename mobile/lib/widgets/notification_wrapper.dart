@@ -103,6 +103,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _queueSub?.cancel();
     super.dispose();
   }
