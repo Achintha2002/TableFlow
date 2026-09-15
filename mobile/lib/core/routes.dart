@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/customer/splash_screen.dart';
@@ -14,6 +16,23 @@ import '../screens/shared/main_shell.dart';
 import '../screens/customer/order_history_screen.dart';
 import '../screens/customer/reservation_history_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
+
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen(
+      (dynamic _) => notifyListeners(),
+    );
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
 
 class AppRoutes {
   static const splash = '/';
@@ -32,6 +51,7 @@ class AppRoutes {
 
   static final router = GoRouter(
     initialLocation: splash,
+    refreshListenable: GoRouterRefreshStream(Supabase.instance.client.auth.onAuthStateChange),
     redirect: (context, state) {
       final isAuth = Supabase.instance.client.auth.currentSession != null;
       final isSplash = state.matchedLocation == splash;

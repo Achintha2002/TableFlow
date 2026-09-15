@@ -84,13 +84,18 @@ class _CartScreenState extends State<CartScreen> {
         .from('orders')
         .stream(primaryKey: ['id'])
         .eq('id', orderId)
-        .listen((data) {
-      if (data.isNotEmpty && mounted) {
-        setState(() {
-          _orderStatus = data.first['status'];
-        });
-      }
-    });
+        .listen(
+          (data) {
+            if (data.isNotEmpty && mounted) {
+              setState(() {
+                _orderStatus = data.first['status'];
+              });
+            }
+          },
+          onError: (error) {
+            debugPrint('CartScreen order stream error: $error');
+          },
+        );
   }
 
   void _submitOrder() async {

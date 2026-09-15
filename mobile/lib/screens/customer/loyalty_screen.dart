@@ -33,15 +33,20 @@ class _LoyaltyScreenState extends State<LoyaltyScreen> {
         .from('users')
         .stream(primaryKey: ['id'])
         .eq('id', userId)
-        .listen((data) {
-      if (data.isNotEmpty && mounted) {
-        setState(() {
-          _points = data.first['loyalty_points'] ?? 0;
-          _tier = data.first['loyalty_tier'] ?? 'Bronze';
-          _isLoading = false;
-        });
-      }
-    });
+        .listen(
+          (data) {
+            if (data.isNotEmpty && mounted) {
+              setState(() {
+                _points = data.first['loyalty_points'] ?? 0;
+                _tier = data.first['loyalty_tier'] ?? 'Bronze';
+                _isLoading = false;
+              });
+            }
+          },
+          onError: (error) {
+            debugPrint('LoyaltyScreen stream error: $error');
+          },
+        );
   }
 
   @override
