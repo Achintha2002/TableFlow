@@ -14,33 +14,52 @@ class NotificationWrapper extends StatefulWidget {
 
 class _NotificationWrapperState extends State<NotificationWrapper> {
   StreamSubscription? _queueSub;
+  StreamSubscription? _authSub;
   String? _lastNotifiedQueueId;
 
   @override
   void initState() {
     super.initState();
     _listenToQueue();
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.tokenRefreshed) {
+        _listenToQueue();
+      } else if (data.event == AuthChangeEvent.signedOut) {
+        _queueSub?.cancel();
+        _queueSub = null;
+      }
+    });
   }
 
   void _listenToQueue() {
     final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      _queueSub?.cancel();
+      _queueSub = null;
+      return;
+    }
 
+    _queueSub?.cancel();
     _queueSub = Supabase.instance.client
         .from('queue_entries')
         .stream(primaryKey: ['id'])
         .eq('user_id', user.id)
-        .listen((data) {
-      if (data.isEmpty) return;
-      
-      // Look for the active one
-      for (var entry in data) {
-        if (entry['status'] == 'notified' && entry['id'] != _lastNotifiedQueueId) {
-          _lastNotifiedQueueId = entry['id'];
-          _showTurnAlert(entry);
-        }
-      }
-    });
+        .listen(
+          (data) {
+            if (data.isEmpty) return;
+            
+            // Look for the active one
+            for (var entry in data) {
+              if (entry['status'] == 'notified' && entry['id'] != _lastNotifiedQueueId) {
+                _lastNotifiedQueueId = entry['id'];
+                _showTurnAlert(entry);
+              }
+            }
+          },
+          onError: (error) {
+            debugPrint('NotificationWrapper realtime stream error: $error');
+          },
+        );
   }
 
 
