@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const authMiddleware = require('./middleware/auth');
@@ -220,44 +221,141 @@ function getSupabaseClient(req) {
   });
 }
 
-// 1. Customer places an order
+// 1. Customer places an order (Hardened with Idempotency, Server Price Recomputation, and Validation)
 app.post('/api/orders', authMiddleware, async (req, res) => {
   try {
-    const sb = getSupabaseClient(req);
-    const { items, total_amount, reservation_id, table_id, special_notes } = req.body;
+    const { 
+      items, 
+      total_amount, 
+      reservation_id, 
+      table_id, 
+      special_notes,
+      payment_method = 'cash',
+      coupon_code,
+      redeem_points = 0
+    } = req.body;
     
+    // Idempotency check: prevent duplicate submissions
+    const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotency_key;
+    if (idempotencyKey) {
+      const { data: existingOrder } = await supabaseAdmin
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+      if (existingOrder) {
+        return res.status(200).json({ 
+          message: 'Order already exists (idempotent)', 
+          order: existingOrder 
+        });
+      }
+    }
+
     if (!items || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain items' });
     }
 
-    // 1. Calculate Prep Time (MAX of item prep times)
+    // 1. Recompute Prices Server-Side from menu_items
     const itemIds = items.map(i => i.menu_item_id);
-    const { data: menuItems, error: menuErr } = await sb
+    const { data: menuItems, error: menuErr } = await supabaseAdmin
       .from('menu_items')
-      .select('id, prep_time_minutes')
+      .select('id, name, price, prep_time_minutes, is_available')
       .in('id', itemIds);
 
     if (menuErr) throw menuErr;
 
-    let maxPrepTime = 15; // default 15
-    if (menuItems && menuItems.length > 0) {
-      maxPrepTime = Math.max(...menuItems.map(m => m.prep_time_minutes || 15));
+    const menuMap = new Map();
+    (menuItems || []).forEach(m => menuMap.set(m.id, m));
+
+    let serverSubtotal = 0;
+    let maxPrepTime = 15;
+
+    for (const item of items) {
+      const dbItem = menuMap.get(item.menu_item_id);
+      if (!dbItem) {
+        return res.status(400).json({ error: `Menu item with ID ${item.menu_item_id} not found` });
+      }
+      if (dbItem.is_available === false) {
+        return res.status(400).json({ error: `Item "${dbItem.name}" is currently sold out / unavailable.` });
+      }
+      const quantity = parseInt(item.quantity, 10) || 1;
+      const unitPrice = parseFloat(dbItem.price);
+      item.unit_price = unitPrice; // Enforce server-side price
+      serverSubtotal += unitPrice * quantity;
+      if (dbItem.prep_time_minutes && dbItem.prep_time_minutes > maxPrepTime) {
+        maxPrepTime = dbItem.prep_time_minutes;
+      }
     }
 
-    // 2. Calculate Target Serve Time
+    // 2. Validate Coupon Server-Side
+    let couponDiscount = 0;
+    let couponRecord = null;
+    if (coupon_code) {
+      const { data: coupon } = await supabaseAdmin
+        .from('coupons')
+        .select('*')
+        .eq('code', coupon_code.trim().toUpperCase())
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (coupon) {
+        const isNotExpired = !coupon.valid_until || new Date(coupon.valid_until) > new Date();
+        const meetsMinAmount = serverSubtotal >= (coupon.min_order_amount || 0);
+        
+        // Check user redemption limit
+        const { count: userRedemptions } = await supabaseAdmin
+          .from('coupon_redemptions')
+          .select('*', { count: 'exact', head: true })
+          .eq('coupon_id', coupon.id)
+          .eq('user_id', req.user.id);
+
+        if (isNotExpired && meetsMinAmount && (userRedemptions || 0) < (coupon.max_uses_per_user || 1)) {
+          couponRecord = coupon;
+          if (coupon.discount_percent > 0) {
+            couponDiscount = (serverSubtotal * coupon.discount_percent) / 100;
+          } else if (coupon.discount_amount > 0) {
+            couponDiscount = Math.min(coupon.discount_amount, serverSubtotal);
+          }
+        }
+      }
+    }
+
+    // 3. Validate Loyalty Points Redemption
+    let pointsDiscount = 0;
+    const pointsToRedeem = Math.max(0, parseInt(redeem_points, 10) || 0);
+    if (pointsToRedeem > 0) {
+      const { data: userProfile } = await supabaseAdmin
+        .from('users')
+        .select('loyalty_points')
+        .eq('id', req.user.id)
+        .single();
+      
+      const userBalance = userProfile?.loyalty_points || 0;
+      if (pointsToRedeem > userBalance) {
+        return res.status(400).json({ error: `Insufficient loyalty points. Current balance: ${userBalance}` });
+      }
+      pointsDiscount = Math.min(pointsToRedeem, Math.max(0, serverSubtotal - couponDiscount));
+    }
+
+    // 4. Financial Breakdown
+    const totalDiscount = Math.round((couponDiscount + pointsDiscount) * 100) / 100;
+    const discountedSubtotal = Math.max(0, serverSubtotal - totalDiscount);
+    const serviceCharge = Math.round(discountedSubtotal * 0.10 * 100) / 100; // 10%
+    const taxAmount = Math.round(discountedSubtotal * 0.08 * 100) / 100; // 8% VAT
+    const serverTotal = Math.round((discountedSubtotal + serviceCharge + taxAmount) * 100) / 100;
+
+    // 5. Target Serve Time Calculation
     let targetServeTime = new Date();
-    targetServeTime.setMinutes(targetServeTime.getMinutes() + maxPrepTime); // Default: dine-in-now
+    targetServeTime.setMinutes(targetServeTime.getMinutes() + maxPrepTime);
 
     if (reservation_id) {
-      // Fetch reservation time
-      const { data: resData, error: resErr } = await sb
+      const { data: resData } = await supabaseAdmin
         .from('reservations')
         .select('reservation_date, reservation_time')
         .eq('id', reservation_id)
-        .single();
+        .maybeSingle();
       
-      if (!resErr && resData) {
-        // Construct target time from reservation date and time
+      if (resData) {
         const resDateTime = new Date(`${resData.reservation_date}T${resData.reservation_time}`);
         if (!isNaN(resDateTime.getTime())) {
           targetServeTime = resDateTime;
@@ -265,41 +363,92 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       }
     }
 
-    // 3. Create the Order
-    const { data: newOrder, error: orderErr } = await sb
+    // 6. Create the Order
+    const insertPayload = {
+      user_id: req.user.id,
+      reservation_id: reservation_id || null,
+      table_id: table_id || null,
+      subtotal: serverSubtotal,
+      discount_amount: totalDiscount,
+      service_charge: serviceCharge,
+      tax_amount: taxAmount,
+      total_amount: serverTotal,
+      status: 'pending',
+      payment_status: payment_method === 'online_card' ? 'processing' : 'pending',
+      payment_method: payment_method,
+      prep_time_minutes: maxPrepTime,
+      target_serve_time: targetServeTime.toISOString(),
+      special_notes: special_notes || null,
+      idempotency_key: idempotencyKey || null
+    };
+
+    const { data: newOrder, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .insert({
-        user_id: req.user.id,
-        reservation_id: reservation_id || null,
-        table_id: table_id || null,
-        total_amount: total_amount,
-        status: 'pending',
-        payment_status: 'pending',
-        prep_time_minutes: maxPrepTime,
-        target_serve_time: targetServeTime.toISOString(),
-        special_notes: special_notes || null
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (orderErr) throw orderErr;
 
-    // 4. Create Order Items
+    // 7. Create Order Items with verified prices
     const orderItems = items.map(item => ({
       order_id: newOrder.id,
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
       unit_price: item.unit_price,
-      item_notes: item.item_notes || null
+      special_instructions: item.item_notes || item.special_instructions || null
     }));
 
-    const { error: itemsErr } = await sb
+    const { error: itemsErr } = await supabaseAdmin
       .from('order_items')
       .insert(orderItems);
 
     if (itemsErr) throw itemsErr;
 
-    res.status(201).json({ message: 'Order placed successfully', order: newOrder });
+    // 8. Record coupon redemption if applicable
+    if (couponRecord) {
+      await supabaseAdmin.from('coupon_redemptions').insert({
+        coupon_id: couponRecord.id,
+        user_id: req.user.id,
+        order_id: newOrder.id
+      }).catch(err => console.warn('Coupon redemption log notice:', err.message));
+    }
+
+    // 9. Atomic Loyalty Points Deduction
+    if (pointsDiscount > 0) {
+      await supabaseAdmin.rpc('redeem_loyalty_points', {
+        p_user_id: req.user.id,
+        p_points: pointsDiscount,
+        p_order_id: newOrder.id
+      }).catch(async () => {
+        // Fallback if RPC not yet run
+        const { data: u } = await supabaseAdmin.from('users').select('loyalty_points').eq('id', req.user.id).single();
+        if (u) {
+          await supabaseAdmin.from('users').update({ loyalty_points: Math.max(0, u.loyalty_points - pointsDiscount) }).eq('id', req.user.id);
+        }
+      });
+    }
+
+    // 10. Update table status to occupied if dine-in table is specified
+    if (table_id) {
+      await supabaseAdmin
+        .from('restaurant_tables')
+        .update({ status: 'occupied' })
+        .eq('id', table_id)
+        .catch(err => console.warn('Table occupancy update notice:', err.message));
+    }
+
+    res.status(201).json({ 
+      message: 'Order placed successfully', 
+      order: newOrder,
+      breakdown: {
+        subtotal: serverSubtotal,
+        discount: totalDiscount,
+        service_charge: serviceCharge,
+        tax: taxAmount,
+        total: serverTotal
+      }
+    });
   } catch (error) {
     console.error('Order creation error:', error);
     res.status(500).json({ error: error.message });
