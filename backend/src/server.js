@@ -595,6 +595,33 @@ function verifyTableToken(token) {
   }
 }
 
+app.get('/api/tables/qr-tokens/all', async (req, res) => {
+  try {
+    const { data: tables, error } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number, capacity, status')
+      .order('table_number', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    const items = (tables || []).map(table => {
+      const token = generateTableToken(table.id);
+      const qrData = `tableflow://table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
+      return {
+        table,
+        token,
+        qrData
+      };
+    });
+
+    res.json({ tables: items });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/tables/:id/qr-token', async (req, res) => {
   try {
     const tableId = req.params.id;
