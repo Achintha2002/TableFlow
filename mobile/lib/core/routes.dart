@@ -16,6 +16,7 @@ import '../screens/shared/main_shell.dart';
 import '../screens/customer/order_history_screen.dart';
 import '../screens/customer/reservation_history_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
+import '../screens/customer/qr_checkin_screen.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -48,6 +49,7 @@ class AppRoutes {
   static const orderHistory = '/order-history';
   static const reservations = '/reservations';
   static const loyalty = '/loyalty';
+  static const qrCheckin = '/qr-checkin';
 
   static final router = GoRouter(
     initialLocation: splash,
@@ -79,6 +81,7 @@ class AppRoutes {
       GoRoute(path: orderHistory, builder: (context, state) => const OrderHistoryScreen()),
       GoRoute(path: reservations, builder: (context, state) => const ReservationHistoryScreen()),
       GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
+      GoRoute(path: qrCheckin, builder: (context, state) => const QrCheckinScreen()),
       GoRoute(
         path: reservationDetails,
         builder: (context, state) {

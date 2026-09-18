@@ -96,6 +96,10 @@ export default function Sidebar() {
         {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
           <>
             <div className="nav-section-label">Operations</div>
+            <Link href="/pos" className={`nav-item ${isActive('/pos')}`}>
+              <Receipt size={20} />
+              Cashier POS & Billing
+            </Link>
             <Link href="/orders" className={`nav-item ${isActive('/orders')}`}>
               <Receipt size={20} />
               Orders

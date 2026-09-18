@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:provider/provider.dart';
 import '../../core/theme.dart';
+import '../../providers/cart_provider.dart';
+import '../../services/api_service.dart';
 
 class QrCheckinScreen extends StatefulWidget {
   const QrCheckinScreen({super.key});
@@ -10,149 +14,355 @@ class QrCheckinScreen extends StatefulWidget {
 }
 
 class _QrCheckinScreenState extends State<QrCheckinScreen>
-    with TickerProviderStateMixin {
-  bool _checkedIn = false;
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+    with SingleTickerProviderStateMixin {
+  final MobileScannerController _scannerController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    returnImage: false,
+  );
+
+  late AnimationController _animController;
+  late Animation<double> _scanLineAnimation;
+
+  bool _isProcessing = false;
+  bool _torchEnabled = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
+    _animController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.9, end: 1.05).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+
+    _scanLineAnimation = Tween<double>(begin: 0.1, end: 0.9).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
     );
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _animController.dispose();
+    _scannerController.dispose();
     super.dispose();
   }
 
-  void _simulateScan() {
-    setState(() => _checkedIn = true);
-    _pulseController.stop();
+  Future<void> _handleScannedCode(String rawCode) async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+
+    try {
+      String? token;
+      String? fallbackCode = rawCode;
+
+      // Check if it's a TableFlow QR URI
+      if (rawCode.contains('token=')) {
+        final uri = Uri.tryParse(rawCode);
+        token = uri?.queryParameters['token'];
+      } else if (rawCode.contains(':') && rawCode.length > 20) {
+        // Raw token
+        token = rawCode;
+      }
+
+      final result = await ApiService.verifyTableQr(
+        token: token,
+        rawCode: token == null ? fallbackCode : null,
+      );
+
+      if (!mounted) return;
+
+      final table = result['table'];
+      final isOccupied = result['isOccupied'] ?? false;
+      final tableNumber = table['table_number'];
+      final tableId = table['id'];
+
+      if (isOccupied) {
+        // Show occupancy dialog
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('Table $tableNumber is Active'),
+            content: const Text(
+              'This table currently has active guests. Are you joining their party or placing orders for this table?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Join Table & Order'),
+              ),
+            ],
+          ),
+        );
+
+        if (proceed != true) {
+          setState(() => _isProcessing = false);
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
+      // Assign table to cart
+      context.read<CartProvider>().setTable(tableId, tableNumber);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Checked in to Table #$tableNumber! Browse the menu to order.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      // Navigate directly to menu
+      context.go('/menu');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Check-in failed: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _isProcessing = false);
+      }
+    }
+  }
+
+  void _showManualEntryDialog() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter Table Number'),
+        content: TextField(
+          controller: textController,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. 4',
+            labelText: 'Table #',
+            prefixIcon: Icon(Icons.table_restaurant),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final code = textController.text.trim();
+              Navigator.of(ctx).pop();
+              if (code.isNotEmpty) {
+                _handleScannedCode(code);
+              }
+            },
+            child: const Text('Confirm Table'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
           onPressed: () => context.pop(),
         ),
-        title: const Text('QR Check-In'),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: _checkedIn ? _buildCheckedInView() : _buildScanView(),
+        title: const Text(
+          'Scan Table QR',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-      ),
-    );
-  }
-
-  Widget _buildScanView() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'Scan to Check In',
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            color: AppTheme.primary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Show this QR code or scan the restaurant\'s code at the host stand.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.6),
-        ),
-        const SizedBox(height: 48),
-
-        // Animated QR Placeholder
-        ScaleTransition(
-          scale: _pulseAnimation,
-          child: Container(
-            width: 220,
-            height: 220,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppTheme.primary, width: 3),
-              borderRadius: BorderRadius.circular(16),
-              color: AppTheme.white,
+        actions: [
+          IconButton(
+            icon: Icon(
+              _torchEnabled ? Icons.flash_on : Icons.flash_off,
+              color: _torchEnabled ? AppTheme.primary : Colors.white70,
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // QR Code pattern simulation using icons/widgets
-                const Icon(Icons.qr_code_2, size: 140, color: AppTheme.secondary),
-                const SizedBox(height: 8),
-                Text(
-                  'TF-23081819-001',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.secondary.withValues(alpha: 0.5),
-                    fontFamily: 'monospace',
+            onPressed: () {
+              _scannerController.toggleTorch();
+              setState(() => _torchEnabled = !_torchEnabled);
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.flip_camera_ios, color: Colors.white70),
+            onPressed: () => _scannerController.switchCamera(),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Camera Viewfinder
+          MobileScanner(
+            controller: _scannerController,
+            onDetect: (BarcodeCapture capture) {
+              final barcodes = capture.barcodes;
+              for (final barcode in barcodes) {
+                final raw = barcode.rawValue;
+                if (raw != null && raw.isNotEmpty) {
+                  _handleScannedCode(raw);
+                  break;
+                }
+              }
+            },
+          ),
+
+          // Dark Overlay with Cutout
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final scanSize = constraints.maxWidth * 0.72;
+              final left = (constraints.maxWidth - scanSize) / 2;
+              final top = (constraints.maxHeight - scanSize) / 2.4;
+
+              return Stack(
+                children: [
+                  ColorFiltered(
+                    colorFilter: ColorFilter.mode(
+                      Colors.black.withValues(alpha: 0.65),
+                      BlendMode.srcOut,
+                    ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.black,
+                            backgroundBlendMode: BlendMode.dstOut,
+                          ),
+                        ),
+                        Positioned(
+                          left: left,
+                          top: top,
+                          width: scanSize,
+                          height: scanSize,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+
+                  // Scanning Border & Animated Laser Line
+                  Positioned(
+                    left: left,
+                    top: top,
+                    width: scanSize,
+                    height: scanSize,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.primary, width: 2.5),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: AnimatedBuilder(
+                        animation: _scanLineAnimation,
+                        builder: (context, child) {
+                          return Align(
+                            alignment: Alignment(0, (_scanLineAnimation.value * 2) - 1),
+                            child: Container(
+                              height: 3,
+                              margin: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.primary.withValues(alpha: 0.8),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // Guidance text
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    top: top + scanSize + 32,
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Point your camera at the Table QR code',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your table number will be automatically linked for easy dine-in ordering.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          // Loading indicator if verifying
+          if (_isProcessing)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.primary),
+                    SizedBox(height: 16),
+                    Text(
+                      'Verifying Table...',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ),
+
+          // Manual Table Entry Fallback Button
+          Positioned(
+            left: 32,
+            right: 32,
+            bottom: 40,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white38),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: _showManualEntryDialog,
+              icon: const Icon(Icons.edit_note, size: 20),
+              label: const Text('Enter Table Number Manually'),
             ),
           ),
-        ),
-        const SizedBox(height: 48),
-
-        // Simulate button
-        ElevatedButton.icon(
-          onPressed: _simulateScan,
-          icon: const Icon(Icons.check_circle_outline),
-          label: const Text('Simulate Successful Scan'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCheckedInView() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 120,
-          height: 120,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.green.withValues(alpha: 0.1),
-          ),
-          child: const Icon(Icons.check_circle, size: 80, color: Colors.green),
-        ),
-        const SizedBox(height: 32),
-        Text(
-          'Checked In!',
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            color: Colors.green,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Welcome to the TableFlow dining experience. Your table will be ready shortly.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.6),
-        ),
-        const SizedBox(height: 48),
-        ElevatedButton(
-          onPressed: () => context.go('/home'),
-          child: const Text('Back to Home'),
-        ),
-        const SizedBox(height: 16),
-        OutlinedButton(
-          onPressed: () => context.push('/menu'),
-          child: const Text('Browse Menu While You Wait'),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import 'package:provider/provider.dart';
+import '../../providers/cart_provider.dart';
+import '../../widgets/call_waiter_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -154,11 +157,115 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildQuickActions() {
+    final cart = context.watch<CartProvider>();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Active Dine-in Table Banner
+          if (cart.hasTableSelected) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppTheme.primary, AppTheme.primary.withValues(alpha: 0.85)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 15,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.table_restaurant, color: Colors.white, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'ACTIVE TABLE SESSION',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            Text(
+                              'Table #${cart.selectedTableNumber}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Leave Table',
+                        icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                        onPressed: () => cart.clearTable(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppTheme.primary,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => CallWaiterSheet.show(context),
+                          icon: const Icon(Icons.support_agent, size: 18),
+                          label: const Text('Call Waiter', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.white, width: 1.5),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () => context.go('/menu'),
+                          icon: const Icon(Icons.restaurant_menu, size: 18),
+                          label: const Text('Order More', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           Text(
             'Quick Actions',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -169,13 +276,29 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Primary Action
-          _buildActionCard(
-            title: 'Book a Table',
-            subtitle: 'Reserve your spot for a perfect evening',
-            icon: Icons.event_seat,
-            isPrimary: true,
-            onTap: () => context.go('/table-selection'),
+          // Primary Actions: Book Table & Scan QR
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionCard(
+                  title: 'Book a Table',
+                  subtitle: 'Reserve spot',
+                  icon: Icons.event_seat,
+                  isPrimary: true,
+                  onTap: () => context.go('/table-selection'),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildActionCard(
+                  title: 'Scan Table QR',
+                  subtitle: 'Dine-in order',
+                  icon: Icons.qr_code_scanner,
+                  isPrimary: false,
+                  onTap: () => context.push('/qr-checkin'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 

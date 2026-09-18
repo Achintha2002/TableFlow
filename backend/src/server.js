@@ -563,6 +563,369 @@ app.get('/api/queue/:id/position', async (req, res) => {
   }
 });
 
+// ==========================================
+// Signed Table QR Code Endpoints
+// ==========================================
+const QR_SECRET = process.env.QR_HMAC_SECRET || 'tableflow-qr-secret-key-2026';
+
+function generateTableToken(tableId) {
+  const timestamp = Date.now();
+  const signature = crypto.createHmac('sha256', QR_SECRET)
+    .update(`${tableId}:${timestamp}`)
+    .digest('hex');
+  return Buffer.from(`${tableId}:${timestamp}:${signature}`).toString('base64');
+}
+
+function verifyTableToken(token) {
+  try {
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
+    const [tableId, timestamp, signature] = decoded.split(':');
+    if (!tableId || !timestamp || !signature) return { valid: false, error: 'Invalid QR token format' };
+
+    const expectedSignature = crypto.createHmac('sha256', QR_SECRET)
+      .update(`${tableId}:${timestamp}`)
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      return { valid: false, error: 'Invalid or forged QR signature' };
+    }
+    return { valid: true, tableId: parseInt(tableId, 10), timestamp: parseInt(timestamp, 10) };
+  } catch (e) {
+    return { valid: false, error: 'Malformed QR token' };
+  }
+}
+
+app.get('/api/tables/:id/qr-token', async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    const { data: table, error } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number, capacity, status')
+      .eq('id', tableId)
+      .single();
+
+    if (error || !table) {
+      return res.status(404).json({ error: 'Table not found' });
+    }
+
+    const token = generateTableToken(table.id);
+    const qrData = `tableflow://table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
+    res.json({ table, token, qrData });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/tables/verify-qr', async (req, res) => {
+  try {
+    const { token, rawCode } = req.body;
+    let tableId = null;
+
+    if (token) {
+      const verification = verifyTableToken(token);
+      if (!verification.valid) {
+        return res.status(400).json({ error: verification.error });
+      }
+      tableId = verification.tableId;
+    } else if (rawCode) {
+      // Manual code fallback (e.g. Table Number entered directly)
+      const parsed = parseInt(String(rawCode).replace(/[^0-9]/g, ''), 10);
+      if (!parsed) return res.status(400).json({ error: 'Invalid table number format' });
+      
+      const { data: tData } = await supabaseAdmin
+        .from('restaurant_tables')
+        .select('id')
+        .eq('table_number', parsed)
+        .maybeSingle();
+      if (!tData) return res.status(404).json({ error: `Table #${parsed} not found` });
+      tableId = tData.id;
+    } else {
+      return res.status(400).json({ error: 'Token or table code required' });
+    }
+
+    const { data: table, error } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number, capacity, status')
+      .eq('id', tableId)
+      .single();
+
+    if (error || !table) return res.status(404).json({ error: 'Table not found' });
+
+    res.json({
+      valid: true,
+      table,
+      isOccupied: table.status === 'occupied'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Coupon Validation Endpoint
+// ==========================================
+app.post('/api/coupons/validate', async (req, res) => {
+  try {
+    const { code, subtotal, user_id } = req.body;
+    if (!code) return res.status(400).json({ error: 'Coupon code required' });
+
+    const { data: coupon, error } = await supabaseAdmin
+      .from('coupons')
+      .select('*')
+      .eq('code', code.trim().toUpperCase())
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error || !coupon) {
+      return res.status(404).json({ error: 'Invalid or inactive promo code.' });
+    }
+
+    if (coupon.valid_until && new Date(coupon.valid_until) < new Date()) {
+      return res.status(400).json({ error: 'This promo code has expired.' });
+    }
+
+    const orderSubtotal = parseFloat(subtotal) || 0;
+    if (orderSubtotal < (coupon.min_order_amount || 0)) {
+      return res.status(400).json({ 
+        error: `Minimum order amount of LKR ${coupon.min_order_amount} required for this code.` 
+      });
+    }
+
+    if (user_id) {
+      const { count: userUses } = await supabaseAdmin
+        .from('coupon_redemptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('coupon_id', coupon.id)
+        .eq('user_id', user_id);
+
+      if ((userUses || 0) >= (coupon.max_uses_per_user || 1)) {
+        return res.status(400).json({ error: 'You have already used this promo code.' });
+      }
+    }
+
+    let discountAmount = 0;
+    if (coupon.discount_percent > 0) {
+      discountAmount = (orderSubtotal * coupon.discount_percent) / 100;
+    } else if (coupon.discount_amount > 0) {
+      discountAmount = Math.min(coupon.discount_amount, orderSubtotal);
+    }
+
+    res.json({
+      valid: true,
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        description: coupon.description,
+        discount_percent: coupon.discount_percent,
+        discount_amount: Math.round(discountAmount * 100) / 100
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Service Requests (Call Waiter / Water / Bill)
+// ==========================================
+app.post('/api/service-requests', async (req, res) => {
+  try {
+    const { table_id, request_type, user_id } = req.body;
+    if (!table_id || !request_type) {
+      return res.status(400).json({ error: 'Table ID and request type are required' });
+    }
+
+    // Rate limiting: prevent spamming more than 1 request per table in 30 seconds
+    const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+    const { data: recent } = await supabaseAdmin
+      .from('service_requests')
+      .select('id')
+      .eq('table_id', table_id)
+      .eq('request_type', request_type)
+      .eq('status', 'pending')
+      .gt('created_at', thirtySecsAgo)
+      .maybeSingle();
+
+    if (recent) {
+      return res.status(429).json({ error: 'A staff member has already been notified. Please wait a moment!' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('service_requests')
+      .insert({
+        table_id,
+        user_id: user_id || null,
+        request_type,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.status(201).json({ message: 'Request sent to staff', request: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/service-requests', async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('service_requests')
+      .select('*, restaurant_tables(table_number)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/service-requests/:id/attend', async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('service_requests')
+      .update({ status: 'attended', attended_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ message: 'Request marked as attended', request: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Cashier / POS Endpoints
+// ==========================================
+app.get('/api/pos/active-tables', async (req, res) => {
+  try {
+    const { data: tables, error: tErr } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select(`
+        id, 
+        table_number, 
+        capacity, 
+        status,
+        orders (
+          id, 
+          status, 
+          payment_status, 
+          payment_method, 
+          subtotal, 
+          discount_amount, 
+          tax_amount, 
+          service_charge, 
+          total_amount, 
+          created_at,
+          locked_by,
+          locked_at,
+          order_items (
+            quantity, 
+            unit_price, 
+            menu_items (name)
+          ),
+          users (full_name, phone_number)
+        )
+      `)
+      .order('table_number', { ascending: true });
+
+    if (tErr) throw tErr;
+
+    const result = (tables || []).map(t => {
+      const activeOrders = (t.orders || []).filter(o => o.payment_status === 'pending');
+      const runningTotal = activeOrders.reduce((acc, o) => acc + parseFloat(o.total_amount || 0), 0);
+      return {
+        ...t,
+        activeOrders,
+        runningTotal
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/pos/orders/:id/lock', authMiddleware, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const cashierId = req.user.id;
+
+    const { data: order, error } = await supabaseAdmin
+      .from('orders')
+      .select('locked_by, locked_at')
+      .eq('id', orderId)
+      .single();
+
+    if (error || !order) return res.status(404).json({ error: 'Order not found' });
+
+    if (order.locked_by && order.locked_by !== cashierId) {
+      const lockAgeMins = (Date.now() - new Date(order.locked_at).getTime()) / 60000;
+      if (lockAgeMins < 5) {
+        return res.status(409).json({ error: 'Bill currently being settled by another staff member.' });
+      }
+    }
+
+    await supabaseAdmin
+      .from('orders')
+      .update({ locked_by: cashierId, locked_at: new Date().toISOString() })
+      .eq('id', orderId);
+
+    res.json({ message: 'Lock acquired' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/pos/orders/:id/settle', authMiddleware, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const { payment_method = 'cash', discount_amount = 0, table_id } = req.body;
+
+    const { data: order, error: oErr } = await supabaseAdmin
+      .from('orders')
+      .select('id, total_amount, table_id')
+      .eq('id', orderId)
+      .single();
+
+    if (oErr || !order) return res.status(404).json({ error: 'Order not found' });
+
+    const { data: settled, error: sErr } = await supabaseAdmin
+      .from('orders')
+      .update({
+        payment_status: 'paid',
+        status: 'served',
+        payment_method,
+        discount_amount,
+        locked_by: null,
+        locked_at: null
+      })
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    if (sErr) throw sErr;
+
+    const targetTable = table_id || order.table_id;
+    if (targetTable) {
+      await supabaseAdmin
+        .from('restaurant_tables')
+        .update({ status: 'cleaning' })
+        .eq('id', targetTable);
+    }
+
+    res.json({ message: 'Bill settled successfully and table freed', order: settled });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

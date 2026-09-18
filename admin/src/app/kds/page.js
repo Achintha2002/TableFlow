@@ -61,6 +61,33 @@ function Timer({ targetServeTime, reservationId, createdAt }) {
 export default function KDS() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const lastChimeTime = useState({ current: 0 })[0];
+
+  function playKitchenChime() {
+    if (!soundEnabled) return;
+    const now = Date.now();
+    // Debounce: prevent chime from firing more than once every 2.5 seconds
+    if (now - lastChimeTime.current < 2500) return;
+    lastChimeTime.current = now;
+
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.8);
+    } catch (e) {
+      console.warn('Kitchen chime audio notice:', e);
+    }
+  }
 
   async function fetchOrders() {
     const token = await getToken();
@@ -78,7 +105,10 @@ export default function KDS() {
     fetchOrders();
 
     const channel = supabase.channel('kds-orders-channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          playKitchenChime();
+        }
         fetchOrders();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
@@ -87,7 +117,7 @@ export default function KDS() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [soundEnabled]);
 
   async function updateStatus(id, newStatus) {
     const token = await getToken();
@@ -217,7 +247,27 @@ export default function KDS() {
       `}} />
       <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0, color: 'var(--text-light)' }}>Kitchen Display System</h1>
-        <div style={{ color: 'var(--text-muted)' }}>Live Updates Active 🟢</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '20px',
+              border: '1px solid var(--border-color)',
+              background: soundEnabled ? 'rgba(212, 175, 55, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+              color: soundEnabled ? 'var(--primary-gold)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              fontSize: '13px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            {soundEnabled ? '🔔 Sound: ON' : '🔕 Sound: OFF'}
+          </button>
+          <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Live Updates Active 🟢</div>
+        </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
         <Column 

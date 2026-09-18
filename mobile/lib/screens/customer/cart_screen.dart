@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme.dart';
-import 'package:provider/provider.dart';
-import '../../providers/cart_provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/theme.dart';
+import '../../providers/cart_provider.dart';
+import '../../services/api_service.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -19,15 +20,30 @@ class _CartScreenState extends State<CartScreen> {
   String _orderStatus = 'none';
   StreamSubscription? _orderSub;
   final TextEditingController _specialNotesController = TextEditingController();
-  
+  final TextEditingController _couponController = TextEditingController();
+
   List<Map<String, dynamic>> _tables = [];
   int? _selectedTableId;
+  int _userLoyaltyPoints = 0;
+  bool _useLoyaltyPoints = false;
+  bool _isValidatingCoupon = false;
+  bool _isSubmitting = false;
+  String _paymentMethod = 'cash'; // 'cash', 'card_at_counter', 'online_card'
 
   @override
   void initState() {
     super.initState();
     _checkActiveOrder();
     _fetchTables();
+    _fetchLoyaltyPoints();
+  }
+
+  @override
+  void dispose() {
+    _orderSub?.cancel();
+    _specialNotesController.dispose();
+    _couponController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchTables() async {
@@ -35,7 +51,6 @@ class _CartScreenState extends State<CartScreen> {
       final data = await Supabase.instance.client
           .from('restaurant_tables')
           .select('id, table_number')
-          .eq('status', 'available')
           .order('table_number', ascending: true);
       if (mounted) {
         setState(() {
@@ -47,11 +62,23 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _orderSub?.cancel();
-    _specialNotesController.dispose();
-    super.dispose();
+  Future<void> _fetchLoyaltyPoints() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('users')
+          .select('loyalty_points')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (data != null && mounted) {
+        setState(() {
+          _userLoyaltyPoints = data['loyalty_points'] ?? 0;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching loyalty points: $e');
+    }
   }
 
   Future<void> _checkActiveOrder() async {
@@ -66,7 +93,7 @@ class _CartScreenState extends State<CartScreen> {
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
-          
+
       if (data != null && mounted) {
         setState(() {
           _orderStatus = data['status'];
@@ -98,21 +125,73 @@ class _CartScreenState extends State<CartScreen> {
         );
   }
 
-  void _submitOrder() async {
-    setState(() {
-      _orderStatus = 'pending';
-    });
+  Future<void> _applyCoupon() async {
+    final code = _couponController.text.trim();
+    if (code.isEmpty) return;
 
     final cart = context.read<CartProvider>();
+    setState(() => _isValidatingCoupon = true);
+
+    try {
+      final res = await ApiService.validateCoupon(code, cart.totalAmount);
+      final couponData = res['coupon'];
+      final discount = (couponData['discount_amount'] as num).toDouble();
+
+      cart.applyCoupon(couponData['code'], discount);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Promo "${couponData['code']}" applied! Saved LKR ${discount.toStringAsFixed(2)}'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isValidatingCoupon = false);
+    }
+  }
+
+  void _toggleLoyaltyPoints(bool? value) {
+    final cart = context.read<CartProvider>();
+    final checked = value ?? false;
+    setState(() => _useLoyaltyPoints = checked);
+
+    if (checked && _userLoyaltyPoints > 0) {
+      // 1 point = 1 LKR, capped at cart total after coupon
+      final maxApplicable = cart.totalAmount - cart.couponDiscount;
+      final pointsToUse = _userLoyaltyPoints.clamp(0, maxApplicable.toInt());
+      cart.setRedeemedPoints(pointsToUse, pointsToUse.toDouble());
+    } else {
+      cart.clearRedeemedPoints();
+    }
+  }
+
+  Future<void> _submitOrder() async {
+    final cart = context.read<CartProvider>();
     final user = Supabase.instance.client.auth.currentUser;
-    
+
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in first')));
-      setState(() => _orderStatus = 'none');
       return;
     }
 
-    try {
+    final effectiveTableId = cart.selectedTableId ?? _selectedTableId;
+
+    // Check reservation if no table is selected
+    String? reservationId;
+    if (effectiveTableId == null) {
       final resData = await Supabase.instance.client
           .from('reservations')
           .select('id')
@@ -120,18 +199,27 @@ class _CartScreenState extends State<CartScreen> {
           .inFilter('status', ['pending', 'confirmed'])
           .order('created_at', ascending: false)
           .limit(1);
-          
-      final reservationId = resData.isNotEmpty ? resData.first['id'] : null;
 
-      if (reservationId == null && _selectedTableId == null) {
+      reservationId = resData.isNotEmpty ? resData.first['id'] : null;
+
+      if (reservationId == null) {
         if (mounted) {
-          setState(() => _orderStatus = 'none');
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select a table or book a reservation first.')),
+            const SnackBar(
+              content: Text('Please scan a Table QR or select a table from the list.'),
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
         return;
       }
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final idempotencyKey = '${user.id}_${DateTime.now().millisecondsSinceEpoch}';
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
 
       final orderItems = cart.itemsList.map((item) => {
         'menu_item_id': int.tryParse(item.id) ?? item.id,
@@ -140,48 +228,148 @@ class _CartScreenState extends State<CartScreen> {
         'item_notes': item.itemNotes,
       }).toList();
 
-      final token = Supabase.instance.client.auth.currentSession?.accessToken;
-
       final response = await http.post(
-        Uri.parse('http://127.0.0.1:3000/api/orders'),
+        Uri.parse('${ApiService.baseUrl}/orders'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
+          'Idempotency-Key': idempotencyKey,
         },
         body: jsonEncode({
           'reservation_id': reservationId,
-          'table_id': _selectedTableId,
-          'total_amount': cart.totalAmount * 1.08,
+          'table_id': effectiveTableId,
+          'total_amount': cart.grandTotal,
+          'payment_method': _paymentMethod,
+          'coupon_code': cart.couponCode,
+          'redeem_points': cart.redeemedPoints,
           'special_notes': _specialNotesController.text,
           'items': orderItems,
         }),
       );
 
-      if (response.statusCode == 201) {
-        final respData = jsonDecode(response.body);
+      final respData = jsonDecode(response.body);
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
         final orderId = respData['order']['id'];
+        final totalPaid = respData['breakdown']?['total'] ?? cart.grandTotal;
 
         if (mounted) {
           cart.clear();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Order sent to kitchen!'),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
+          _showDigitalReceipt(orderId, totalPaid, effectiveTableId);
           _listenToOrder(orderId.toString());
         }
       } else {
-        throw Exception('Server error: ${response.body}');
+        throw Exception(respData['error'] ?? 'Server error placing order');
       }
     } catch (e) {
       debugPrint('Error submitting order: $e');
       if (mounted) {
-        setState(() => _orderStatus = 'none');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _showDigitalReceipt(String orderId, num total, int? tableId) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.all(24),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle, color: Colors.green, size: 56),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Order Placed!',
+              style: TextStyle(fontFamily: 'Playfair Display', fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Sent to the Kitchen. Order #${orderId.substring(0, 8)}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.6), fontSize: 13),
+            ),
+            if (tableId != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Dine-in Table #$tableId',
+                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+            ],
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Divider(),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Payment Method:'),
+                Text(
+                  _paymentMethod == 'online_card'
+                      ? 'Card (Online)'
+                      : _paymentMethod == 'card_at_counter'
+                          ? 'Card at Counter'
+                          : 'Cash on Dine-in',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total Amount:'),
+                Text(
+                  'LKR ${total.toStringAsFixed(2)}',
+                  style: const TextStyle(color: AppTheme.primary, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  context.go('/home');
+                },
+                child: const Text('Back to Home', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -202,7 +390,7 @@ class _CartScreenState extends State<CartScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.1), blurRadius: 10),
-              ]
+              ],
             ),
             child: const Icon(Icons.arrow_back_ios_new, size: 18, color: AppTheme.secondary),
           ),
@@ -222,12 +410,11 @@ class _CartScreenState extends State<CartScreen> {
           Column(
             children: [
               if (_orderStatus != 'none') _buildStatusBanner(),
-              
               Expanded(
                 child: cartItems.isEmpty
                     ? _buildEmptyState()
                     : ListView(
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 280),
                         children: [
                           ...cartItems.map((item) => Padding(
                             padding: const EdgeInsets.only(bottom: 16.0),
@@ -240,13 +427,13 @@ class _CartScreenState extends State<CartScreen> {
                               imageUrl: item.imageUrl ?? 'https://via.placeholder.com/500',
                             ),
                           )),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
+                          _buildDiscountAndLoyaltySection(cart),
                         ],
                       ),
               ),
             ],
           ),
-          
           if (cartItems.isNotEmpty)
             Positioned(
               left: 0,
@@ -259,46 +446,110 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
+  Widget _buildDiscountAndLoyaltySection(CartProvider cart) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.05), blurRadius: 30)
-              ]
-            ),
-            child: Icon(Icons.shopping_bag_outlined, size: 64, color: AppTheme.primary.withValues(alpha: 0.5)),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Your cart is empty',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontFamily: 'Playfair Display',
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('Promo & Loyalty Rewards', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 12),
-          Text(
-            'Looks like you haven\'t added\nany dishes yet.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.6), height: 1.5),
+
+          // Coupon Code Row
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _couponController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: InputDecoration(
+                    hintText: 'Enter Promo Code (e.g. WELCOME10)',
+                    hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.35), fontSize: 13),
+                    isDense: true,
+                    filled: true,
+                    fillColor: AppTheme.background,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (cart.couponCode != null)
+                IconButton(
+                  tooltip: 'Remove coupon',
+                  icon: const Icon(Icons.close, color: Colors.redAccent),
+                  onPressed: () {
+                    cart.removeCoupon();
+                    _couponController.clear();
+                  },
+                )
+              else
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.secondary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  onPressed: _isValidatingCoupon ? null : _applyCoupon,
+                  child: _isValidatingCoupon
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Apply'),
+                ),
+            ],
           ),
-          const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () => context.pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: AppTheme.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+
+          if (cart.couponCode != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_offer, size: 16, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Code "${cart.couponCode}" applied: -LKR ${cart.couponDiscount.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-            child: const Text('Browse Menu', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12.0),
+            child: Divider(height: 1),
+          ),
+
+          // Loyalty Points Checkbox
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            activeColor: AppTheme.primary,
+            value: _useLoyaltyPoints,
+            onChanged: _userLoyaltyPoints > 0 ? _toggleLoyaltyPoints : null,
+            title: Row(
+              children: [
+                const Icon(Icons.stars, color: AppTheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Redeem Loyalty Points ($_userLoyaltyPoints pts)',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ],
+            ),
+            subtitle: _userLoyaltyPoints > 0
+                ? Text('Save up to LKR $_userLoyaltyPoints on this bill', style: const TextStyle(fontSize: 11))
+                : const Text('No points available to redeem', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ),
         ],
       ),
@@ -306,27 +557,56 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _buildCheckoutPanel(CartProvider cart) {
+    final hasTable = cart.hasTableSelected;
+
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppTheme.white,
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(28), topRight: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.secondary.withValues(alpha: 0.1),
+            color: AppTheme.secondary.withValues(alpha: 0.12),
             blurRadius: 30,
             offset: const Offset(0, -10),
-          )
+          ),
         ],
       ),
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_tables.isNotEmpty)
+            // Table selection badge or dropdown
+            if (hasTable)
               Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.table_restaurant, color: AppTheme.primary, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Dine-in at Table #${cart.selectedTableNumber} (QR Linked)',
+                        style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => cart.clearTable(),
+                      child: const Icon(Icons.close, size: 18, color: AppTheme.primary),
+                    ),
+                  ],
+                ),
+              )
+            else if (_tables.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
                   color: AppTheme.background,
                   borderRadius: BorderRadius.circular(12),
@@ -335,70 +615,187 @@ class _CartScreenState extends State<CartScreen> {
                   child: DropdownButton<int>(
                     isExpanded: true,
                     value: _selectedTableId,
-                    hint: Text('Select Table (Dine-in)', style: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.6))),
+                    hint: Text('Select Table (Or Scan QR)', style: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.6))),
                     items: _tables.map((t) => DropdownMenuItem<int>(
                       value: t['id'],
                       child: Text('Table ${t['table_number']}'),
                     )).toList(),
                     onChanged: (val) {
-                      setState(() {
-                        _selectedTableId = val;
-                      });
+                      setState(() => _selectedTableId = val);
                     },
                   ),
                 ),
               ),
-            TextField(
-              controller: _specialNotesController,
-              decoration: InputDecoration(
-                hintText: 'Add a special note for the kitchen...',
-                hintStyle: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.4)),
-                filled: true,
-                fillColor: AppTheme.background,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+
+            // Payment Method Selector
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(12),
               ),
-              maxLines: 2,
+              child: Row(
+                children: [
+                  const Text('Payment:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: _paymentMethod,
+                        items: const [
+                          DropdownMenuItem(value: 'cash', child: Text('Cash on Dine-in', style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(value: 'card_at_counter', child: Text('Card at Counter', style: TextStyle(fontSize: 13))),
+                          DropdownMenuItem(value: 'online_card', child: Text('Online Card Payment', style: TextStyle(fontSize: 13))),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _paymentMethod = val);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
+
+            // Financial Summary Breakdown
             _buildSummaryRow('Subtotal', 'LKR ${cart.totalAmount.toStringAsFixed(2)}'),
-            const SizedBox(height: 12),
-            _buildSummaryRow('Taxes & Fees (8%)', 'LKR ${(cart.totalAmount * 0.08).toStringAsFixed(2)}'),
+            if (cart.couponDiscount > 0)
+              _buildSummaryRow('Promo Discount', '-LKR ${cart.couponDiscount.toStringAsFixed(2)}', isDiscount: true),
+            if (cart.pointsDiscount > 0)
+              _buildSummaryRow('Loyalty Points', '-LKR ${cart.pointsDiscount.toStringAsFixed(2)}', isDiscount: true),
+            _buildSummaryRow('Service Charge (10%)', 'LKR ${cart.serviceCharge.toStringAsFixed(2)}'),
+            _buildSummaryRow('VAT / Tax (8%)', 'LKR ${cart.taxAmount.toStringAsFixed(2)}'),
+
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16.0),
+              padding: EdgeInsets.symmetric(vertical: 8.0),
               child: Divider(),
             ),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Total',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                const Text(
+                  'Total Payable',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 Text(
-                  'LKR ${(cart.totalAmount * 1.08).toStringAsFixed(2)}',
-                  style: const TextStyle(color: AppTheme.primary, fontSize: 24, fontWeight: FontWeight.bold),
+                  'LKR ${cart.grandTotal.toStringAsFixed(2)}',
+                  style: const TextStyle(color: AppTheme.primary, fontSize: 22, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 14),
+
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _submitOrder,
+                onPressed: _isSubmitting ? null : _submitOrder,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
                   foregroundColor: AppTheme.white,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  elevation: 10,
-                  shadowColor: AppTheme.primary.withValues(alpha: 0.5),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 6,
                 ),
-                child: const Text('Confirm Order (Pay at Restaurant)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: _isSubmitting
+                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : const Text('Confirm & Place Order', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, {bool isDiscount = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: isDiscount ? Colors.green : Colors.black87, fontSize: 13),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: isDiscount ? Colors.green : Colors.black87,
+              fontWeight: isDiscount ? FontWeight.bold : FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCartItem({
+    required CartProvider cart,
+    required String id,
+    required String title,
+    required String price,
+    required int quantity,
+    required String imageUrl,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.secondary.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              imageUrl,
+              width: 70,
+              height: 70,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                width: 70,
+                height: 70,
+                color: Colors.grey.shade200,
+                child: const Icon(Icons.fastfood, color: Colors.grey),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text(price, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline, size: 22),
+                onPressed: () => cart.updateQuantity(id, quantity - 1),
+              ),
+              Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, size: 22, color: AppTheme.primary),
+                onPressed: () => cart.updateQuantity(id, quantity + 1),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -433,165 +830,65 @@ class _CartScreenState extends State<CartScreen> {
     }
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      margin: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
       decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: 0.1),
+        color: statusColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: statusColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Icon(statusIcon, color: statusColor),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Text(
             statusText,
-            style: TextStyle(
-              color: statusColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCartItem({
-    required CartProvider cart,
-    required String id,
-    required String title,
-    required String price,
-    required int quantity,
-    required String imageUrl,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.secondary.withValues(alpha: 0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          )
-        ],
-      ),
-      child: Row(
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.network(
-              imageUrl,
-              width: 90,
-              height: 90,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontFamily: 'Playfair Display',
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  price,
-                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                if (cart.items[id]?.itemNotes != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      'Note: ${cart.items[id]!.itemNotes}',
-                      style: const TextStyle(color: Colors.red, fontSize: 13, fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                Row(
-                    children: [
-                      MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: () => cart.updateQuantity(id, quantity - 1),
-                          child: _buildQtyBtn(Icons.remove),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(quantity.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      ),
-                      MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: () => cart.updateQuantity(id, quantity + 1),
-                          child: _buildQtyBtn(Icons.add),
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.note_add_outlined, size: 20, color: AppTheme.secondary),
-                        onPressed: () {
-                          final item = cart.items[id];
-                          final noteCtrl = TextEditingController(text: item?.itemNotes ?? '');
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Add Note'),
-                              content: TextField(
-                                controller: noteCtrl,
-                                decoration: const InputDecoration(hintText: 'E.g., No onions, extra spicy...'),
-                              ),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                                TextButton(
-                                  onPressed: () {
-                                    cart.updateItemNotes(id, noteCtrl.text);
-                                    Navigator.pop(ctx);
-                                  },
-                                  child: const Text('Save'),
-                                )
-                              ],
-                            )
-                          );
-                        },
-                      )
-                    ],
-                  ),
+          Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.05), blurRadius: 25),
               ],
             ),
+            child: Icon(Icons.shopping_bag_outlined, size: 64, color: AppTheme.primary.withValues(alpha: 0.5)),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Your cart is empty',
+            style: TextStyle(fontFamily: 'Playfair Display', fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Select delicious dishes from the menu to get started.',
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.5), fontSize: 13),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => context.pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            ),
+            child: const Text('Browse Menu', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQtyBtn(IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(icon, size: 16, color: AppTheme.secondary),
-    );
-  }
-
-  Widget _buildSummaryRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.6), fontSize: 15)),
-        Text(value, style: const TextStyle(color: AppTheme.secondary, fontWeight: FontWeight.w600, fontSize: 15)),
-      ],
     );
   }
 }
