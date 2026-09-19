@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
@@ -18,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _firstName = '';
+  bool _isFirstVisit = false;
 
   @override
   void initState() {
@@ -29,13 +32,27 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final profile = await SupabaseService.getUserProfile();
       if (mounted) {
-        setState(() {
-          final fullName = profile?['full_name'] as String? ?? '';
-          _firstName = fullName.split(' ').first;
-        });
+        final fullName = profile?['full_name'] as String? ?? '';
+
+        // Per-user first-visit check using their Supabase user ID
+        final userId = Supabase.instance.client.auth.currentUser?.id ?? 'guest';
+        final prefKey = 'home_visited_$userId';
+        final prefs = await SharedPreferences.getInstance();
+        final hasVisited = prefs.getBool(prefKey) ?? false;
+
+        if (!hasVisited) {
+          await prefs.setBool(prefKey, true);
+        }
+
+        if (mounted) {
+          setState(() {
+            _firstName = fullName.split(' ').first;
+            _isFirstVisit = !hasVisited;
+          });
+        }
       }
     } catch (e) {
-      // ignore empty catch
+      // ignore
     }
   }
 
@@ -60,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeroSection() {
     final greeting = _firstName.isNotEmpty
-        ? 'Welcome back, $_firstName'
+        ? (_isFirstVisit ? 'Welcome, $_firstName' : 'Welcome back, $_firstName')
         : 'Welcome to TableFlow';
 
     return Container(
