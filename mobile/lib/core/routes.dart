@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/customer/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
+import '../screens/auth/onboarding_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/customer/home_screen.dart';
 import '../screens/customer/menu_screen.dart';
@@ -38,6 +39,7 @@ class GoRouterRefreshStream extends ChangeNotifier {
 
 class AppRoutes {
   static const splash = '/';
+  static const onboarding = '/onboarding';
   static const login = '/login';
   static const register = '/register';
   static const home = '/home';
@@ -59,22 +61,26 @@ class AppRoutes {
     redirect: (context, state) {
       final isAuth = Supabase.instance.client.auth.currentSession != null;
       final isSplash = state.matchedLocation == splash;
-      final isAuthRoute = state.matchedLocation == login || state.matchedLocation == register;
+      final isOnboarding = state.matchedLocation == onboarding;
+      final isAuthRoute = state.matchedLocation == login ||
+          state.matchedLocation == register ||
+          isOnboarding;
 
       // If not logged in and trying to access a protected route, go to login
       if (!isAuth && !isSplash && !isAuthRoute) {
         return login;
       }
-      
-      // If logged in and trying to access auth screens or splash, go to home
+
+      // If logged in and trying to access auth screens, splash or onboarding → go home
       if (isAuth && (isAuthRoute || isSplash)) {
         return home;
       }
-      
+
       return null;
     },
     routes: [
       GoRoute(path: splash, builder: (context, state) => const SplashScreen()),
+      GoRoute(path: onboarding, builder: (context, state) => const OnboardingScreen()),
       GoRoute(path: login, builder: (context, state) => const LoginScreen()),
       GoRoute(path: register, builder: (context, state) => const RegisterScreen()),
       

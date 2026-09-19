@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 
@@ -27,11 +28,22 @@ class _SplashScreenState extends State<SplashScreen> {
     if (currentUser != null) {
       // Already logged in → go to Home
       context.go('/home');
-    } else {
-      // Not logged in → go to Login
+      return;
+    }
+
+    // Not logged in → check if they've seen onboarding before
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenOnboarding = prefs.getBool('onboarding_seen') ?? false;
+
+    if (!mounted) return;
+
+    if (hasSeenOnboarding) {
       context.go('/login');
+    } else {
+      context.go('/onboarding');
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
