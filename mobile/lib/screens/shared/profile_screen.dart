@@ -267,134 +267,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
             
             const SizedBox(height: 32),
             
-            // Staff Controls Section
+            // Staff Operations Portal Card
             if (['staff', 'waiter', 'manager', 'admin'].contains(_role) || true) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Host & Staff Operations',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontFamily: 'Playfair Display',
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.secondary,
-                          ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFB87F5C).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text(
-                            'STAFF HUB',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFB87F5C),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2C2523), Color(0xFF1E1A18)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFB87F5C).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'STAFF OPERATIONS',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2,
+                                color: Color(0xFFE2DDD7),
+                              ),
                             ),
                           ),
+                          const Icon(Icons.arrow_forward, color: Color(0xFFB87F5C), size: 18),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Floor & Host Operations Hub',
+                        style: TextStyle(
+                          fontFamily: 'Playfair Display',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildSettingsCard(
-                      children: [
-                        _buildActionTile(
-                          icon: Icons.table_restaurant,
-                          title: 'Waiter Floor Mode',
-                          subtitle: 'Live dining floor, service requests & table ordering.',
-                          onTap: () => context.push('/waiter-floor'),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Waiter Floor Mode, Reservations, Priority Queue, Bussing & Shifts.',
+                        style: TextStyle(fontSize: 12, color: Color(0xFFA59D95)),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFB87F5C),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
+                          onPressed: () => context.push('/staff-hub'),
+                          icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
+                          label: const Text(
+                            'Open Operations Hub',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
                         ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.calendar_month,
-                          title: 'Reservations Management',
-                          subtitle: 'View bookings, confirm, edit or cancel tables.',
-                          onTap: () => context.push('/reservations-management'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.contacts_outlined,
-                          title: 'Customer Directory (CRM)',
-                          subtitle: 'Guest profiles, VIP badges & visit frequency.',
-                          onTap: () => context.push('/customer-directory'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.format_list_numbered,
-                          title: 'Manage Waitlist Queue',
-                          subtitle: 'Reorder priority, add walk-in & table assignments.',
-                          onTap: () => context.push('/manage-queue'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.access_time_filled,
-                          title: 'Queue Status & Batch Time',
-                          subtitle: 'Batch wait time adjustments & party stages.',
-                          onTap: () => context.push('/queue-status'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.dashboard_customize_outlined,
-                          title: 'Table Status Live Monitor',
-                          subtitle: 'Real-time floor grid: available, occupied, cleaning.',
-                          onTap: () => context.push('/table-status-monitor'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.cleaning_services,
-                          title: 'Table Cleaning & Bussing',
-                          subtitle: 'Turnover workflow tracker: pending, in-progress, done.',
-                          onTap: () => context.push('/table-cleaning-tasks'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.schedule_send,
-                          title: 'Daily Shift Schedule',
-                          subtitle: 'Morning, afternoon & night staff rosters.',
-                          onTap: () => context.push('/daily-schedule'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.campaign_outlined,
-                          title: 'Compose Push Notification',
-                          subtitle: 'Broadcast alerts to waiting customers or staff.',
-                          onTap: () => context.push('/compose-notification'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.bar_chart,
-                          title: 'Queue & Flow Analytics',
-                          subtitle: 'Hourly customer flow bar chart & turnover KPIs.',
-                          onTap: () => context.push('/queue-report'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.sync,
-                          title: 'Partner Channel Sync',
-                          subtitle: 'Manage BookMe, Reserve.lk & DineHub integrations.',
-                          onTap: () => context.push('/partner-sync'),
-                        ),
-                        const Divider(height: 1),
-                        _buildActionTile(
-                          icon: Icons.badge_outlined,
-                          title: 'Staff Profile & Shift Details',
-                          subtitle: 'Personal floor performance, KPIs & clock-out.',
-                          onTap: () => context.push('/staff-profile'),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
             ],
 
             // Account Activity Section

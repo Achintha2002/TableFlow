@@ -32,6 +32,7 @@ import '../screens/staff/table_status_monitor_screen.dart';
 import '../screens/staff/staff_profile_screen.dart';
 import '../screens/staff/table_cleaning_tasks_screen.dart';
 import '../screens/staff/daily_schedule_screen.dart';
+import '../screens/staff/staff_hub_screen.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -80,6 +81,7 @@ class AppRoutes {
   static const staffProfile = '/staff-profile';
   static const tableCleaningTasks = '/table-cleaning-tasks';
   static const dailySchedule = '/daily-schedule';
+  static const staffHub = '/staff-hub';
 
   static final router = GoRouter(
     initialLocation: splash,
@@ -127,6 +129,7 @@ class AppRoutes {
       GoRoute(path: staffProfile, builder: (context, state) => const StaffProfileScreen()),
       GoRoute(path: tableCleaningTasks, builder: (context, state) => const TableCleaningTasksScreen()),
       GoRoute(path: dailySchedule, builder: (context, state) => const DailyScheduleScreen()),
+      GoRoute(path: staffHub, builder: (context, state) => const StaffHubScreen()),
       GoRoute(
         path: reservationDetails,
         builder: (context, state) {
