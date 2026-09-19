@@ -67,16 +67,14 @@ class SupabaseService {
       await _client.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: '${Uri.base.origin}/',
-        queryParams: {
-          'prompt': 'select_account',
-        },
+        queryParams: {'prompt': 'select_account'},
       );
       // The browser will redirect to Google and then back to the app, so we return null.
       return null;
     }
 
     // On Mobile (Android/iOS), use the native google_sign_in plugin
-    // TODO: Replace with your actual Web Client ID from Google Cloud Console
+
     const webClientId =
         '878569392531-9uv232dv0r3h7n4aflmt3joncj5f43hs.apps.googleusercontent.com';
     // TODO: Replace with your actual iOS Client ID from Google Cloud Console (if supporting iOS)
@@ -185,11 +183,7 @@ class SupabaseService {
 
     final response = await _client
         .from('queue_entries')
-        .insert({
-          'user_id': userId,
-          'pax': partySize,
-          'status': 'waiting',
-        })
+        .insert({'user_id': userId, 'pax': partySize, 'status': 'waiting'})
         .select()
         .single();
     return response;
@@ -295,8 +289,10 @@ class SupabaseService {
         .insert({
           'user_id': userId,
           'table_id': tableId,
-          'reservation_date': '${reservationTime.year}-${reservationTime.month.toString().padLeft(2, '0')}-${reservationTime.day.toString().padLeft(2, '0')}',
-          'reservation_time': '${reservationTime.hour.toString().padLeft(2, '0')}:${reservationTime.minute.toString().padLeft(2, '0')}:00',
+          'reservation_date':
+              '${reservationTime.year}-${reservationTime.month.toString().padLeft(2, '0')}-${reservationTime.day.toString().padLeft(2, '0')}',
+          'reservation_time':
+              '${reservationTime.hour.toString().padLeft(2, '0')}:${reservationTime.minute.toString().padLeft(2, '0')}:00',
           'pax': partySize,
           'status': 'confirmed',
         })
