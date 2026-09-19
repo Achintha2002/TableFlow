@@ -20,6 +20,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _email = '';
   String _phone = '';
   String _loyaltyTier = 'Bronze';
+  String _role = 'customer';
   
   bool _promoEmails = true;
 
@@ -33,13 +34,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final profile = await SupabaseService.getUserProfile();
 
-      
       if (mounted) {
         setState(() {
           _fullName = profile?['full_name'] ?? 'Guest';
           _email = profile?['email'] ?? '';
           _phone = profile?['phone_number'] ?? '';
           _loyaltyTier = profile?['loyalty_tier'] ?? 'Bronze';
+          _role = profile?['role'] ?? 'customer';
           
           _isLoading = false;
         });
@@ -266,6 +267,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
             
             const SizedBox(height: 32),
             
+            // Staff Controls Section
+            if (['staff', 'waiter', 'manager', 'admin'].contains(_role)) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Staff Controls',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontFamily: 'Playfair Display',
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildSettingsCard(
+                      children: [
+                        _buildActionTile(
+                          icon: Icons.table_restaurant,
+                          title: 'Waiter Floor Mode',
+                          subtitle: 'Live dining floor, service requests & table ordering.',
+                          onTap: () => context.push('/waiter-floor'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+
             // Account Activity Section
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),

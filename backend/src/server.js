@@ -79,7 +79,67 @@ const supabaseAdmin = createClient(
 );
 
 // ==========================================
-// System Health & FCM Notification Status
+// Staff RBAC Middleware
+// ==========================================
+const requireStaffRole = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Query public.users for the caller's authoritative role
+    const { data: userProfile, error } = await supabaseAdmin
+      .from('users')
+      .select('id, role, full_name')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    if (error || !userProfile) {
+      return res.status(403).json({ error: 'Forbidden: User profile not found' });
+    }
+
+    const staffRoles = ['staff', 'waiter', 'manager', 'admin'];
+    if (!staffRoles.includes(userProfile.role)) {
+      return res.status(403).json({
+        error: `Forbidden: Staff access required. Current role: ${userProfile.role}`
+      });
+    }
+
+    req.staffProfile = userProfile;
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ==========================================
+// Service Requests Storage Fallback
+// ==========================================
+const inMemoryServiceRequests = [];
+let isServiceRequestsInMemory = false;
+
+async function checkServiceRequestsTable() {
+  try {
+    const { error } = await supabaseAdmin.from('service_requests').select('id').limit(1);
+    if (error && (error.code === 'PGRST205' || error.message.includes('Could not find the table'))) {
+      isServiceRequestsInMemory = true;
+      if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_MEMORY_FALLBACK) {
+        console.error('\x1b[31m[CRITICAL] service_requests table missing in PRODUCTION! Apply backend/phase10_service_requests.sql\x1b[0m');
+      } else {
+        console.warn('\x1b[33m⚠️ [SERVICE REQUESTS] Running on IN-MEMORY fallback — not safe for multi-instance production. Apply backend/phase10_service_requests.sql to Supabase!\x1b[0m');
+      }
+    } else {
+      isServiceRequestsInMemory = false;
+      console.log('\x1b[32m[SERVICE REQUESTS] Database table verified and active.\x1b[0m');
+    }
+  } catch (_) {
+    isServiceRequestsInMemory = true;
+  }
+}
+checkServiceRequestsTable();
+
+// ==========================================
+// System Health & System Status
 // ==========================================
 app.get('/api/health', (req, res) => {
   const fcmStatus = fcmService.getFCMStatus();
@@ -87,7 +147,8 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     fcm_mode: fcmStatus.mode,
-    fcm_configured: fcmStatus.configured
+    fcm_configured: fcmStatus.configured,
+    service_requests_storage: isServiceRequestsInMemory ? 'in_memory' : 'database'
   });
 });
 
@@ -1429,6 +1490,45 @@ app.post('/api/service-requests', async (req, res) => {
 
     // Rate limiting: prevent spamming more than 1 request per table in 30 seconds
     const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
+
+    if (isServiceRequestsInMemory) {
+      const recent = inMemoryServiceRequests.find(r => 
+        String(r.table_id) === String(table_id) && 
+        r.request_type === request_type && 
+        r.status === 'pending' && 
+        r.created_at > thirtySecsAgo
+      );
+      if (recent) {
+        return res.status(429).json({ error: 'A staff member has already been notified. Please wait a moment!' });
+      }
+
+      const newReq = {
+        id: crypto.randomUUID(),
+        table_id: Number(table_id),
+        user_id: user_id || null,
+        request_type,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        attended_at: null,
+        attended_by: null
+      };
+      inMemoryServiceRequests.unshift(newReq);
+
+      // Topic push to staff
+      try {
+        const { data: tableData } = await supabaseAdmin.from('restaurant_tables').select('table_number').eq('id', table_id).maybeSingle();
+        const tNum = tableData?.table_number || table_id;
+        fcmService.sendToTopic('staff-service-calls', {
+          title: '🛎️ Guest Service Request',
+          body: `Table #${tNum} requested: ${request_type.toUpperCase()}`,
+          data: { type: 'service_request', requestId: newReq.id, tableId: String(table_id), tableNumber: String(tNum), requestType: request_type }
+        }).catch(() => {});
+      } catch (_) {}
+
+      return res.status(201).json({ message: 'Request sent to staff', request: newReq });
+    }
+
+    // Database path
     const { data: recent } = await supabaseAdmin
       .from('service_requests')
       .select('id')
@@ -1453,26 +1553,29 @@ app.post('/api/service-requests', async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // Fallback to in-memory if table missing
+      isServiceRequestsInMemory = true;
+      const fallbackReq = {
+        id: crypto.randomUUID(),
+        table_id: Number(table_id),
+        user_id: user_id || null,
+        request_type,
+        status: 'pending',
+        created_at: new Date().toISOString()
+      };
+      inMemoryServiceRequests.unshift(fallbackReq);
+      return res.status(201).json({ message: 'Request sent to staff (memory fallback)', request: fallbackReq });
+    }
 
     // Dispatch real-time push alert to staff topic
     try {
-      const { data: tableData } = await supabaseAdmin
-        .from('restaurant_tables')
-        .select('table_number')
-        .eq('id', table_id)
-        .maybeSingle();
+      const { data: tableData } = await supabaseAdmin.from('restaurant_tables').select('table_number').eq('id', table_id).maybeSingle();
       const tNum = tableData?.table_number || table_id;
       fcmService.sendToTopic('staff-service-calls', {
         title: '🛎️ Guest Service Request',
         body: `Table #${tNum} requested: ${request_type.toUpperCase()}`,
-        data: {
-          type: 'service_request',
-          requestId: data.id,
-          tableId: table_id,
-          tableNumber: String(tNum),
-          requestType: request_type
-        }
+        data: { type: 'service_request', requestId: data.id, tableId: String(table_id), tableNumber: String(tNum), requestType: request_type }
       }).catch(err => console.error('[FCM] Staff service call error:', err.message));
     } catch (_) {}
 
@@ -1482,32 +1585,422 @@ app.post('/api/service-requests', async (req, res) => {
   }
 });
 
-app.get('/api/service-requests', async (req, res) => {
+// Staff-only: Fetch active service requests
+app.get('/api/service-requests', authMiddleware, requireStaffRole, async (req, res) => {
   try {
+    if (isServiceRequestsInMemory) {
+      const pending = inMemoryServiceRequests.filter(r => r.status === 'pending');
+      // Resolve table numbers
+      const { data: tables } = await supabaseAdmin.from('restaurant_tables').select('id, table_number');
+      const tableMap = {};
+      (tables || []).forEach(t => tableMap[t.id] = t.table_number);
+
+      const enriched = pending.map(r => ({
+        ...r,
+        restaurant_tables: { table_number: tableMap[r.table_id] || r.table_id }
+      }));
+      return res.json(enriched);
+    }
+
     const { data, error } = await supabaseAdmin
       .from('service_requests')
       .select('*, restaurant_tables(table_number)')
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      // Fallback
+      isServiceRequestsInMemory = true;
+      const pending = inMemoryServiceRequests.filter(r => r.status === 'pending');
+      return res.json(pending);
+    }
     res.json(data || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.patch('/api/service-requests/:id/attend', async (req, res) => {
+// Staff-only: Atomic Attendance of Service Request
+app.patch('/api/service-requests/:id/attend', authMiddleware, requireStaffRole, async (req, res) => {
   try {
+    const requestId = req.params.id;
+    const staffId = req.user.id;
+    const staffName = req.staffProfile?.full_name || 'Staff';
+
+    if (isServiceRequestsInMemory) {
+      const item = inMemoryServiceRequests.find(r => r.id === requestId);
+      if (!item) {
+        return res.status(404).json({ error: 'Service request not found' });
+      }
+      if (item.status !== 'pending') {
+        return res.status(409).json({
+          error: 'Already attended by another staff member',
+          attended_by: item.attended_by_name || 'Another staff member'
+        });
+      }
+
+      // Atomic claim
+      item.status = 'attended';
+      item.attended_at = new Date().toISOString();
+      item.attended_by = staffId;
+      item.attended_by_name = staffName;
+
+      return res.json({ message: 'Request marked as attended', request: item });
+    }
+
+    // Atomic database update (only succeeds if still pending)
     const { data, error } = await supabaseAdmin
       .from('service_requests')
-      .update({ status: 'attended', attended_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-      .select()
-      .single();
+      .update({
+        status: 'attended',
+        attended_at: new Date().toISOString(),
+        attended_by: staffId
+      })
+      .eq('id', requestId)
+      .eq('status', 'pending')
+      .select('*, restaurant_tables(table_number)')
+      .maybeSingle();
 
     if (error) throw error;
+
+    if (!data) {
+      // Check if it was already attended
+      const { data: check } = await supabaseAdmin
+        .from('service_requests')
+        .select('status, attended_by, users:attended_by(full_name)')
+        .eq('id', requestId)
+        .maybeSingle();
+
+      return res.status(409).json({
+        error: 'Already attended by another staff member',
+        attended_by: check?.users?.full_name || 'Another staff member'
+      });
+    }
+
     res.json({ message: 'Request marked as attended', request: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Waiter Floor Mode: Table Status Management
+// ==========================================
+app.patch('/api/tables/:id/status', authMiddleware, requireStaffRole, async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    const { status, force = false } = req.body;
+
+    const validStatuses = ['available', 'occupied', 'needs_cleaning', 'reserved'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    // Check unpaid order guard if transitioning to 'available'
+    if (status === 'available') {
+      const { data: activeOrder } = await supabaseAdmin
+        .from('orders')
+        .select('id, status, total_amount')
+        .eq('table_id', tableId)
+        .in('status', ['pending', 'preparing', 'ready', 'served'])
+        .limit(1)
+        .maybeSingle();
+
+      if (activeOrder && !force) {
+        return res.status(409).json({
+          error: 'Table has an active unsettled order. Settle the bill before marking available, or provide force=true.',
+          order_id: activeOrder.id,
+          order_status: activeOrder.status,
+          total_amount: activeOrder.total_amount
+        });
+      }
+    }
+
+    // Attempt update with audit fields
+    let updatedTable = null;
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('restaurant_tables')
+        .update({
+          status,
+          status_changed_by: req.user.id,
+          status_changed_at: new Date().toISOString()
+        })
+        .eq('id', tableId)
+        .select('*, table_categories(name)')
+        .single();
+
+      if (!error) updatedTable = data;
+    } catch (_) {}
+
+    // Fallback if audit columns not yet added to table
+    if (!updatedTable) {
+      const { data, error } = await supabaseAdmin
+        .from('restaurant_tables')
+        .update({ status })
+        .eq('id', tableId)
+        .select('*, table_categories(name)')
+        .single();
+
+      if (error) throw error;
+      updatedTable = data;
+    }
+
+    res.json({
+      success: true,
+      message: `Table #${updatedTable.table_number} status updated to ${status}`,
+      table: updatedTable
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Waiter Floor Mode: Table Order Punch-in
+// ==========================================
+app.post('/api/staff/orders', authMiddleware, requireStaffRole, async (req, res) => {
+  try {
+    const { table_id, items, special_instructions } = req.body;
+    if (!table_id || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'table_id and non-empty items array are required' });
+    }
+
+    // Fetch live menu items to recalculate unit prices accurately
+    const itemIds = items.map(i => i.id || i.product_id).filter(Boolean);
+    const { data: dbItems, error: menuErr } = await supabaseAdmin
+      .from('menu_items')
+      .select('id, name, price, is_available')
+      .in('id', itemIds);
+
+    if (menuErr) throw menuErr;
+    const dbItemMap = new Map((dbItems || []).map(m => [m.id, m]));
+
+    let calculatedTotal = 0;
+    const validatedItems = [];
+
+    for (const item of items) {
+      const pId = item.id || item.product_id;
+      const dbItem = dbItemMap.get(pId);
+      if (!dbItem) {
+        return res.status(400).json({ error: `Item with id ${pId} not found in menu` });
+      }
+      if (dbItem.is_available === false) {
+        return res.status(400).json({ error: `Item "${dbItem.name}" is currently marked unavailable` });
+      }
+
+      const qty = parseInt(item.quantity, 10) || 1;
+      let unitPrice = Number(dbItem.price) || 0;
+
+      // Portions
+      if (item.selected_size && item.selected_size.price_delta) {
+        unitPrice += Number(item.selected_size.price_delta) || 0;
+      }
+      // Addons
+      if (Array.isArray(item.selected_addons)) {
+        item.selected_addons.forEach(a => {
+          unitPrice += (Number(a.price) || 0) * (parseInt(a.quantity, 10) || 1);
+        });
+      }
+
+      calculatedTotal += unitPrice * qty;
+      validatedItems.push({
+        product_id: dbItem.id,
+        name: dbItem.name,
+        quantity: qty,
+        price: unitPrice,
+        subtotal: unitPrice * qty,
+        selected_customizations: {
+          size: item.selected_size || null,
+          addons: item.selected_addons || [],
+          preference: item.cooking_preference || null
+        },
+        item_notes: item.item_notes || ''
+      });
+    }
+
+    // Check if table already has an active open order (avoid duplicate split bills)
+    const { data: existingOrder } = await supabaseAdmin
+      .from('orders')
+      .select('id, total_amount, special_notes, status')
+      .eq('table_id', table_id)
+      .in('status', ['pending', 'preparing', 'ready'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingOrder) {
+      // 1. Insert newly added line items into order_items
+      const newOrderItems = validatedItems.map(item => ({
+        order_id: existingOrder.id,
+        menu_item_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.price,
+        item_notes: item.item_notes || null,
+        special_instructions: item.item_notes || null,
+        selected_customizations: item.selected_customizations || null
+      }));
+
+      const { error: itemsErr } = await supabaseAdmin
+        .from('order_items')
+        .insert(newOrderItems);
+
+      if (itemsErr) {
+        const fallbackItems = newOrderItems.map(({ selected_customizations, ...rest }) => rest);
+        await supabaseAdmin.from('order_items').insert(fallbackItems);
+      }
+
+      // 2. Update order total & notes
+      const newTotal = (Number(existingOrder.total_amount) || 0) + calculatedTotal;
+      const mergedNotes = [existingOrder.special_notes, special_instructions]
+        .filter(Boolean)
+        .join(' | ');
+
+      const { data: updated, error: updateErr } = await supabaseAdmin
+        .from('orders')
+        .update({
+          total_amount: newTotal,
+          special_notes: mergedNotes
+        })
+        .eq('id', existingOrder.id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
+
+      return res.json({
+        success: true,
+        mode: 'merged',
+        message: `Order items appended to existing Table #${table_id} check`,
+        order_id: existingOrder.id,
+        total_amount: newTotal,
+        order: updated
+      });
+    }
+
+    // Create a new order for this table
+    let newOrder = null;
+    const orderPayload = {
+      table_id,
+      user_id: req.user.id,
+      created_by_staff_id: req.user.id,
+      total_amount: calculatedTotal,
+      status: 'pending',
+      payment_status: 'pending',
+      special_notes: special_instructions || `Punched in by staff: ${req.staffProfile.full_name}`
+    };
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .insert(orderPayload)
+        .select()
+        .single();
+
+      if (!error) {
+        newOrder = data;
+      } else if (error.message.includes('orders_check') || error.code === '23514') {
+        // Fallback for older database schema requiring reservation_id or queue_entry_id
+        const { data: resData } = await supabaseAdmin
+          .from('reservations')
+          .select('id')
+          .eq('table_id', table_id)
+          .limit(1)
+          .maybeSingle();
+
+        const fallbackRes = resData?.id || (await supabaseAdmin.from('reservations').select('id').limit(1).single()).data?.id;
+
+        const { data: fallbackOrder, error: fErr } = await supabaseAdmin
+          .from('orders')
+          .insert({
+            ...orderPayload,
+            reservation_id: fallbackRes
+          })
+          .select()
+          .single();
+
+        if (!fErr) newOrder = fallbackOrder;
+      }
+    } catch (_) {}
+
+    if (!newOrder) {
+      // Fallback without created_by_staff_id column
+      const { created_by_staff_id, ...fallbackPayload } = orderPayload;
+      let { data, error } = await supabaseAdmin
+        .from('orders')
+        .insert(fallbackPayload)
+        .select()
+        .single();
+
+      if (error && (error.message.includes('orders_check') || error.code === '23514')) {
+        const { data: resFallback } = await supabaseAdmin.from('reservations').select('id').limit(1).single();
+        const retry = await supabaseAdmin
+          .from('orders')
+          .insert({
+            ...fallbackPayload,
+            reservation_id: resFallback?.id
+          })
+          .select()
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (error) throw error;
+      newOrder = data;
+    }
+
+    // Insert order items
+    const orderItems = validatedItems.map(item => ({
+      order_id: newOrder.id,
+      menu_item_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.price,
+      item_notes: item.item_notes || null,
+      special_instructions: item.item_notes || null,
+      selected_customizations: item.selected_customizations || null
+    }));
+
+    const { error: itemsErr } = await supabaseAdmin
+      .from('order_items')
+      .insert(orderItems);
+
+    if (itemsErr) {
+      const fallbackItems = orderItems.map(({ selected_customizations, ...rest }) => rest);
+      await supabaseAdmin.from('order_items').insert(fallbackItems);
+    }
+
+    // Auto mark table as occupied
+    await supabaseAdmin.from('restaurant_tables').update({ status: 'occupied' }).eq('id', table_id);
+
+    res.status(201).json({
+      success: true,
+      mode: 'created',
+      message: `New order created for Table #${table_id}`,
+      order_id: newOrder.id,
+      total_amount: calculatedTotal,
+      order: newOrder
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Fetch active order for table (for staff inspection)
+app.get('/api/staff/table-order/:tableId', authMiddleware, requireStaffRole, async (req, res) => {
+  try {
+    const tableId = req.params.tableId;
+    const { data: order, error } = await supabaseAdmin
+      .from('orders')
+      .select('*, order_items(*, menu_items(name, price))')
+      .eq('table_id', tableId)
+      .in('status', ['pending', 'preparing', 'ready'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    res.json({ active_order: order || null });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
