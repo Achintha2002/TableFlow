@@ -1321,6 +1321,44 @@ function verifyTableToken(token) {
   }
 }
 
+// ==========================================
+// Table Availability Check (Waitlist Gate)
+// GET /api/tables/availability?pax=N
+// Returns: { allOccupied: bool, availableCount: int, availableTables: [...] }
+// Waitlist may only be joined when allOccupied === true
+// ==========================================
+app.get('/api/tables/availability', async (req, res) => {
+  try {
+    const pax = parseInt(req.query.pax, 10) || 1;
+
+    // Fetch all tables
+    const { data: tables, error } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number, capacity, status')
+      .order('table_number', { ascending: true });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const all = tables || [];
+    // A table is "usable" if it's available AND can seat the party
+    const usable = all.filter(
+      t => t.status === 'available' && t.capacity >= pax
+    );
+    // All tables (regardless of size) that are not available
+    const occupiedCount = all.filter(t => t.status !== 'available').length;
+
+    res.json({
+      allOccupied: usable.length === 0,       // true → waitlist is open
+      availableCount: usable.length,           // tables that fit this party
+      totalTables: all.length,
+      occupiedCount,
+      paxRequested: pax,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/tables/qr-tokens/all', async (req, res) => {
   try {
     const { data: tables, error } = await supabaseAdmin

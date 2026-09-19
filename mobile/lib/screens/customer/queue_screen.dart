@@ -2,8 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'dart:async';
+import 'dart:convert';
 import '../../core/theme.dart';
+import '../../core/constants.dart';
 
 class QueueScreen extends StatefulWidget {
   const QueueScreen({super.key});
@@ -21,6 +24,10 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   bool _isLoading = true;
   String? _queueId;
   StreamSubscription? _queueSubscription;
+
+  // Availability gate state
+  int _availableTablesForParty = -1;  // -1 = not yet checked
+  bool _checkingAvailability = false;
 
   late AnimationController _pulseController;
 
@@ -139,6 +146,117 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
         );
   }
 
+  // -------------------------------------------------------
+  // Check availability for a given party size via backend
+  // -------------------------------------------------------
+  Future<int> _checkAvailabilityForPax(int pax) async {
+    try {
+      final uri = Uri.parse('${AppConstants.backendUrl}/api/tables/availability?pax=$pax');
+      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return (body['availableCount'] as int? ?? 0);
+      }
+    } catch (e) {
+      debugPrint('Availability check error: $e');
+    }
+    // On network error, fail-open (allow joining)
+    return 0;
+  }
+
+  // -------------------------------------------------------
+  // Show "Tables are available" blocking dialog
+  // -------------------------------------------------------
+  void _showTablesAvailableDialog(int pax, int availableCount) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.table_restaurant, color: Colors.green.shade700, size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Tables Available!',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Text(
+                '$availableCount ${availableCount == 1 ? 'table is' : 'tables are'} currently available for a party of $pax.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.green.shade800,
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'The waitlist is only for when the restaurant is fully occupied.\nPlease scan a table QR code or ask a staff member to seat you.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                context.go('/home');
+              },
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label: const Text('Go to Home', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('I still want to browse the waitlist'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _joinQueue() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
@@ -146,8 +264,8 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
       return;
     }
     
-    // Ask for pax
-    int pax = 2; // Default
+    // ── Step 1: Pick party size ──────────────────────────
+    int pax = 2;
     final selectedPax = await showModalBottomSheet<int>(
       context: context,
       useRootNavigator: true,
@@ -204,6 +322,23 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     if (selectedPax == null) return;
     pax = selectedPax;
 
+    // ── Step 2: Availability check ───────────────────────
+    setState(() { _checkingAvailability = true; });
+    final availCount = await _checkAvailabilityForPax(pax);
+    setState(() {
+      _availableTablesForParty = availCount;
+      _checkingAvailability = false;
+    });
+
+    if (!mounted) return;
+
+    // Block if suitable tables are free
+    if (availCount > 0) {
+      _showTablesAvailableDialog(pax, availCount);
+      return;
+    }
+
+    // ── Step 3: All tables full → join the queue ─────────
     setState(() => _isLoading = true);
     try {
       final res = await Supabase.instance.client.from('queue_entries').insert({
@@ -264,8 +399,15 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(32.0),
-                child: _isLoading 
-                  ? const CircularProgressIndicator(color: AppTheme.primary)
+                child: (_isLoading || _checkingAvailability)
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(color: AppTheme.primary),
+                        if (_checkingAvailability) ...
+                          [const SizedBox(height: 16), const Text('Checking table availability…', style: TextStyle(color: AppTheme.secondary))],
+                      ],
+                    )
                   : _inQueue ? _buildInQueueView() : _buildJoinQueueView(),
               ),
             ),
@@ -339,6 +481,52 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                   height: 1.5,
                 ),
               ),
+              // Live availability status banner
+              if (_availableTablesForParty >= 0) ...
+                [
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _availableTablesForParty > 0
+                          ? Colors.green.shade50
+                          : AppTheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _availableTablesForParty > 0
+                            ? Colors.green.shade300
+                            : AppTheme.primary.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _availableTablesForParty > 0
+                              ? Icons.table_restaurant
+                              : Icons.event_busy,
+                          size: 16,
+                          color: _availableTablesForParty > 0
+                              ? Colors.green.shade700
+                              : AppTheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _availableTablesForParty > 0
+                              ? '$_availableTablesForParty table(s) currently open'
+                              : 'Restaurant is fully occupied',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _availableTablesForParty > 0
+                                ? Colors.green.shade700
+                                : AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
             ],
           ),
         ),
