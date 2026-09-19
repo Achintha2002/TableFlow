@@ -171,7 +171,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
@@ -234,7 +234,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 context.go('/home');
               },
               icon: const Icon(Icons.arrow_forward_rounded),
@@ -249,7 +249,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
           ),
           const SizedBox(height: 4),
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('I still want to browse the waitlist'),
           ),
         ],
