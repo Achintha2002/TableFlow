@@ -14,10 +14,11 @@ class QrCheckinScreen extends StatefulWidget {
 }
 
 class _QrCheckinScreenState extends State<QrCheckinScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final MobileScannerController _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     returnImage: false,
+    autoStart: false,   // ← do NOT start camera on construction
   );
 
   late AnimationController _animController;
@@ -29,6 +30,8 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     _animController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
@@ -37,10 +40,28 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
     _scanLineAnimation = Tween<double>(begin: 0.1, end: 0.9).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
     );
+
+    // Start camera only after the first frame — user is actually on this screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scannerController.start();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Pause camera when app goes to background; resume when foregrounded
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden) {
+      _scannerController.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      if (mounted && !_isProcessing) _scannerController.start();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _animController.dispose();
     _scannerController.dispose();
     super.dispose();
@@ -117,7 +138,8 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
         ),
       );
 
-      // Navigate directly to menu
+      // Navigate directly to menu — stop camera first
+      _scannerController.stop();
       context.go('/menu');
     } catch (e) {
       if (mounted) {
@@ -178,7 +200,14 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-          onPressed: () { if (context.canPop()) { context.pop(); } else { context.go('/home'); } },
+          onPressed: () {
+            _scannerController.stop();
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
         title: const Text(
           'Scan Table QR',
