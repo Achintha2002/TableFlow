@@ -17,22 +17,7 @@ import '../screens/customer/order_history_screen.dart';
 import '../screens/customer/reservation_history_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
 import '../screens/customer/qr_checkin_screen.dart';
-import '../screens/customer/reservation_step1_screen.dart';
-import '../screens/customer/restaurant_status_screen.dart';
 import '../screens/staff/waiter_floor_screen.dart';
-import '../screens/staff/partner_sync_screen.dart';
-import '../screens/staff/reservations_management_screen.dart';
-import '../screens/staff/new_reservation_screen.dart';
-import '../screens/staff/customer_directory_screen.dart';
-import '../screens/staff/manage_queue_screen.dart';
-import '../screens/staff/queue_status_screen.dart';
-import '../screens/staff/compose_notification_screen.dart';
-import '../screens/staff/queue_report_screen.dart';
-import '../screens/staff/table_status_monitor_screen.dart';
-import '../screens/staff/staff_profile_screen.dart';
-import '../screens/staff/table_cleaning_tasks_screen.dart';
-import '../screens/staff/daily_schedule_screen.dart';
-import '../screens/staff/staff_hub_screen.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -67,21 +52,6 @@ class AppRoutes {
   static const loyalty = '/loyalty';
   static const qrCheckin = '/qr-checkin';
   static const waiterFloor = '/waiter-floor';
-  static const reservationStep1 = '/reservation-step-1';
-  static const restaurantStatus = '/restaurant-status';
-  static const partnerSync = '/partner-sync';
-  static const reservationsManagement = '/reservations-management';
-  static const newReservation = '/new-reservation';
-  static const customerDirectory = '/customer-directory';
-  static const manageQueue = '/manage-queue';
-  static const queueStatus = '/queue-status';
-  static const composeNotification = '/compose-notification';
-  static const queueReport = '/queue-report';
-  static const tableStatusMonitor = '/table-status-monitor';
-  static const staffProfile = '/staff-profile';
-  static const tableCleaningTasks = '/table-cleaning-tasks';
-  static const dailySchedule = '/daily-schedule';
-  static const staffHub = '/staff-hub';
 
   static final router = GoRouter(
     initialLocation: splash,
@@ -115,21 +85,6 @@ class AppRoutes {
       GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
       GoRoute(path: qrCheckin, builder: (context, state) => const QrCheckinScreen()),
       GoRoute(path: waiterFloor, builder: (context, state) => const WaiterFloorScreen()),
-      GoRoute(path: reservationStep1, builder: (context, state) => const ReservationStep1Screen()),
-      GoRoute(path: restaurantStatus, builder: (context, state) => const RestaurantStatusScreen()),
-      GoRoute(path: partnerSync, builder: (context, state) => const PartnerSyncScreen()),
-      GoRoute(path: reservationsManagement, builder: (context, state) => const ReservationsManagementScreen()),
-      GoRoute(path: newReservation, builder: (context, state) => const NewReservationScreen()),
-      GoRoute(path: customerDirectory, builder: (context, state) => const CustomerDirectoryScreen()),
-      GoRoute(path: manageQueue, builder: (context, state) => const ManageQueueScreen()),
-      GoRoute(path: queueStatus, builder: (context, state) => const QueueStatusScreen()),
-      GoRoute(path: composeNotification, builder: (context, state) => const ComposeNotificationScreen()),
-      GoRoute(path: queueReport, builder: (context, state) => const QueueReportScreen()),
-      GoRoute(path: tableStatusMonitor, builder: (context, state) => const TableStatusMonitorScreen()),
-      GoRoute(path: staffProfile, builder: (context, state) => const StaffProfileScreen()),
-      GoRoute(path: tableCleaningTasks, builder: (context, state) => const TableCleaningTasksScreen()),
-      GoRoute(path: dailySchedule, builder: (context, state) => const DailyScheduleScreen()),
-      GoRoute(path: staffHub, builder: (context, state) => const StaffHubScreen()),
       GoRoute(
         path: reservationDetails,
         builder: (context, state) {
