@@ -221,6 +221,142 @@ function getSupabaseClient(req) {
   });
 }
 
+const SEEDED_CUSTOMIZATIONS = {
+  4: {
+    sizes: [
+      { id: "reg", name: "Regular Portion (250g)", price_delta: 0, is_available: true },
+      { id: "large", name: "King Cut (400g)", price_delta: 1200, is_available: true }
+    ],
+    addon_groups: [
+      {
+        id: "sauce",
+        name: "Signature Sauce",
+        min_select: 1,
+        max_select: 1,
+        options: [
+          { id: "red_wine", name: "Red Wine Glaze", price: 0, max_qty: 1, is_available: true },
+          { id: "truffle_pepper", name: "Truffle Peppercorn", price: 250, max_qty: 1, is_available: true },
+          { id: "chimichurri", name: "Herb Chimichurri", price: 0, max_qty: 1, is_available: true }
+        ]
+      },
+      {
+        id: "gourmet_extras",
+        name: "Gourmet Add-ons",
+        min_select: 0,
+        max_select: 3,
+        options: [
+          { id: "bone_marrow", name: "Roasted Bone Marrow", price: 800, max_qty: 1, is_available: true },
+          { id: "extra_mash", name: "Extra Truffle Mash", price: 450, max_qty: 2, is_available: true },
+          { id: "asparagus", name: "Charred Asparagus", price: 350, max_qty: 1, is_available: true },
+          { id: "foie_gras", name: "Seared Foie Gras", price: 1200, max_qty: 1, is_available: false }
+        ]
+      }
+    ],
+    preferences: ["Medium Rare", "Medium", "Medium Well", "Well Done"]
+  },
+  5: {
+    sizes: [
+      { id: "reg", name: "Standard Bowl", price_delta: 0, is_available: true },
+      { id: "sharing", name: "Sharing Platter", price_delta: 900, is_available: true }
+    ],
+    addon_groups: [
+      {
+        id: "cheese_extras",
+        name: "Cheeses & Toppings",
+        min_select: 0,
+        max_select: 2,
+        options: [
+          { id: "black_truffle", name: "Shaved Fresh Truffle", price: 650, max_qty: 1, is_available: true },
+          { id: "parmesan_crisp", name: "Aged Parmesan Crisp", price: 200, max_qty: 2, is_available: true },
+          { id: "wild_porcini", name: "Wild Porcini Mushrooms", price: 400, max_qty: 1, is_available: true }
+        ]
+      }
+    ],
+    preferences: ["Classic Al Dente", "Extra Creamy", "Less Cream"]
+  },
+  3: {
+    sizes: [
+      { id: "reg", name: "Single Starter", price_delta: 0, is_available: true },
+      { id: "large", name: "Double Portion", price_delta: 1500, is_available: true }
+    ],
+    addon_groups: [
+      {
+        id: "dressing",
+        name: "Artisanal Dressing",
+        min_select: 1,
+        max_select: 1,
+        options: [
+          { id: "truffle_aioli", name: "Truffle Aioli", price: 0, max_qty: 1, is_available: true },
+          { id: "lemon_caper", name: "Lemon Caper Vinaigrette", price: 0, max_qty: 1, is_available: true }
+        ]
+      },
+      {
+        id: "garnishes",
+        name: "Premium Garnishes",
+        min_select: 0,
+        max_select: 2,
+        options: [
+          { id: "capers", name: "Fried Baby Capers", price: 150, max_qty: 1, is_available: true },
+          { id: "microgreens", name: "Organic Microgreens", price: 180, max_qty: 1, is_available: true }
+        ]
+      }
+    ],
+    preferences: ["Light Dressing", "Dressing on Side"]
+  },
+  8: {
+    sizes: [
+      { id: "reg", name: "Regular (350ml)", price_delta: 0, is_available: true },
+      { id: "large", name: "Pitcher (750ml)", price_delta: 450, is_available: true }
+    ],
+    addon_groups: [
+      {
+        id: "sweetness",
+        name: "Sweetness Level",
+        min_select: 1,
+        max_select: 1,
+        options: [
+          { id: "no_sugar", name: "No Added Sugar", price: 0, max_qty: 1, is_available: true },
+          { id: "honey", name: "Wild Honey", price: 60, max_qty: 1, is_available: true },
+          { id: "classic", name: "Classic Cane Sugar", price: 0, max_qty: 1, is_available: true }
+        ]
+      },
+      {
+        id: "refreshers",
+        name: "Fresh Infusions",
+        min_select: 0,
+        max_select: 2,
+        options: [
+          { id: "mint", name: "Crushed Mint Leaves", price: 50, max_qty: 1, is_available: true },
+          { id: "chia", name: "Chia Seeds", price: 80, max_qty: 1, is_available: true },
+          { id: "lime", name: "Fresh Lime Squeeze", price: 50, max_qty: 1, is_available: true }
+        ]
+      }
+    ],
+    preferences: ["Extra Ice", "No Ice", "Less Ice"]
+  }
+};
+
+// Menu customizations endpoint
+app.get('/api/menu/customizations', async (req, res) => {
+  try {
+    const { data: menuItems, error } = await supabaseAdmin
+      .from('menu_items')
+      .select('id, name, price, customizations');
+      
+    const result = { ...SEEDED_CUSTOMIZATIONS };
+    if (!error && menuItems) {
+      menuItems.forEach(item => {
+        if (item.customizations) {
+          result[item.id] = item.customizations;
+        }
+      });
+    }
+    res.json({ customizations: result });
+  } catch (err) {
+    res.json({ customizations: SEEDED_CUSTOMIZATIONS });
+  }
+});
+
 // 1. Customer places an order (Hardened with Idempotency, Server Price Recomputation, and Validation)
 app.post('/api/orders', authMiddleware, async (req, res) => {
   try {
@@ -257,15 +393,26 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
 
     // 1. Recompute Prices Server-Side from menu_items
     const itemIds = items.map(i => i.menu_item_id);
-    const { data: menuItems, error: menuErr } = await supabaseAdmin
+    let menuItems = [];
+    const { data: fetchedItems, error: menuErr } = await supabaseAdmin
       .from('menu_items')
-      .select('id, name, price, prep_time_minutes, is_available')
+      .select('id, name, price, prep_time_minutes, is_available, customizations')
       .in('id', itemIds);
 
-    if (menuErr) throw menuErr;
+    if (menuErr) {
+      // Fallback if customizations column not yet created
+      const { data: fallbackItems, error: fallbackErr } = await supabaseAdmin
+        .from('menu_items')
+        .select('id, name, price, prep_time_minutes, is_available')
+        .in('id', itemIds);
+      if (fallbackErr) throw fallbackErr;
+      menuItems = fallbackItems || [];
+    } else {
+      menuItems = fetchedItems || [];
+    }
 
     const menuMap = new Map();
-    (menuItems || []).forEach(m => menuMap.set(m.id, m));
+    menuItems.forEach(m => menuMap.set(m.id, m));
 
     let serverSubtotal = 0;
     let maxPrepTime = 15;
@@ -278,9 +425,126 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       if (dbItem.is_available === false) {
         return res.status(400).json({ error: `Item "${dbItem.name}" is currently sold out / unavailable.` });
       }
+
       const quantity = parseInt(item.quantity, 10) || 1;
-      const unitPrice = parseFloat(dbItem.price);
-      item.unit_price = unitPrice; // Enforce server-side price
+      const basePrice = parseFloat(dbItem.price);
+      const customizations = dbItem.customizations || SEEDED_CUSTOMIZATIONS[dbItem.id] || null;
+
+      let sizeDelta = 0;
+      let addonsTotal = 0;
+      const snapshot = {
+        size: null,
+        addons: [],
+        preference: null,
+        special_instructions: item.special_instructions || item.selected_customizations?.special_instructions || null
+      };
+      const noteParts = [];
+
+      if (customizations) {
+        const reqCust = item.selected_customizations || {};
+
+        // A. Portion Size Validation
+        if (customizations.sizes && customizations.sizes.length > 0) {
+          const reqSize = reqCust.size;
+          if (!reqSize) {
+            return res.status(400).json({ 
+              error: `Please select a portion size for "${dbItem.name}".`,
+              item_id: dbItem.id 
+            });
+          }
+          const matchedSize = customizations.sizes.find(s => s.id === reqSize.id || s.name === reqSize.name);
+          if (!matchedSize) {
+            return res.status(400).json({ 
+              error: `Invalid portion size "${reqSize.name || reqSize.id}" for "${dbItem.name}".`,
+              item_id: dbItem.id 
+            });
+          }
+          if (matchedSize.is_available === false) {
+            return res.status(400).json({ 
+              error: `Portion size "${matchedSize.name}" for "${dbItem.name}" is currently sold out.`,
+              item_id: dbItem.id 
+            });
+          }
+          sizeDelta = parseFloat(matchedSize.price_delta) || 0;
+          snapshot.size = { id: matchedSize.id, name: matchedSize.name, price_delta: sizeDelta };
+          noteParts.push(`[${matchedSize.name}]`);
+        }
+
+        // B. Add-on Groups Validation
+        if (customizations.addon_groups && customizations.addon_groups.length > 0) {
+          const reqAddons = Array.isArray(reqCust.addons) ? reqCust.addons : [];
+          
+          for (const group of customizations.addon_groups) {
+            const groupSelections = reqAddons.filter(a => a.group_id === group.id || a.groupId === group.id);
+            const totalGroupQty = groupSelections.reduce((sum, a) => sum + (parseInt(a.qty, 10) || 1), 0);
+
+            if (group.min_select && totalGroupQty < group.min_select) {
+              return res.status(400).json({ 
+                error: `Please select at least ${group.min_select} option(s) for "${group.name}" on "${dbItem.name}".`,
+                item_id: dbItem.id 
+              });
+            }
+            if (group.max_select && totalGroupQty > group.max_select) {
+              return res.status(400).json({ 
+                error: `You can select at most ${group.max_select} option(s) for "${group.name}" on "${dbItem.name}".`,
+                item_id: dbItem.id 
+              });
+            }
+
+            for (const sel of groupSelections) {
+              const opt = (group.options || []).find(o => o.id === sel.id || o.name === sel.name);
+              if (!opt) {
+                return res.status(400).json({ 
+                  error: `Invalid add-on "${sel.name || sel.id}" for "${dbItem.name}".`,
+                  item_id: dbItem.id 
+                });
+              }
+              if (opt.is_available === false) {
+                return res.status(400).json({ 
+                  error: `Add-on "${opt.name}" for "${dbItem.name}" is currently unavailable / sold out.`,
+                  item_id: dbItem.id 
+                });
+              }
+              const qty = parseInt(sel.qty, 10) || 1;
+              if (opt.max_qty && qty > opt.max_qty) {
+                return res.status(400).json({ 
+                  error: `Maximum quantity for "${opt.name}" is ${opt.max_qty}.`,
+                  item_id: dbItem.id 
+                });
+              }
+              const optPrice = parseFloat(opt.price) || 0;
+              addonsTotal += optPrice * qty;
+              snapshot.addons.push({
+                group_id: group.id,
+                group_name: group.name,
+                id: opt.id,
+                name: opt.name,
+                price: optPrice,
+                qty
+              });
+              noteParts.push(`+ ${opt.name}${qty > 1 ? ` (x${qty})` : ''}`);
+            }
+          }
+        }
+
+        // C. Cooking Preferences
+        if (reqCust.preference) {
+          if (customizations.preferences && customizations.preferences.includes(reqCust.preference)) {
+            snapshot.preference = reqCust.preference;
+            noteParts.push(`• ${reqCust.preference}`);
+          }
+        }
+      }
+
+      if (snapshot.special_instructions) {
+        noteParts.push(`Note: ${snapshot.special_instructions}`);
+      }
+
+      const unitPrice = basePrice + sizeDelta + addonsTotal;
+      item.unit_price = unitPrice;
+      item.selected_customizations = snapshot;
+      item.item_notes = noteParts.length > 0 ? noteParts.join(' ') : (item.item_notes || null);
+
       serverSubtotal += unitPrice * quantity;
       if (dbItem.prep_time_minutes && dbItem.prep_time_minutes > maxPrepTime) {
         maxPrepTime = dbItem.prep_time_minutes;
@@ -382,28 +646,60 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       idempotency_key: idempotencyKey || null
     };
 
-    const { data: newOrder, error: orderErr } = await supabaseAdmin
+    let newOrder;
+    let { data: orderData, error: orderErr } = await supabaseAdmin
       .from('orders')
       .insert(insertPayload)
       .select()
       .single();
 
-    if (orderErr) throw orderErr;
+    if (orderErr) {
+      // Fallback if phase0 columns (subtotal, discount_amount, etc.) not yet applied to database
+      const basicPayload = {
+        user_id: req.user.id,
+        reservation_id: reservation_id || null,
+        table_id: table_id || null,
+        total_amount: serverTotal,
+        status: 'pending',
+        payment_status: payment_method === 'online_card' ? 'processing' : 'pending',
+        prep_time_minutes: maxPrepTime,
+        target_serve_time: targetServeTime.toISOString(),
+        special_notes: special_notes || null
+      };
+      const { data: fallbackOrder, error: fallbackErr } = await supabaseAdmin
+        .from('orders')
+        .insert(basicPayload)
+        .select()
+        .single();
+      if (fallbackErr) throw fallbackErr;
+      newOrder = fallbackOrder;
+    } else {
+      newOrder = orderData;
+    }
 
-    // 7. Create Order Items with verified prices
+    // 7. Create Order Items with verified prices and snapshot customizations
     const orderItems = items.map(item => ({
       order_id: newOrder.id,
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
       unit_price: item.unit_price,
-      special_instructions: item.item_notes || item.special_instructions || null
+      item_notes: item.item_notes || item.special_instructions || null,
+      special_instructions: item.item_notes || item.special_instructions || null,
+      selected_customizations: item.selected_customizations || null
     }));
 
-    const { error: itemsErr } = await supabaseAdmin
+    let { error: itemsErr } = await supabaseAdmin
       .from('order_items')
       .insert(orderItems);
 
-    if (itemsErr) throw itemsErr;
+    if (itemsErr) {
+      // If selected_customizations column does not exist yet, fallback to inserting without it
+      const fallbackItems = orderItems.map(({ selected_customizations, ...rest }) => rest);
+      const { error: fallbackErr } = await supabaseAdmin
+        .from('order_items')
+        .insert(fallbackItems);
+      if (fallbackErr) throw fallbackErr;
+    }
 
     // 8. Record coupon redemption if applicable
     if (couponRecord) {
@@ -464,7 +760,7 @@ app.get('/api/kitchen/orders', authMiddleware, async (req, res) => {
       .from('orders')
       .select(`
         *,
-        order_items(quantity, unit_price, item_notes, menu_items(name)),
+        order_items(quantity, unit_price, item_notes, special_instructions, menu_items(name)),
         users(full_name),
         restaurant_tables(table_number)
       `)

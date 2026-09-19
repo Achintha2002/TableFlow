@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/supabase_service.dart';
+import '../../widgets/item_customization_sheet.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -28,6 +30,31 @@ class _CartScreenState extends State<CartScreen> {
   bool _useLoyaltyPoints = false;
   bool _isValidatingCoupon = false;
   bool _isSubmitting = false;
+
+  Future<void> _handleEditCartItem(CartItem item) async {
+    try {
+      final menuItems = await SupabaseService.getMenuItems();
+      final menuItem = menuItems.firstWhere(
+        (m) => m['id'].toString() == item.id,
+        orElse: () => {
+          'id': item.id,
+          'name': item.name,
+          'price': item.basePrice,
+          'image_url': item.imageUrl,
+          'customizations': null,
+        },
+      );
+      if (mounted) {
+        ItemCustomizationSheet.show(
+          context,
+          menuItem: menuItem,
+          editingCartItem: item,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error opening customization sheet for edit: $e');
+    }
+  }
   String _paymentMethod = 'cash'; // 'cash', 'card_at_counter', 'online_card'
 
   @override
@@ -226,6 +253,7 @@ class _CartScreenState extends State<CartScreen> {
         'quantity': item.quantity,
         'unit_price': item.price,
         'item_notes': item.itemNotes,
+        'selected_customizations': item.toSelectedCustomizationsJson(),
       }).toList();
 
       final response = await http.post(
@@ -420,11 +448,7 @@ class _CartScreenState extends State<CartScreen> {
                             padding: const EdgeInsets.only(bottom: 16.0),
                             child: _buildCartItem(
                               cart: cart,
-                              id: item.id,
-                              title: item.name,
-                              price: 'LKR ${item.price.toStringAsFixed(2)}',
-                              quantity: item.quantity,
-                              imageUrl: item.imageUrl ?? 'https://via.placeholder.com/500',
+                              item: item,
                             ),
                           )),
                           const SizedBox(height: 12),
@@ -735,14 +759,14 @@ class _CartScreenState extends State<CartScreen> {
 
   Widget _buildCartItem({
     required CartProvider cart,
-    required String id,
-    required String title,
-    required String price,
-    required int quantity,
-    required String imageUrl,
+    required CartItem item,
   }) {
+    final hasCustomizations = item.selectedSize != null ||
+        item.selectedAddons.isNotEmpty ||
+        (item.cookingPreference != null && item.cookingPreference!.isNotEmpty);
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.white,
         borderRadius: BorderRadius.circular(18),
@@ -754,44 +778,169 @@ class _CartScreenState extends State<CartScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              imageUrl,
-              width: 70,
-              height: 70,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                width: 70,
-                height: 70,
-                color: Colors.grey.shade200,
-                child: const Icon(Icons.fastfood, color: Colors.grey),
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 4),
-                Text(price, style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
-              ],
-            ),
-          ),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline, size: 22),
-                onPressed: () => cart.updateQuantity(id, quantity - 1),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  item.imageUrl ?? 'https://via.placeholder.com/500',
+                  width: 68,
+                  height: 68,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 68,
+                    height: 68,
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.fastfood, color: Colors.grey),
+                  ),
+                ),
               ),
-              Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline, size: 22, color: AppTheme.primary),
-                onPressed: () => cart.updateQuantity(id, quantity + 1),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                        Text(
+                          'LKR ${(item.price * item.quantity).toStringAsFixed(0)}',
+                          style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'LKR ${item.price.toStringAsFixed(0)} each',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Customization Badges / Chips
+          if (hasCustomizations || (item.itemNotes != null && item.itemNotes!.isNotEmpty)) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.background.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (item.selectedSize != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item.selectedSize!['name'] ?? '',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                          ),
+                        ),
+                      ...item.selectedAddons.map((addon) {
+                        final name = addon['name'] ?? '';
+                        final qty = (addon['qty'] as num?)?.toInt() ?? 1;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '+ $name${qty > 1 ? ' (x$qty)' : ''}',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+                          ),
+                        );
+                      }),
+                      if (item.cookingPreference != null && item.cookingPreference!.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '• ${item.cookingPreference!}',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (item.itemNotes != null && item.itemNotes!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Note: ${item.itemNotes}',
+                      style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade700),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Edit In-Place Action Button
+              InkWell(
+                onTap: () => _handleEditCartItem(item),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.edit_outlined, size: 13, color: AppTheme.primary),
+                      SizedBox(width: 4),
+                      Text(
+                        'Edit',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Stepper Quantity Controls
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, size: 22),
+                    onPressed: () => cart.updateQuantity(item.cartLineId, item.quantity - 1),
+                  ),
+                  Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, size: 22, color: AppTheme.primary),
+                    onPressed: () => cart.updateQuantity(item.cartLineId, item.quantity + 1),
+                  ),
+                ],
               ),
             ],
           ),

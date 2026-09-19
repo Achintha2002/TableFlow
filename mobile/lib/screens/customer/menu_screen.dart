@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../widgets/item_customization_sheet.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -34,7 +35,6 @@ class _MenuScreenState extends State<MenuScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error fetching menu: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -54,9 +54,32 @@ class _MenuScreenState extends State<MenuScreen> {
       backgroundColor: AppTheme.background,
       body: CustomScrollView(
         slivers: [
+          // App Bar with Hero title
+          SliverAppBar(
+            expandedHeight: 140.0,
+            floating: false,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: AppTheme.background,
+            flexibleSpace: FlexibleSpaceBar(
+              titlePadding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              title: Text(
+                'Menu',
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                  fontFamily: 'Playfair Display',
+                  color: AppTheme.secondary,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              centerTitle: false,
+            ),
+          ),
+          
+          // Subtitle
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
               child: Text(
                 'Explore our seasonal offerings, crafted with intention and presented with care.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -112,14 +135,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             final item = _filteredItems[index];
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 24.0),
-                              child: _buildMenuItem(
-                                context,
-                                id: item['id'].toString(),
-                                title: item['name'] ?? '',
-                                description: item['description'] ?? '',
-                                price: (item['price'] as num?)?.toDouble() ?? 0.0,
-                                imageUrl: item['image_url'] ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop',
-                              ),
+                              child: _buildMenuItem(context, item),
                             );
                           },
                           childCount: _filteredItems.length,
@@ -181,15 +197,16 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _buildMenuItem(BuildContext context, {
-    required String id,
-    required String title,
-    required String description,
-    required double price,
-    required String imageUrl,
-  }) {
+  Widget _buildMenuItem(BuildContext context, Map<String, dynamic> item) {
+    final id = item['id'].toString();
+    final title = item['name'] ?? '';
+    final description = item['description'] ?? '';
+    final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+    final imageUrl = item['image_url'] ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop';
+    final hasCustomizations = item['customizations'] != null;
+
     return Container(
-      height: 280,
+      height: 290,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
@@ -212,9 +229,9 @@ class _MenuScreenState extends State<MenuScreen> {
             end: Alignment.bottomCenter,
             colors: [
               Colors.transparent,
-              AppTheme.secondary.withValues(alpha: 0.9),
+              AppTheme.secondary.withValues(alpha: 0.92),
             ],
-            stops: const [0.4, 1.0],
+            stops: const [0.35, 1.0],
           ),
         ),
         padding: const EdgeInsets.all(20),
@@ -223,6 +240,33 @@ class _MenuScreenState extends State<MenuScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (hasCustomizations) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.tertiary.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.tertiary.withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.tune, size: 13, color: AppTheme.tertiary),
+                    SizedBox(width: 5),
+                    Text(
+                      'Portions & Add-ons Available',
+                      style: TextStyle(
+                        color: AppTheme.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -234,7 +278,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         title,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontFamily: 'Playfair Display',
-                          fontSize: 24,
+                          fontSize: 23,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.white,
                         ),
@@ -246,30 +290,31 @@ class _MenuScreenState extends State<MenuScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: AppTheme.white.withValues(alpha: 0.8),
-                          height: 1.4,
+                          height: 1.35,
+                          fontSize: 13,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppTheme.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: AppTheme.white.withValues(alpha: 0.3)),
                       ),
                       child: Text(
-                        'LKR ${price.toStringAsFixed(0)}',
+                        hasCustomizations ? 'From LKR ${price.toStringAsFixed(0)}' : 'LKR ${price.toStringAsFixed(0)}',
                         style: const TextStyle(
                           color: AppTheme.white,
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 15,
                         ),
                       ),
                     ),
@@ -282,19 +327,23 @@ class _MenuScreenState extends State<MenuScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  context.read<CartProvider>().addItem(id, title, price, imageUrl);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('$title added to cart'),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      action: SnackBarAction(
-                        label: 'View Cart',
-                        textColor: AppTheme.primary,
-                        onPressed: () => context.push('/cart'),
+                  if (hasCustomizations) {
+                    ItemCustomizationSheet.show(context, menuItem: item);
+                  } else {
+                    context.read<CartProvider>().addItem(id, title, price, imageUrl);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$title added to cart'),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        action: SnackBarAction(
+                          label: 'View Cart',
+                          textColor: AppTheme.tertiary,
+                          onPressed: () => context.push('/cart'),
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
@@ -305,7 +354,20 @@ class _MenuScreenState extends State<MenuScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text('Add to Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (hasCustomizations) ...[
+                      const Icon(Icons.tune, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Customize & Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ] else ...[
+                      const Icon(Icons.add_shopping_cart, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Add to Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ],
+                ),
               ),
             ),
           ],

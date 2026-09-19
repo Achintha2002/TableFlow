@@ -2,21 +2,79 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 class CartItem {
-  final String id;
+  final String id; // Menu Item ID
   final String name;
-  final double price;
+  final double basePrice;
+  final double price; // Verified unit price (base + sizeDelta + addonsTotal)
   final String? imageUrl;
   int quantity;
+  final String cartLineId; // Unique deterministic sorted hash
+  final Map<String, dynamic>? selectedSize; // e.g. {'id': 'large', 'name': 'King Cut (400g)', 'price_delta': 1200}
+  final List<Map<String, dynamic>> selectedAddons; // e.g. [{'group_id': 'sauce', 'id': 'red_wine', 'name': 'Red Wine Glaze', 'price': 0, 'qty': 1}]
+  final String? cookingPreference;
   String? itemNotes;
 
   CartItem({
     required this.id,
     required this.name,
+    required this.basePrice,
     required this.price,
     this.imageUrl,
     this.quantity = 1,
+    required this.cartLineId,
+    this.selectedSize,
+    this.selectedAddons = const [],
+    this.cookingPreference,
     this.itemNotes,
   });
+
+  /// Deterministic sorted hash so selection order (e.g. Cheese-then-Bacon vs Bacon-then-Cheese)
+  /// always maps to the same cart line and correctly merges quantities.
+  static String generateCartLineId(
+    String productId,
+    Map<String, dynamic>? size,
+    List<Map<String, dynamic>> addons,
+    String? preference,
+  ) {
+    final sizeKey = size != null ? '${size['id'] ?? size['name']}' : 'nosize';
+    final sortedAddons = List<Map<String, dynamic>>.from(addons);
+    sortedAddons.sort((a, b) =>
+        (a['id'] ?? a['name'] ?? '').toString().compareTo((b['id'] ?? b['name'] ?? '').toString()));
+    final addonsKey = sortedAddons.map((a) => '${a['id'] ?? a['name']}:${a['qty'] ?? 1}').join('|');
+    final prefKey = preference != null && preference.isNotEmpty ? preference : 'nopref';
+    return '${productId}_${sizeKey}_${addonsKey}_$prefKey';
+  }
+
+  /// Structured snapshot for order submission and receipt records
+  Map<String, dynamic> toSelectedCustomizationsJson() {
+    return {
+      'size': selectedSize,
+      'addons': selectedAddons,
+      'preference': cookingPreference,
+      'special_instructions': itemNotes,
+    };
+  }
+
+  /// Human-readable summary for display under cart items
+  String get customizationSummary {
+    final parts = <String>[];
+    if (selectedSize != null && selectedSize!['name'] != null) {
+      parts.add(selectedSize!['name'].toString());
+    }
+    for (final addon in selectedAddons) {
+      final name = addon['name']?.toString() ?? '';
+      final qty = (addon['qty'] as num?)?.toInt() ?? 1;
+      if (qty > 1) {
+        parts.add('$name (x$qty)');
+      } else {
+        parts.add(name);
+      }
+    }
+    if (cookingPreference != null && cookingPreference!.isNotEmpty) {
+      parts.add(cookingPreference!);
+    }
+    return parts.join(' • ');
+  }
 }
 
 class CartProvider extends ChangeNotifier {
@@ -115,27 +173,53 @@ class CartProvider extends ChangeNotifier {
 
   double get grandTotal => (discountedSubtotal + serviceCharge + taxAmount);
 
-  void addItem(String productId, String name, double price, String? imageUrl, {String? itemNotes}) {
-    if (_items.containsKey(productId)) {
+  /// Add item to cart with support for structured customizations
+  void addItem(
+    String productId,
+    String name,
+    double price,
+    String? imageUrl, {
+    double? basePrice,
+    Map<String, dynamic>? selectedSize,
+    List<Map<String, dynamic>> selectedAddons = const [],
+    String? cookingPreference,
+    String? itemNotes,
+    int quantity = 1,
+  }) {
+    final effectiveBase = basePrice ?? price;
+    final lineId = CartItem.generateCartLineId(productId, selectedSize, selectedAddons, cookingPreference);
+
+    if (_items.containsKey(lineId)) {
       _items.update(
-        productId,
-        (existingCartItem) => CartItem(
-          id: existingCartItem.id,
-          name: existingCartItem.name,
-          price: existingCartItem.price,
-          imageUrl: existingCartItem.imageUrl,
-          quantity: existingCartItem.quantity + 1,
-          itemNotes: itemNotes ?? existingCartItem.itemNotes,
+        lineId,
+        (existing) => CartItem(
+          id: existing.id,
+          name: existing.name,
+          basePrice: existing.basePrice,
+          price: existing.price,
+          imageUrl: existing.imageUrl,
+          quantity: existing.quantity + quantity,
+          cartLineId: existing.cartLineId,
+          selectedSize: existing.selectedSize,
+          selectedAddons: existing.selectedAddons,
+          cookingPreference: existing.cookingPreference,
+          itemNotes: itemNotes ?? existing.itemNotes,
         ),
       );
     } else {
       _items.putIfAbsent(
-        productId,
+        lineId,
         () => CartItem(
           id: productId,
           name: name,
+          basePrice: effectiveBase,
           price: price,
           imageUrl: imageUrl,
+          quantity: quantity,
+          cartLineId: lineId,
+          selectedSize: selectedSize,
+          selectedAddons: selectedAddons,
+          cookingPreference: cookingPreference,
           itemNotes: itemNotes,
         ),
       );
@@ -143,42 +227,86 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void removeItem(String productId) {
-    _items.remove(productId);
+  /// In-place cart line edit (replaces old cart line, merging if new selections match an existing line)
+  void updateCartLine(String oldLineId, CartItem updatedItem) {
+    if (oldLineId == updatedItem.cartLineId) {
+      _items[oldLineId] = updatedItem;
+    } else {
+      _items.remove(oldLineId);
+      if (_items.containsKey(updatedItem.cartLineId)) {
+        _items[updatedItem.cartLineId]!.quantity += updatedItem.quantity;
+      } else {
+        _items[updatedItem.cartLineId] = updatedItem;
+      }
+    }
     notifyListeners();
   }
 
-  void updateQuantity(String productId, int quantity) {
-    if (_items.containsKey(productId)) {
+  void removeItem(String lineIdOrProductId) {
+    if (_items.containsKey(lineIdOrProductId)) {
+      _items.remove(lineIdOrProductId);
+    } else {
+      // Fallback: match by product id if old key was passed
+      _items.removeWhere((k, v) => v.id == lineIdOrProductId || v.cartLineId == lineIdOrProductId);
+    }
+    notifyListeners();
+  }
+
+  void updateQuantity(String lineIdOrProductId, int quantity) {
+    final targetKey = _items.containsKey(lineIdOrProductId)
+        ? lineIdOrProductId
+        : _items.keys.firstWhere(
+            (k) => _items[k]!.id == lineIdOrProductId || _items[k]!.cartLineId == lineIdOrProductId,
+            orElse: () => '',
+          );
+
+    if (targetKey.isNotEmpty && _items.containsKey(targetKey)) {
       if (quantity > 0) {
         _items.update(
-          productId,
-          (existingCartItem) => CartItem(
-            id: existingCartItem.id,
-            name: existingCartItem.name,
-            price: existingCartItem.price,
-            imageUrl: existingCartItem.imageUrl,
+          targetKey,
+          (existing) => CartItem(
+            id: existing.id,
+            name: existing.name,
+            basePrice: existing.basePrice,
+            price: existing.price,
+            imageUrl: existing.imageUrl,
             quantity: quantity,
-            itemNotes: existingCartItem.itemNotes,
+            cartLineId: existing.cartLineId,
+            selectedSize: existing.selectedSize,
+            selectedAddons: existing.selectedAddons,
+            cookingPreference: existing.cookingPreference,
+            itemNotes: existing.itemNotes,
           ),
         );
       } else {
-        _items.remove(productId);
+        _items.remove(targetKey);
       }
       notifyListeners();
     }
   }
 
-  void updateItemNotes(String productId, String notes) {
-    if (_items.containsKey(productId)) {
+  void updateItemNotes(String lineIdOrProductId, String notes) {
+    final targetKey = _items.containsKey(lineIdOrProductId)
+        ? lineIdOrProductId
+        : _items.keys.firstWhere(
+            (k) => _items[k]!.id == lineIdOrProductId || _items[k]!.cartLineId == lineIdOrProductId,
+            orElse: () => '',
+          );
+
+    if (targetKey.isNotEmpty && _items.containsKey(targetKey)) {
       _items.update(
-        productId,
-        (existingCartItem) => CartItem(
-          id: existingCartItem.id,
-          name: existingCartItem.name,
-          price: existingCartItem.price,
-          imageUrl: existingCartItem.imageUrl,
-          quantity: existingCartItem.quantity,
+        targetKey,
+        (existing) => CartItem(
+          id: existing.id,
+          name: existing.name,
+          basePrice: existing.basePrice,
+          price: existing.price,
+          imageUrl: existing.imageUrl,
+          quantity: existing.quantity,
+          cartLineId: existing.cartLineId,
+          selectedSize: existing.selectedSize,
+          selectedAddons: existing.selectedAddons,
+          cookingPreference: existing.cookingPreference,
           itemNotes: notes.isEmpty ? null : notes,
         ),
       );

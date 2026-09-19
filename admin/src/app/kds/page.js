@@ -180,18 +180,20 @@ export default function KDS() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 600, color: 'var(--text-light)' }}>
                     <span><span style={{ color: color }}>{item.quantity}x</span> {item.menu_items?.name}</span>
                   </div>
-                  {item.item_notes && (
+                  {(item.item_notes || item.special_instructions) && (
                     <div style={{ 
-                      marginTop: '4px', 
+                      marginTop: '6px', 
                       display: 'inline-block',
-                      background: 'var(--danger-red)', 
-                      color: '#fff', 
-                      padding: '2px 8px', 
-                      borderRadius: '4px', 
+                      background: 'rgba(184, 127, 92, 0.2)', 
+                      color: 'var(--primary-gold)',
+                      border: '1px solid rgba(212, 175, 55, 0.4)',
+                      padding: '4px 10px', 
+                      borderRadius: '6px', 
                       fontSize: '12px',
-                      fontWeight: 'bold' 
+                      fontWeight: 'bold',
+                      lineHeight: 1.3
                     }}>
-                      {item.item_notes}
+                      {item.item_notes || item.special_instructions}
                     </div>
                   )}
                 </li>
