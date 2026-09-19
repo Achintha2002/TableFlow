@@ -119,7 +119,7 @@ class _PartnerSyncScreenState extends State<PartnerSyncScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF1E1E1E), size: 18),
-          onPressed: () => context.pop(),
+          onPressed: () { if (context.canPop()) { context.pop(); } else { context.go('/home'); } },
         ),
         centerTitle: true,
         title: const Text(

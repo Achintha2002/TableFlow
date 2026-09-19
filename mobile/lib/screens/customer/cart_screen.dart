@@ -422,7 +422,13 @@ class _CartScreenState extends State<CartScreen> {
             ),
             child: const Icon(Icons.arrow_back_ios_new, size: 18, color: AppTheme.secondary),
           ),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/menu');
+            }
+          },
         ),
         title: Text(
           'Your Order',
@@ -1027,7 +1033,13 @@ class _CartScreenState extends State<CartScreen> {
           ),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () => context.pop(),
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/menu');
+              }
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: Colors.white,

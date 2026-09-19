@@ -178,7 +178,7 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-          onPressed: () => context.pop(),
+          onPressed: () { if (context.canPop()) { context.pop(); } else { context.go('/home'); } },
         ),
         title: const Text(
           'Scan Table QR',
