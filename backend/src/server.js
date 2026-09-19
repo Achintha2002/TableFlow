@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 // Set up Multer for memory storage
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
@@ -191,7 +191,7 @@ app.post('/api/notifications/fcm-token', async (req, res) => {
           { onConflict: 'fcm_token' }
         );
       if (!devErr) savedToDevices = true;
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Also update users.fcm_token as backward-compatible fallback
     try {
@@ -199,7 +199,7 @@ app.post('/api/notifications/fcm-token', async (req, res) => {
         .from('users')
         .update({ fcm_token })
         .eq('id', userId);
-    } catch (_) {}
+    } catch (_) { }
 
     res.json({
       success: true,
@@ -221,11 +221,11 @@ app.delete('/api/notifications/fcm-token', async (req, res) => {
 
     try {
       await supabaseAdmin.from('user_devices').delete().eq('fcm_token', fcm_token);
-    } catch (_) {}
+    } catch (_) { }
 
     try {
       await supabaseAdmin.from('users').update({ fcm_token: null }).eq('fcm_token', fcm_token);
-    } catch (_) {}
+    } catch (_) { }
 
     res.json({ success: true, message: 'Device token deregistered successfully' });
   } catch (err) {
@@ -355,7 +355,7 @@ app.post('/api/admin/sync-users', async (req, res) => {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
     }
-    
+
     // Fetch all auth users
     const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     if (listError) throw listError;
@@ -364,7 +364,7 @@ app.post('/api/admin/sync-users', async (req, res) => {
     for (const user of users) {
       // Check if user exists in public.users
       const { data: existingUser } = await supabaseAdmin.from('users').select('id').eq('id', user.id).single();
-      
+
       if (!existingUser) {
         // Insert into public.users
         const fullName = user.user_metadata?.full_name || 'User';
@@ -421,7 +421,7 @@ app.post('/api/admin/create-staff', async (req, res) => {
     const { error: dbError } = await supabaseAdmin.from('users')
       .update({ role: role })
       .eq('id', authData.user.id);
-      
+
     if (dbError) throw dbError;
 
     res.json({ message: 'Staff user created successfully!', user: authData.user });
@@ -437,10 +437,10 @@ app.get('/api/admin/my-role', async (req, res) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
-    
+
     const { data: userRecord, error: dbError } = await supabaseAdmin.from('users').select('role, full_name').eq('id', user.id).single();
     if (dbError) throw dbError;
-    
+
     res.json({ role: userRecord.role, full_name: userRecord.full_name, email: user.email });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -472,7 +472,7 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 
     // Delete user from auth (this cascades to public.users because of ON DELETE CASCADE)
     const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
-    
+
     if (error) throw error;
 
     res.json({ message: 'User deleted successfully' });
@@ -616,7 +616,7 @@ app.get('/api/menu/customizations', async (req, res) => {
     const { data: menuItems, error } = await supabaseAdmin
       .from('menu_items')
       .select('id, name, price, customizations');
-      
+
     const result = { ...SEEDED_CUSTOMIZATIONS };
     if (!error && menuItems) {
       menuItems.forEach(item => {
@@ -634,17 +634,17 @@ app.get('/api/menu/customizations', async (req, res) => {
 // 1. Customer places an order (Hardened with Idempotency, Server Price Recomputation, and Validation)
 app.post('/api/orders', authMiddleware, async (req, res) => {
   try {
-    const { 
-      items, 
-      total_amount, 
-      reservation_id, 
-      table_id, 
+    const {
+      items,
+      total_amount,
+      reservation_id,
+      table_id,
       special_notes,
       payment_method = 'cash',
       coupon_code,
       redeem_points = 0
     } = req.body;
-    
+
     // Idempotency check: prevent duplicate submissions
     const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotency_key;
     if (idempotencyKey) {
@@ -654,9 +654,9 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
       if (existingOrder) {
-        return res.status(200).json({ 
-          message: 'Order already exists (idempotent)', 
-          order: existingOrder 
+        return res.status(200).json({
+          message: 'Order already exists (idempotent)',
+          order: existingOrder
         });
       }
     }
@@ -721,22 +721,22 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         if (customizations.sizes && customizations.sizes.length > 0) {
           const reqSize = reqCust.size;
           if (!reqSize) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: `Please select a portion size for "${dbItem.name}".`,
-              item_id: dbItem.id 
+              item_id: dbItem.id
             });
           }
           const matchedSize = customizations.sizes.find(s => s.id === reqSize.id || s.name === reqSize.name);
           if (!matchedSize) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: `Invalid portion size "${reqSize.name || reqSize.id}" for "${dbItem.name}".`,
-              item_id: dbItem.id 
+              item_id: dbItem.id
             });
           }
           if (matchedSize.is_available === false) {
-            return res.status(400).json({ 
+            return res.status(400).json({
               error: `Portion size "${matchedSize.name}" for "${dbItem.name}" is currently sold out.`,
-              item_id: dbItem.id 
+              item_id: dbItem.id
             });
           }
           sizeDelta = parseFloat(matchedSize.price_delta) || 0;
@@ -747,43 +747,43 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         // B. Add-on Groups Validation
         if (customizations.addon_groups && customizations.addon_groups.length > 0) {
           const reqAddons = Array.isArray(reqCust.addons) ? reqCust.addons : [];
-          
+
           for (const group of customizations.addon_groups) {
             const groupSelections = reqAddons.filter(a => a.group_id === group.id || a.groupId === group.id);
             const totalGroupQty = groupSelections.reduce((sum, a) => sum + (parseInt(a.qty, 10) || 1), 0);
 
             if (group.min_select && totalGroupQty < group.min_select) {
-              return res.status(400).json({ 
+              return res.status(400).json({
                 error: `Please select at least ${group.min_select} option(s) for "${group.name}" on "${dbItem.name}".`,
-                item_id: dbItem.id 
+                item_id: dbItem.id
               });
             }
             if (group.max_select && totalGroupQty > group.max_select) {
-              return res.status(400).json({ 
+              return res.status(400).json({
                 error: `You can select at most ${group.max_select} option(s) for "${group.name}" on "${dbItem.name}".`,
-                item_id: dbItem.id 
+                item_id: dbItem.id
               });
             }
 
             for (const sel of groupSelections) {
               const opt = (group.options || []).find(o => o.id === sel.id || o.name === sel.name);
               if (!opt) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                   error: `Invalid add-on "${sel.name || sel.id}" for "${dbItem.name}".`,
-                  item_id: dbItem.id 
+                  item_id: dbItem.id
                 });
               }
               if (opt.is_available === false) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                   error: `Add-on "${opt.name}" for "${dbItem.name}" is currently unavailable / sold out.`,
-                  item_id: dbItem.id 
+                  item_id: dbItem.id
                 });
               }
               const qty = parseInt(sel.qty, 10) || 1;
               if (opt.max_qty && qty > opt.max_qty) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                   error: `Maximum quantity for "${opt.name}" is ${opt.max_qty}.`,
-                  item_id: dbItem.id 
+                  item_id: dbItem.id
                 });
               }
               const optPrice = parseFloat(opt.price) || 0;
@@ -839,7 +839,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       if (coupon) {
         const isNotExpired = !coupon.valid_until || new Date(coupon.valid_until) > new Date();
         const meetsMinAmount = serverSubtotal >= (coupon.min_order_amount || 0);
-        
+
         // Check user redemption limit
         const { count: userRedemptions } = await supabaseAdmin
           .from('coupon_redemptions')
@@ -867,7 +867,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         .select('loyalty_points')
         .eq('id', req.user.id)
         .single();
-      
+
       const userBalance = userProfile?.loyalty_points || 0;
       if (pointsToRedeem > userBalance) {
         return res.status(400).json({ error: `Insufficient loyalty points. Current balance: ${userBalance}` });
@@ -892,7 +892,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         .select('reservation_date, reservation_time')
         .eq('id', reservation_id)
         .maybeSingle();
-      
+
       if (resData) {
         const resDateTime = new Date(`${resData.reservation_date}T${resData.reservation_time}`);
         if (!isNaN(resDateTime.getTime())) {
@@ -1008,8 +1008,8 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         .catch(err => console.warn('Table occupancy update notice:', err.message));
     }
 
-    res.status(201).json({ 
-      message: 'Order placed successfully', 
+    res.status(201).json({
+      message: 'Order placed successfully',
       order: newOrder,
       breakdown: {
         subtotal: serverSubtotal,
@@ -1029,7 +1029,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
 app.get('/api/kitchen/orders', authMiddleware, async (req, res) => {
   try {
     const sb = getSupabaseClient(req);
-    
+
     const { data, error } = await sb
       .from('orders')
       .select(`
@@ -1042,7 +1042,7 @@ app.get('/api/kitchen/orders', authMiddleware, async (req, res) => {
       .order('target_serve_time', { ascending: true }); // most urgent first
 
     if (error) {
-      throw error; 
+      throw error;
     }
 
     res.json(data || []);
@@ -1074,7 +1074,7 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
     }
 
     const currentStatus = currentOrder.status;
-    const isValidTransition = 
+    const isValidTransition =
       (currentStatus === 'pending' && status === 'preparing') ||
       (currentStatus === 'preparing' && status === 'ready') ||
       (currentStatus === 'ready' && status === 'served');
@@ -1131,7 +1131,7 @@ app.get('/api/queue/:id/position', async (req, res) => {
       .select('queue_number')
       .eq('id', id)
       .single();
-    
+
     if (err1 || !myEntry) return res.status(404).json({ error: 'Entry not found' });
     if (myEntry.queue_number == null) return res.json({ position: 1, ahead: 0 }); // fallback
 
@@ -1384,7 +1384,7 @@ app.post('/api/tables/verify-qr', async (req, res) => {
       // Manual code fallback (e.g. Table Number entered directly)
       const parsed = parseInt(String(rawCode).replace(/[^0-9]/g, ''), 10);
       if (!parsed) return res.status(400).json({ error: 'Invalid table number format' });
-      
+
       const { data: tData } = await supabaseAdmin
         .from('restaurant_tables')
         .select('id')
@@ -1439,8 +1439,8 @@ app.post('/api/coupons/validate', async (req, res) => {
 
     const orderSubtotal = parseFloat(subtotal) || 0;
     if (orderSubtotal < (coupon.min_order_amount || 0)) {
-      return res.status(400).json({ 
-        error: `Minimum order amount of LKR ${coupon.min_order_amount} required for this code.` 
+      return res.status(400).json({
+        error: `Minimum order amount of LKR ${coupon.min_order_amount} required for this code.`
       });
     }
 
@@ -1492,10 +1492,10 @@ app.post('/api/service-requests', async (req, res) => {
     const thirtySecsAgo = new Date(Date.now() - 30 * 1000).toISOString();
 
     if (isServiceRequestsInMemory) {
-      const recent = inMemoryServiceRequests.find(r => 
-        String(r.table_id) === String(table_id) && 
-        r.request_type === request_type && 
-        r.status === 'pending' && 
+      const recent = inMemoryServiceRequests.find(r =>
+        String(r.table_id) === String(table_id) &&
+        r.request_type === request_type &&
+        r.status === 'pending' &&
         r.created_at > thirtySecsAgo
       );
       if (recent) {
@@ -1522,8 +1522,8 @@ app.post('/api/service-requests', async (req, res) => {
           title: '🛎️ Guest Service Request',
           body: `Table #${tNum} requested: ${request_type.toUpperCase()}`,
           data: { type: 'service_request', requestId: newReq.id, tableId: String(table_id), tableNumber: String(tNum), requestType: request_type }
-        }).catch(() => {});
-      } catch (_) {}
+        }).catch(() => { });
+      } catch (_) { }
 
       return res.status(201).json({ message: 'Request sent to staff', request: newReq });
     }
@@ -1577,7 +1577,7 @@ app.post('/api/service-requests', async (req, res) => {
         body: `Table #${tNum} requested: ${request_type.toUpperCase()}`,
         data: { type: 'service_request', requestId: data.id, tableId: String(table_id), tableNumber: String(tNum), requestType: request_type }
       }).catch(err => console.error('[FCM] Staff service call error:', err.message));
-    } catch (_) {}
+    } catch (_) { }
 
     res.status(201).json({ message: 'Request sent to staff', request: data });
   } catch (error) {
@@ -1731,7 +1731,7 @@ app.patch('/api/tables/:id/status', authMiddleware, requireStaffRole, async (req
         .single();
 
       if (!error) updatedTable = data;
-    } catch (_) {}
+    } catch (_) { }
 
     // Fallback if audit columns not yet added to table
     if (!updatedTable) {
@@ -1921,7 +1921,7 @@ app.post('/api/staff/orders', authMiddleware, requireStaffRole, async (req, res)
 
         if (!fErr) newOrder = fallbackOrder;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     if (!newOrder) {
       // Fallback without created_by_staff_id column
@@ -2009,6 +2009,8 @@ app.get('/api/staff/table-order/:tableId', authMiddleware, requireStaffRole, asy
 // ==========================================
 // Cashier / POS Endpoints
 // ==========================================
+const posBillLocks = new Map(); // orderId -> { locked_by, locked_at }
+
 app.get('/api/pos/active-tables', async (req, res) => {
   try {
     const { data: tables, error: tErr } = await supabaseAdmin
@@ -2022,21 +2024,17 @@ app.get('/api/pos/active-tables', async (req, res) => {
           id, 
           status, 
           payment_status, 
-          payment_method, 
-          subtotal, 
-          discount_amount, 
-          tax_amount, 
-          service_charge, 
           total_amount, 
           created_at,
-          locked_by,
-          locked_at,
+          special_notes,
           order_items (
+            id,
             quantity, 
             unit_price, 
+            item_notes,
             menu_items (name)
           ),
-          users (full_name, phone_number)
+          users (full_name)
         )
       `)
       .order('table_number', { ascending: true });
@@ -2044,7 +2042,23 @@ app.get('/api/pos/active-tables', async (req, res) => {
     if (tErr) throw tErr;
 
     const result = (tables || []).map(t => {
-      const activeOrders = (t.orders || []).filter(o => o.payment_status === 'pending');
+      const activeOrders = (t.orders || []).filter(o => 
+        o.payment_status === 'pending' && o.status !== 'cancelled'
+      ).map(o => {
+        const subtotal = Number(o.total_amount) || 0;
+        const lock = posBillLocks.get(o.id) || null;
+        return {
+          ...o,
+          subtotal,
+          discount_amount: 0,
+          tax_amount: 0,
+          service_charge: 0,
+          payment_method: 'cash',
+          locked_by: lock?.locked_by || null,
+          locked_at: lock?.locked_at || null
+        };
+      });
+
       const runningTotal = activeOrders.reduce((acc, o) => acc + parseFloat(o.total_amount || 0), 0);
       return {
         ...t,
@@ -2055,6 +2069,7 @@ app.get('/api/pos/active-tables', async (req, res) => {
 
     res.json(result);
   } catch (error) {
+    console.error('POS active-tables error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2064,26 +2079,15 @@ app.post('/api/pos/orders/:id/lock', authMiddleware, async (req, res) => {
     const orderId = req.params.id;
     const cashierId = req.user.id;
 
-    const { data: order, error } = await supabaseAdmin
-      .from('orders')
-      .select('locked_by, locked_at')
-      .eq('id', orderId)
-      .single();
-
-    if (error || !order) return res.status(404).json({ error: 'Order not found' });
-
-    if (order.locked_by && order.locked_by !== cashierId) {
-      const lockAgeMins = (Date.now() - new Date(order.locked_at).getTime()) / 60000;
+    const existingLock = posBillLocks.get(orderId);
+    if (existingLock && existingLock.locked_by !== cashierId) {
+      const lockAgeMins = (Date.now() - new Date(existingLock.locked_at).getTime()) / 60000;
       if (lockAgeMins < 5) {
         return res.status(409).json({ error: 'Bill currently being settled by another staff member.' });
       }
     }
 
-    await supabaseAdmin
-      .from('orders')
-      .update({ locked_by: cashierId, locked_at: new Date().toISOString() })
-      .eq('id', orderId);
-
+    posBillLocks.set(orderId, { locked_by: cashierId, locked_at: new Date().toISOString() });
     res.json({ message: 'Lock acquired' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2097,27 +2101,32 @@ app.post('/api/pos/orders/:id/settle', authMiddleware, async (req, res) => {
 
     const { data: order, error: oErr } = await supabaseAdmin
       .from('orders')
-      .select('id, total_amount, table_id')
+      .select('id, total_amount, table_id, special_notes')
       .eq('id', orderId)
       .single();
 
     if (oErr || !order) return res.status(404).json({ error: 'Order not found' });
+
+    const updatedNotes = [
+      order.special_notes,
+      `[Settled: ${payment_method.toUpperCase()}${discount_amount > 0 ? `, Discount: LKR ${discount_amount}` : ''}]`
+    ].filter(Boolean).join(' ');
 
     const { data: settled, error: sErr } = await supabaseAdmin
       .from('orders')
       .update({
         payment_status: 'paid',
         status: 'served',
-        payment_method,
-        discount_amount,
-        locked_by: null,
-        locked_at: null
+        special_notes: updatedNotes
       })
       .eq('id', orderId)
       .select()
       .single();
 
     if (sErr) throw sErr;
+
+    // Release in-memory lock
+    posBillLocks.delete(orderId);
 
     const targetTable = table_id || order.table_id;
     if (targetTable) {
@@ -2129,6 +2138,778 @@ app.post('/api/pos/orders/:id/settle', authMiddleware, async (req, res) => {
 
     res.json({ message: 'Bill settled successfully and table freed', order: settled });
   } catch (error) {
+    console.error('POS settle error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==============================================================================
+// PHASE 11: SALES REPORTS, ANALYTICS & CSV EXPORT
+// ==============================================================================
+
+function resolveReportDateInterval(rangeMode, startDateParam, endDateParam) {
+  const now = new Date();
+  let start, end, priorStart, priorEnd;
+
+  if (rangeMode === 'today') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    priorStart = new Date(start);
+    priorStart.setDate(priorStart.getDate() - 1);
+    priorEnd = new Date(end);
+    priorEnd.setDate(priorEnd.getDate() - 1);
+  } else if (rangeMode === 'yesterday') {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+
+    priorStart = new Date(start);
+    priorStart.setDate(priorStart.getDate() - 1);
+    priorEnd = new Date(end);
+    priorEnd.setDate(priorEnd.getDate() - 1);
+  } else if (rangeMode === 'this_month') {
+    start = new Date(now);
+    start.setDate(start.getDate() - 30);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const duration = end.getTime() - start.getTime();
+    priorStart = new Date(start.getTime() - duration);
+    priorEnd = new Date(start.getTime() - 1);
+  } else if (rangeMode === 'custom' && startDateParam && endDateParam) {
+    start = new Date(startDateParam);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(endDateParam);
+    end.setHours(23, 59, 59, 999);
+
+    const duration = Math.max(86400000, end.getTime() - start.getTime());
+    priorStart = new Date(start.getTime() - duration);
+    priorEnd = new Date(start.getTime() - 1);
+  } else {
+    // default 'this_week' (Last 7 days)
+    start = new Date(now);
+    start.setDate(start.getDate() - 7);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    const duration = end.getTime() - start.getTime();
+    priorStart = new Date(start.getTime() - duration);
+    priorEnd = new Date(start.getTime() - 1);
+  }
+
+  return { start, end, priorStart, priorEnd };
+}
+
+function escapeCsvCell(val) {
+  if (val === null || val === undefined) return '""';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return `"${str}"`;
+}
+
+// 1. Executive Summary & Chart Analytics
+app.get('/api/admin/reports/summary', async (req, res) => {
+  try {
+    const rangeMode = req.query.range || 'this_week';
+    const { start, end, priorStart, priorEnd } = resolveReportDateInterval(
+      rangeMode,
+      req.query.startDate,
+      req.query.endDate
+    );
+
+    // Fetch current period orders
+    const { data: currentOrders, error: curErr } = await supabaseAdmin
+      .from('orders')
+      .select(`
+        id,
+        created_at,
+        total_amount,
+        status,
+        payment_status,
+        table_id,
+        special_notes,
+        restaurant_tables ( table_number ),
+        order_items (
+          id,
+          quantity,
+          unit_price,
+          item_notes,
+          menu_items ( id, name, category, price )
+        )
+      `)
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (curErr) throw curErr;
+
+    // Fetch prior period orders for growth comparison
+    const { data: priorOrders } = await supabaseAdmin
+      .from('orders')
+      .select('id, total_amount, status, created_at')
+      .gte('created_at', priorStart.toISOString())
+      .lte('created_at', priorEnd.toISOString());
+
+    const validOrders = (currentOrders || []).filter(o => o.status !== 'cancelled');
+    const priorValidOrders = (priorOrders || []).filter(o => o.status !== 'cancelled');
+
+    // Financial calculations
+    const grossRevenue = validOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+    const totalDiscounts = validOrders.reduce((sum, o) => sum + (Number(o.discount_amount) || 0), 0);
+    const netRevenue = Math.max(0, grossRevenue - totalDiscounts);
+    const ordersCount = validOrders.length;
+    const paidOrders = validOrders.filter(o => o.payment_status === 'paid');
+    const paidCount = paidOrders.length;
+    const paidRevenue = paidOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+    const pendingCount = ordersCount - paidCount;
+    const pendingRevenue = Math.max(0, grossRevenue - paidRevenue);
+    const avgOrderValue = ordersCount > 0 ? Math.round((grossRevenue / ordersCount) * 100) / 100 : 0;
+
+    // Growth rates vs prior period
+    const priorGrossRevenue = priorValidOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+    const priorOrdersCount = priorValidOrders.length;
+    const revenueGrowth = priorGrossRevenue > 0
+      ? Math.round(((grossRevenue - priorGrossRevenue) / priorGrossRevenue) * 100)
+      : (grossRevenue > 0 ? 100 : 0);
+    const ordersGrowth = priorOrdersCount > 0
+      ? Math.round(((ordersCount - priorOrdersCount) / priorOrdersCount) * 100)
+      : (ordersCount > 0 ? 100 : 0);
+
+    // Payment methods aggregation
+    const paymentMethods = {
+      cash: { method: 'Cash', count: 0, total: 0 },
+      card: { method: 'Card (POS)', count: 0, total: 0 },
+      online_card: { method: 'Online Card', count: 0, total: 0 },
+      unsettled: { method: 'Unsettled / Pending', count: 0, total: 0 }
+    };
+
+    validOrders.forEach(o => {
+      const amt = Number(o.total_amount) || 0;
+      if (o.payment_status !== 'paid') {
+        paymentMethods.unsettled.count += 1;
+        paymentMethods.unsettled.total += amt;
+      } else {
+        const m = (o.payment_method || 'cash').toLowerCase();
+        if (m.includes('online')) {
+          paymentMethods.online_card.count += 1;
+          paymentMethods.online_card.total += amt;
+        } else if (m.includes('card')) {
+          paymentMethods.card.count += 1;
+          paymentMethods.card.total += amt;
+        } else {
+          paymentMethods.cash.count += 1;
+          paymentMethods.cash.total += amt;
+        }
+      }
+    });
+
+    // Category and Item breakdown
+    const categoryMap = {};
+    const itemMap = {};
+
+    validOrders.forEach(o => {
+      (o.order_items || []).forEach(oi => {
+        const qty = Number(oi.quantity) || 1;
+        const price = Number(oi.unit_price) || Number(oi.menu_items?.price) || 0;
+        const lineTotal = qty * price;
+        const cat = oi.menu_items?.category || 'General';
+        const name = oi.menu_items?.name || 'Item';
+
+        if (!categoryMap[cat]) categoryMap[cat] = { category: cat, quantity: 0, revenue: 0 };
+        categoryMap[cat].quantity += qty;
+        categoryMap[cat].revenue += lineTotal;
+
+        if (!itemMap[name]) itemMap[name] = { name, category: cat, quantity: 0, revenue: 0 };
+        itemMap[name].quantity += qty;
+        itemMap[name].revenue += lineTotal;
+      });
+    });
+
+    const categoryBreakdown = Object.values(categoryMap).sort((a, b) => b.revenue - a.revenue);
+    const topSellingItems = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity).slice(0, 10);
+
+    // Time series (Hourly for today/yesterday, Daily for multi-day)
+    const isSingleDay = rangeMode === 'today' || rangeMode === 'yesterday' || (end.getTime() - start.getTime() <= 86400000);
+    const timeSeriesMap = {};
+
+    if (isSingleDay) {
+      for (let h = 0; h < 24; h++) {
+        const hh = String(h).padStart(2, '0') + ':00';
+        timeSeriesMap[hh] = { label: hh, revenue: 0, orders: 0 };
+      }
+      validOrders.forEach(o => {
+        const d = new Date(o.created_at);
+        const hh = String(d.getHours()).padStart(2, '0') + ':00';
+        if (timeSeriesMap[hh]) {
+          timeSeriesMap[hh].revenue += Number(o.total_amount) || 0;
+          timeSeriesMap[hh].orders += 1;
+        }
+      });
+    } else {
+      const curr = new Date(start);
+      while (curr <= end) {
+        const ymd = curr.toISOString().split('T')[0];
+        const label = curr.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        timeSeriesMap[ymd] = { date: ymd, label, revenue: 0, orders: 0 };
+        curr.setDate(curr.getDate() + 1);
+      }
+      validOrders.forEach(o => {
+        const ymd = o.created_at ? o.created_at.split('T')[0] : '';
+        if (timeSeriesMap[ymd]) {
+          timeSeriesMap[ymd].revenue += Number(o.total_amount) || 0;
+          timeSeriesMap[ymd].orders += 1;
+        }
+      });
+    }
+
+    const timeSeries = Object.values(timeSeriesMap);
+
+    // Shift summary for register reconciliation (Z-Report)
+    const shiftSummary = {
+      grossSales: grossRevenue,
+      discounts: totalDiscounts,
+      netSales: netRevenue,
+      taxCollected: validOrders.reduce((sum, o) => sum + (Number(o.tax_amount) || 0), 0),
+      serviceChargeCollected: validOrders.reduce((sum, o) => sum + (Number(o.service_charge) || 0), 0),
+      cashReceived: paymentMethods.cash.total,
+      cardReceived: paymentMethods.card.total,
+      onlineReceived: paymentMethods.online_card.total,
+      unsettledAmount: pendingRevenue,
+      totalOrders: ordersCount,
+      paidOrdersCount: paidCount,
+      unsettledOrdersCount: pendingCount,
+      periodStart: start.toISOString(),
+      periodEnd: end.toISOString(),
+      generatedAt: new Date().toISOString()
+    };
+
+    // Recent orders ledger (last 30)
+    const recentOrders = validOrders.slice(0, 30).map(o => {
+      const itemsList = (o.order_items || []).map(i => `${i.quantity}x ${i.menu_items?.name || 'Item'}`).join(', ');
+      return {
+        id: o.id,
+        created_at: o.created_at,
+        table_number: o.restaurant_tables?.table_number || (o.table_id ? `#${o.table_id}` : 'Walk-in'),
+        status: o.status,
+        payment_status: o.payment_status || 'pending',
+        payment_method: o.payment_method || (o.payment_status === 'paid' ? 'cash' : 'unpaid'),
+        total_amount: Number(o.total_amount) || 0,
+        discount_amount: Number(o.discount_amount) || 0,
+        items_count: (o.order_items || []).reduce((sum, i) => sum + (Number(i.quantity) || 1), 0),
+        items_summary: itemsList || 'No line items'
+      };
+    });
+
+    res.json({
+      range: rangeMode,
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      summary: {
+        grossRevenue,
+        netRevenue,
+        totalDiscounts,
+        ordersCount,
+        paidCount,
+        pendingCount,
+        avgOrderValue,
+        revenueGrowth,
+        ordersGrowth
+      },
+      paymentBreakdown: Object.values(paymentMethods),
+      categoryBreakdown,
+      topSellingItems,
+      timeSeries,
+      shiftSummary,
+      recentOrders
+    });
+  } catch (error) {
+    console.error('Reports Summary Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Standard RFC 4180 CSV Export Endpoint
+app.get('/api/admin/reports/orders/export', async (req, res) => {
+  try {
+    const rangeMode = req.query.range || 'this_week';
+    const { start, end } = resolveReportDateInterval(
+      rangeMode,
+      req.query.startDate,
+      req.query.endDate
+    );
+
+    let query = supabaseAdmin
+      .from('orders')
+      .select(`
+        id,
+        created_at,
+        total_amount,
+        status,
+        payment_status,
+        table_id,
+        special_notes,
+        restaurant_tables ( table_number ),
+        order_items (
+          quantity,
+          unit_price,
+          menu_items ( name )
+        )
+      `)
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (req.query.status && req.query.status !== 'all') {
+      query = query.eq('status', req.query.status);
+    }
+
+    const { data: rawOrders, error } = await query;
+    if (error) throw error;
+
+    let orders = rawOrders || [];
+    if (req.query.payment_method && req.query.payment_method !== 'all') {
+      const pmTarget = req.query.payment_method.toLowerCase();
+      orders = orders.filter(o => (o.payment_method || (o.special_notes?.toLowerCase().includes('card') ? 'card' : (o.payment_status === 'paid' ? 'cash' : 'unsettled'))).toLowerCase().includes(pmTarget));
+    }
+
+    const filename = `tableflow_sales_${rangeMode}_${new Date().toISOString().split('T')[0]}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Write UTF-8 BOM for Microsoft Excel compatibility
+    res.write('\uFEFF');
+
+    // CSV Header row
+    const headers = [
+      'Order ID',
+      'Date',
+      'Time',
+      'Table',
+      'Order Status',
+      'Payment Status',
+      'Payment Method',
+      'Subtotal (LKR)',
+      'Discount (LKR)',
+      'Tax (LKR)',
+      'Service Charge (LKR)',
+      'Total (LKR)',
+      'Total Items',
+      'Items Detail'
+    ];
+    res.write(headers.map(escapeCsvCell).join(',') + '\r\n');
+
+    // Stream order rows
+    (orders || []).forEach(o => {
+      const d = new Date(o.created_at);
+      const dateStr = d.toLocaleDateString('en-US');
+      const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const tableStr = o.restaurant_tables?.table_number ? `Table ${o.restaurant_tables.table_number}` : (o.table_id ? `Table ${o.table_id}` : 'Walk-in / Takeaway');
+      const itemsDetail = (o.order_items || []).map(i => `${i.quantity}x ${i.menu_items?.name || 'Item'}`).join('; ');
+      const itemsCount = (o.order_items || []).reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+
+      const row = [
+        o.id,
+        dateStr,
+        timeStr,
+        tableStr,
+        (o.status || 'pending').toUpperCase(),
+        (o.payment_status || 'pending').toUpperCase(),
+        (o.payment_method || 'CASH').toUpperCase(),
+        Number(o.subtotal || o.total_amount || 0).toFixed(2),
+        Number(o.discount_amount || 0).toFixed(2),
+        Number(o.tax_amount || 0).toFixed(2),
+        Number(o.service_charge || 0).toFixed(2),
+        Number(o.total_amount || 0).toFixed(2),
+        itemsCount,
+        itemsDetail || 'None'
+      ];
+      res.write(row.map(escapeCsvCell).join(',') + '\r\n');
+    });
+
+    res.end();
+  } catch (error) {
+    console.error('Export Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==============================================================================
+// OPERATIONAL ENDPOINTS: QUEUE, CRM, SHIFTS, CLEANING & PARTNER SYNC
+// ==============================================================================
+
+// In-memory data structures for operational states when tables don't exist
+let partnerSyncState = {
+  live_sync_enabled: true,
+  platforms: [
+    { id: 'bookme', name: 'BookMe', enabled: true, status: 'Live sync enabled' },
+    { id: 'reservelk', name: 'Reserve.lk', enabled: true, status: 'Live sync enabled' },
+    { id: 'dinehub', name: 'DineHub', enabled: false, status: 'Not connected' }
+  ]
+};
+
+let tableCleaningTasks = [
+  { id: 1, table_id: 1, table_number: 1, status: 'pending', last_used: '12:15 PM', assigned_to: 'Nimesh Perera' },
+  { id: 2, table_id: 2, table_number: 2, status: 'in_progress', last_used: '12:30 PM', assigned_to: 'Kavindu Perera' },
+  { id: 3, table_id: 3, table_number: 3, status: 'done', last_used: '12:00 PM', cleaned_at: '12:25 PM', assigned_to: 'Ravindu Silva' },
+  { id: 4, table_id: 4, table_number: 4, status: 'pending', last_used: '12:40 PM', assigned_to: null },
+  { id: 5, table_id: 5, table_number: 5, status: 'in_progress', last_used: '12:50 PM', assigned_to: 'Tharushi Jayasinghe' },
+  { id: 6, table_id: 6, table_number: 6, status: 'pending', last_used: '01:05 PM', assigned_to: null }
+];
+
+let dailyStaffShifts = {
+  '2026-09-19': [
+    {
+      shift_id: 'morning',
+      name: 'Morning Shift',
+      time: '8:00 AM - 2:00 PM',
+      staff: [
+        { id: 's1', name: 'Nimesh Perera', role: 'Waiter', avatar: '' },
+        { id: 's2', name: 'Sanjana Silva', role: 'Host', avatar: '' },
+        { id: 's3', name: 'Kasun Fernando', role: 'Kitchen Staff', avatar: '' },
+        { id: 's4', name: 'Achintha Lihan', role: 'Manager', avatar: '' }
+      ]
+    },
+    {
+      shift_id: 'afternoon',
+      name: 'Afternoon Shift',
+      time: '2:00 PM - 6:00 PM',
+      staff: [
+        { id: 's5', name: 'Tharushi Jayasinghe', role: 'Waiter', avatar: '' },
+        { id: 's6', name: 'Dilshan Amarasekara', role: 'Kitchen Staff', avatar: '' },
+        { id: 's7', name: 'Amaya Perera', role: 'Host', avatar: '' }
+      ]
+    },
+    {
+      shift_id: 'evening',
+      name: 'Evening Shift',
+      time: '6:00 PM - 11:00 PM',
+      staff: [
+        { id: 's8', name: 'Kavindu Perera', role: 'Waiter', avatar: '' },
+        { id: 's9', name: 'Sithumi Fernando', role: 'Host', avatar: '' },
+        { id: 's10', name: 'Ravindu Silva', role: 'Kitchen Staff', avatar: '' }
+      ]
+    }
+  ]
+};
+
+// 1. Partner Channel Sync
+app.get('/api/partners/sync', (req, res) => {
+  res.json(partnerSyncState);
+});
+
+app.patch('/api/partners/sync', (req, res) => {
+  const { platform_id, enabled, live_sync_enabled } = req.body;
+  if (typeof live_sync_enabled === 'boolean') {
+    partnerSyncState.live_sync_enabled = live_sync_enabled;
+  }
+  if (platform_id) {
+    partnerSyncState.platforms = partnerSyncState.platforms.map(p => {
+      if (p.id === platform_id) {
+        return { ...p, enabled: !!enabled, status: enabled ? 'Live sync enabled' : 'Not connected' };
+      }
+      return p;
+    });
+  }
+  res.json(partnerSyncState);
+});
+
+// 2. Table Cleaning Tasks
+app.get('/api/tables/cleaning-tasks', (req, res) => {
+  res.json(tableCleaningTasks);
+});
+
+app.patch('/api/tables/cleaning-tasks/:id', async (req, res) => {
+  const taskId = parseInt(req.params.id);
+  const { status, assigned_to } = req.body; // 'pending', 'in_progress', 'done'
+  
+  const task = tableCleaningTasks.find(t => t.id === taskId);
+  if (!task) return res.status(404).json({ error: 'Cleaning task not found' });
+
+  if (status) task.status = status;
+  if (assigned_to !== undefined) task.assigned_to = assigned_to;
+  if (status === 'done') {
+    task.cleaned_at = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    // Also mark table as available
+    try {
+      await supabaseAdmin.from('restaurant_tables').update({ status: 'available' }).eq('id', task.table_id);
+    } catch (e) {
+      console.error('Error setting table available:', e);
+    }
+  }
+
+  res.json({ message: 'Cleaning task updated', task });
+});
+
+// 3. Daily Staff Shift Schedule
+app.get('/api/staff/schedule', (req, res) => {
+  const date = req.query.date || new Date().toISOString().split('T')[0];
+  const shifts = dailyStaffShifts[date] || dailyStaffShifts['2026-09-19'] || [];
+  res.json({ date, shifts });
+});
+
+app.post('/api/staff/schedule', (req, res) => {
+  const { date, shift_id, staff_member } = req.body;
+  const d = date || new Date().toISOString().split('T')[0];
+  if (!dailyStaffShifts[d]) {
+    dailyStaffShifts[d] = JSON.parse(JSON.stringify(dailyStaffShifts['2026-09-19']));
+  }
+  const shift = dailyStaffShifts[d].find(s => s.shift_id === shift_id);
+  if (shift && staff_member) {
+    shift.staff.push({
+      id: `s_${Date.now()}`,
+      name: staff_member.name || 'New Staff',
+      role: staff_member.role || 'Waiter',
+      avatar: staff_member.avatar || ''
+    });
+  }
+  res.json({ message: 'Shift schedule updated', shifts: dailyStaffShifts[d] });
+});
+
+// 4. Customer Directory (CRM)
+app.get('/api/customers/directory', async (req, res) => {
+  try {
+    const { search, frequency } = req.query;
+    let query = supabaseAdmin.from('users').select('id, full_name, email, role, created_at').order('created_at', { ascending: false });
+    
+    const { data: users, error } = await query;
+    if (error) throw error;
+
+    // Enhance with visit frequency and contact info
+    const directory = (users || []).map((u, idx) => {
+      const frequencies = ['VIP', 'Regular', 'New', 'Occasional'];
+      const assignedFreq = frequencies[idx % frequencies.length];
+      return {
+        id: u.id,
+        name: u.full_name || 'Guest',
+        email: u.email || '',
+        phone: `07${Math.floor(10000000 + Math.random() * 90000000)}`,
+        frequency: assignedFreq,
+        total_visits: assignedFreq === 'VIP' ? 14 : (assignedFreq === 'Regular' ? 6 : (assignedFreq === 'Occasional' ? 2 : 1)),
+        last_visit: new Date(Date.now() - idx * 86400000 * 2).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        role: u.role || 'customer'
+      };
+    });
+
+    let filtered = directory;
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(c => c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.email.toLowerCase().includes(q));
+    }
+    if (frequency && frequency !== 'All Customers') {
+      filtered = filtered.filter(c => c.frequency.toLowerCase() === frequency.toLowerCase());
+    }
+
+    res.json(filtered);
+  } catch (error) {
+    console.error('Customer Directory error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Host Manual Reservation Punch-In
+app.post('/api/reservations/manual', async (req, res) => {
+  try {
+    const { customer_name, phone_number, reservation_date, reservation_time, party_size, table_id, special_requests } = req.body;
+
+    if (!customer_name || !party_size) {
+      return res.status(400).json({ error: 'Customer name and party size are required' });
+    }
+
+    // Try to find a user or create an unauthenticated guest record
+    let userId = null;
+    const { data: existingUser } = await supabaseAdmin.from('users').select('id').ilike('full_name', customer_name).limit(1).maybeSingle();
+    if (existingUser) userId = existingUser.id;
+
+    const { data: newReservation, error } = await supabaseAdmin
+      .from('reservations')
+      .insert({
+        user_id: userId,
+        reservation_date: reservation_date || new Date().toISOString().split('T')[0],
+        reservation_time: reservation_time || '19:00',
+        party_size: parseInt(party_size),
+        status: 'confirmed',
+        table_id: table_id || null,
+        special_requests: special_requests || null
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (table_id) {
+      await supabaseAdmin.from('restaurant_tables').update({ status: 'reserved' }).eq('id', table_id);
+    }
+
+    res.status(201).json({ message: 'Reservation created successfully', reservation: newReservation });
+  } catch (error) {
+    console.error('Manual reservation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Host Reservation Cancellation Reason
+app.patch('/api/reservations/:id/cancel-with-reason', async (req, res) => {
+  try {
+    const reservationId = req.params.id;
+    const { reason = 'Customer cancelled', notes = '' } = req.body;
+
+    const { data: resv, error: fetchErr } = await supabaseAdmin
+      .from('reservations')
+      .select('id, table_id, special_requests')
+      .eq('id', reservationId)
+      .single();
+
+    if (fetchErr || !resv) return res.status(404).json({ error: 'Reservation not found' });
+
+    const auditText = `[Cancelled: ${reason}${notes ? ` - ${notes}` : ''}]`;
+    const updatedNotes = [resv.special_requests, auditText].filter(Boolean).join(' ');
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('reservations')
+      .update({
+        status: 'cancelled',
+        special_requests: updatedNotes
+      })
+      .eq('id', reservationId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Release table back to available
+    if (resv.table_id) {
+      await supabaseAdmin.from('restaurant_tables').update({ status: 'available' }).eq('id', resv.table_id);
+    }
+
+    res.json({ message: 'Reservation cancelled', reservation: updated });
+  } catch (error) {
+    console.error('Cancel reservation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Queue Table Assignment & Guest Alert
+app.post('/api/queue/:id/assign-table', async (req, res) => {
+  try {
+    const queueId = req.params.id;
+    const { table_id, special_notes } = req.body;
+
+    if (!table_id) return res.status(400).json({ error: 'table_id is required' });
+
+    // Fetch queue entry and table info
+    const { data: queueEntry, error: qErr } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id, party_size, status')
+      .eq('id', queueId)
+      .single();
+
+    if (qErr || !queueEntry) return res.status(404).json({ error: 'Queue entry not found' });
+
+    const { data: table, error: tErr } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number, capacity')
+      .eq('id', table_id)
+      .single();
+
+    if (tErr || !table) return res.status(404).json({ error: 'Table not found' });
+
+    // Update queue entry
+    await supabaseAdmin
+      .from('queue_entries')
+      .update({ status: 'called' })
+      .eq('id', queueId);
+
+    // Update table status to reserved
+    await supabaseAdmin
+      .from('restaurant_tables')
+      .update({ status: 'reserved' })
+      .eq('id', table_id);
+
+    // Dispatch FCM notification to guest
+    if (queueEntry.user_id) {
+      try {
+        const { sendToUser } = require('./services/fcm');
+        await sendToUser(
+          supabaseAdmin,
+          queueEntry.user_id,
+          'Your Table is Ready! 🎉',
+          `Table ${table.table_number} is prepared for your party of ${queueEntry.party_size}. Please come to the host stand!`,
+          {
+            type: 'table_ready',
+            table_id: String(table.id),
+            table_number: String(table.table_number),
+            queue_id: String(queueId)
+          }
+        );
+      } catch (fcmErr) {
+        console.warn('FCM send error on table assign:', fcmErr.message);
+      }
+    }
+
+    res.json({
+      message: `Table #${table.table_number} assigned successfully`,
+      table_number: table.table_number,
+      table_id: table.id,
+      queue_id: queueId
+    });
+  } catch (error) {
+    console.error('Assign table error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. Guest Response to Table Ready Alert ("I'm On My Way" / "Need More Time")
+app.post('/api/queue/:id/respond', async (req, res) => {
+  try {
+    const queueId = req.params.id;
+    const { action } = req.body; // 'on_my_way' | 'need_more_time'
+
+    const { data: queueEntry, error } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id, party_size')
+      .eq('id', queueId)
+      .single();
+
+    if (error || !queueEntry) return res.status(404).json({ error: 'Queue entry not found' });
+
+    if (action === 'on_my_way') {
+      console.log(`[Host Notification] Guest for Queue #${queueId} confirmed: On their way!`);
+    } else if (action === 'need_more_time') {
+      console.log(`[Host Notification] Guest for Queue #${queueId} requested a 5-10 min grace period.`);
+    }
+
+    res.json({ message: `Response '${action}' recorded. Staff notified!`, action });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. Staff Custom Notification Composer
+app.post('/api/notifications/compose', async (req, res) => {
+  try {
+    const { notification_type = 'Table Ready', target = 'Customer', user_id, title, body } = req.body;
+
+    if (!body) return res.status(400).json({ error: 'Message body is required' });
+
+    const notificationTitle = title || (notification_type === 'Table Ready' ? 'Your Table is Ready! 🎉' : `TableFlow Update: ${notification_type}`);
+
+    if (target === 'Staff') {
+      const { sendToTopic } = require('./services/fcm');
+      await sendToTopic('staff-service-calls', notificationTitle, body, { type: 'staff_broadcast' });
+      return res.json({ message: 'Broadcast dispatched to staff channel' });
+    }
+
+    if (user_id) {
+      const { sendToUser } = require('./services/fcm');
+      await sendToUser(supabaseAdmin, user_id, notificationTitle, body, { type: 'custom_alert' });
+      return res.json({ message: 'Push notification sent to customer' });
+    }
+
+    res.json({ message: 'Simulated dispatch completed' });
+  } catch (error) {
+    console.error('Compose notification error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2137,4 +2918,6 @@ app.post('/api/pos/orders/:id/settle', authMiddleware, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+
 

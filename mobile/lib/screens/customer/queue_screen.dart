@@ -359,139 +359,283 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   }
 
   Widget _buildInQueueView() {
+    const primaryColor = Color(0xFFB87F5C);
+    final pos = _position > 0 ? _position : 1;
+    final waitMins = _estimatedWaitTime > 0 ? _estimatedWaitTime : pos * 5;
+
     return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
         children: [
-        AnimatedBuilder(
-          animation: _pulseController,
-          builder: (context, child) {
-            return Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primary.withValues(alpha: 0.2 + (_pulseController.value * 0.3)),
-                    blurRadius: 40 + (_pulseController.value * 20),
-                    spreadRadius: _pulseController.value * 10,
-                  ),
-                  const BoxShadow(
-                    color: Colors.white,
-                    blurRadius: 10,
-                    spreadRadius: 5,
-                  ),
-                ],
-                border: Border.all(
-                  color: AppTheme.primary.withValues(alpha: 0.3),
-                  width: 2,
+          // Live status badge bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'CURRENT QUEUE STATUS',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: Color(0xFF8C827A),
                 ),
               ),
-              child: Column(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.circle, color: Color(0xFF10B981), size: 6),
+                    SizedBox(width: 4),
+                    Text(
+                      'Live',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF10B981),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Central Ticket Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFEBE5DF)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFF7F3EE),
+                  ),
+                  child: const Icon(Icons.people_outline, color: primaryColor, size: 28),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  "You're in the queue",
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF8C827A),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '#$pos',
+                  style: const TextStyle(
+                    fontFamily: 'Playfair Display',
+                    fontSize: 52,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E1E1E),
+                    height: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'YOUR POSITION',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
+                    color: Color(0xFF8C827A),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F3EE),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFEBE5DF)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.access_time, color: primaryColor, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Estimated waiting time  ~ $waitMins minutes',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E1E1E),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Queue Details Header
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'QUEUE DETAILS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: Color(0xFF8C827A),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Queue Details Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEBE5DF)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildQueueDetailRow(
+                  icon: Icons.people_outline,
+                  label: 'Party size',
+                  value: '2 People',
+                ),
+                const Divider(height: 20, color: Color(0xFFF3ECE6)),
+                _buildQueueDetailRow(
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Date & time',
+                  value: 'Today, ${TimeOfDay.now().format(context)}',
+                ),
+                const Divider(height: 20, color: Color(0xFFF3ECE6)),
+                _buildQueueDetailRow(
+                  icon: Icons.home_outlined,
+                  label: 'Restaurant',
+                  value: 'The Green Table',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // View Restaurant Status Action Button
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: OutlinedButton(
+              onPressed: () => context.push('/restaurant-status'),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFD4CDC5), width: 1.2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+                children: const [
                   Text(
-                    _queueNumber != null ? '#$_queueNumber' : '#?',
-                    style: const TextStyle(
-                      fontSize: 72,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primary,
-                      height: 1.0,
-                    ),
-                  ),
-                  Text(
-                    'YOUR NUMBER',
+                    'View Restaurant Status',
                     style: TextStyle(
-                      color: AppTheme.secondary.withValues(alpha: 0.6),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1E1E1E),
                     ),
                   ),
+                  SizedBox(width: 6),
+                  Icon(Icons.chevron_right, size: 18, color: Color(0xFF8C827A)),
                 ],
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 48),
-        Text(
-          'You\'re on the list!',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontFamily: 'Playfair Display',
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
+          const SizedBox(height: 12),
+
+          // Leave Queue Text Button
+          TextButton(
+            onPressed: _leaveQueue,
+            child: const Text(
+              'Leave Queue',
+              style: TextStyle(
+                color: Color(0xFFEF4444),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Bottom description note
+          const Text(
+            'Real-time queue information area\nUpdates automatically when queue position changes',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              color: Color(0xFFA59D95),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQueueDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    const primaryColor = Color(0xFFB87F5C);
+
+    return Row(
+      children: [
+        Icon(icon, color: primaryColor, size: 18),
+        const SizedBox(width: 12),
         Text(
-          _position == 1 
-              ? 'You are next in line!' 
-              : 'There are ${_position - 1} people ahead of you',
+          label,
           style: const TextStyle(
-            color: AppTheme.secondary,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF8C827A),
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppTheme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            'Estimated wait time: ~$_estimatedWaitTime mins',
-            style: const TextStyle(
-              color: AppTheme.primary,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        const SizedBox(height: 32),
+        const Spacer(),
         Text(
-          'We will notify you when your table is almost ready.\nPre-order your favorites while you wait.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            height: 1.6, 
-            color: AppTheme.secondary.withValues(alpha: 0.6),
-            fontSize: 15,
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1E1E1E),
           ),
-        ),
-        const SizedBox(height: 48),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => context.go('/menu'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  side: BorderSide(color: AppTheme.secondary.withValues(alpha: 0.2)),
-                ),
-                child: const Text('Browse Menu'),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: TextButton(
-                onPressed: _leaveQueue,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  backgroundColor: Colors.red.withValues(alpha: 0.05),
-                ),
-                child: const Text('Leave Queue', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
         ),
       ],
-      ),
     );
   }
 }

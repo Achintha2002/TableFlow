@@ -276,35 +276,44 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Primary Actions: Book Table & Scan QR
+          // Primary Actions: Book Table (Multi-step) & Live Floor Status
           Row(
             children: [
               Expanded(
                 child: _buildActionCard(
                   title: 'Book a Table',
-                  subtitle: 'Reserve spot',
+                  subtitle: 'Multi-step booking',
                   icon: Icons.event_seat,
                   isPrimary: true,
-                  onTap: () => context.go('/table-selection'),
+                  onTap: () => context.push('/reservation-step-1'),
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _buildActionCard(
-                  title: 'Scan Table QR',
-                  subtitle: 'Dine-in order',
-                  icon: Icons.qr_code_scanner,
+                  title: 'Live Floor Status',
+                  subtitle: 'Seats & queue times',
+                  icon: Icons.speed,
                   isPrimary: false,
-                  onTap: () => context.push('/qr-checkin'),
+                  onTap: () => context.push('/restaurant-status'),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          // Secondary Actions Row
+          // Scan QR & Join Queue Row
           Row(
             children: [
+              Expanded(
+                child: _buildActionCard(
+                  title: 'Scan Table QR',
+                  subtitle: 'Dine-in order',
+                  icon: Icons.qr_code_scanner,
+                  onTap: () => context.push('/qr-checkin'),
+                ),
+              ),
+              const SizedBox(width: 16),
               Expanded(
                 child: _buildActionCard(
                   title: 'Join Queue',
@@ -313,7 +322,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => context.go('/queue'),
                 ),
               ),
-              const SizedBox(width: 16),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Menu & My Reservations Row
+          Row(
+            children: [
               Expanded(
                 child: _buildActionCard(
                   title: 'Menu',
@@ -322,11 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => context.go('/menu'),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
+              const SizedBox(width: 16),
               Expanded(
                 child: _buildActionCard(
                   title: 'My Reservations',
@@ -335,7 +346,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => context.go('/reservations'),
                 ),
               ),
-              const SizedBox(width: 16),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Order History Row
+          Row(
+            children: [
               Expanded(
                 child: _buildActionCard(
                   title: 'Order History',
