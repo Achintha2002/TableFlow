@@ -6,6 +6,8 @@ const crypto = require('crypto');
 require('dotenv').config();
 
 const authMiddleware = require('./middleware/auth');
+const supabase = require('./config/supabase');
+const fcmService = require('./services/fcm');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,6 +77,217 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY // fallback to anon if missing, though it will fail RLS
 );
+
+// ==========================================
+// System Health & FCM Notification Status
+// ==========================================
+app.get('/api/health', (req, res) => {
+  const fcmStatus = fcmService.getFCMStatus();
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    fcm_mode: fcmStatus.mode,
+    fcm_configured: fcmStatus.configured
+  });
+});
+
+// Register / Upsert FCM Token for current user & device
+app.post('/api/notifications/fcm-token', async (req, res) => {
+  try {
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) userId = user.id;
+    }
+    if (!userId && req.body.user_id) {
+      userId = req.body.user_id;
+    }
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication or user_id required to register device token' });
+    }
+
+    const { fcm_token, platform = 'web', device_info = null } = req.body;
+    if (!fcm_token) {
+      return res.status(400).json({ error: 'fcm_token is required' });
+    }
+
+    // 1. Try upserting into user_devices table
+    let savedToDevices = false;
+    try {
+      const { error: devErr } = await supabaseAdmin
+        .from('user_devices')
+        .upsert(
+          {
+            user_id: userId,
+            fcm_token,
+            platform,
+            device_info,
+            last_seen_at: new Date().toISOString()
+          },
+          { onConflict: 'fcm_token' }
+        );
+      if (!devErr) savedToDevices = true;
+    } catch (_) {}
+
+    // 2. Also update users.fcm_token as backward-compatible fallback
+    try {
+      await supabaseAdmin
+        .from('users')
+        .update({ fcm_token })
+        .eq('id', userId);
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: 'Device token registered successfully',
+      multi_device_stored: savedToDevices
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Deregister FCM Token on logout
+app.delete('/api/notifications/fcm-token', async (req, res) => {
+  try {
+    const fcm_token = req.body?.fcm_token || req.query?.fcm_token;
+    if (!fcm_token) {
+      return res.status(400).json({ error: 'fcm_token is required' });
+    }
+
+    try {
+      await supabaseAdmin.from('user_devices').delete().eq('fcm_token', fcm_token);
+    } catch (_) {}
+
+    try {
+      await supabaseAdmin.from('users').update({ fcm_token: null }).eq('fcm_token', fcm_token);
+    } catch (_) {}
+
+    res.json({ success: true, message: 'Device token deregistered successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Rate-limited Test Notification Endpoint (strictly authenticated caller to self)
+const testNotificationRateLimit = new Map();
+
+app.post('/api/notifications/test', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const now = Date.now();
+    const windowMs = 60 * 1000;
+    const maxAttempts = 5;
+
+    let timestamps = testNotificationRateLimit.get(userId) || [];
+    timestamps = timestamps.filter(t => now - t < windowMs);
+
+    if (timestamps.length >= maxAttempts) {
+      return res.status(429).json({
+        error: 'Rate limit exceeded. You can send at most 5 test notifications per minute.'
+      });
+    }
+
+    timestamps.push(now);
+    testNotificationRateLimit.set(userId, timestamps);
+
+    const title = req.body.title || '🔔 TableFlow Test Notification';
+    const body = req.body.body || 'Your real-time notification pipeline is working!';
+
+    const result = await fcmService.sendToUser(userId, {
+      title,
+      body,
+      data: { type: 'test', timestamp: new Date().toISOString() },
+      type: 'general'
+    });
+
+    res.json({
+      success: true,
+      message: 'Test notification triggered',
+      delivery: result
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Notification History for Authenticated User
+app.get('/api/notifications', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    const offset = (page - 1) * limit;
+
+    const { data: notifications, count, error } = await supabaseAdmin
+      .from('notifications')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    const { count: unreadCount } = await supabaseAdmin
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    res.json({
+      notifications: notifications || [],
+      unread_count: unreadCount || 0,
+      total: count || 0,
+      page,
+      limit
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark Single Notification Read (ownership checked)
+app.patch('/api/notifications/:id/read', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notifId = req.params.id;
+
+    const { data, error } = await supabaseAdmin
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notifId)
+      .eq('user_id', userId)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Notification not found or access denied' });
+
+    res.json({ success: true, notification: data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark All Notifications Read
+app.post('/api/notifications/read-all', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { error } = await supabaseAdmin
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) throw error;
+    res.json({ success: true, message: 'All notifications marked as read' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/admin/sync-users', async (req, res) => {
   try {
@@ -788,10 +1001,10 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    // Fetch current status to validate transition
+    // Fetch current status and table info to validate transition and notify guest
     const { data: currentOrder, error: fetchErr } = await sb
       .from('orders')
-      .select('status')
+      .select('status, user_id, table_id, restaurant_tables(table_number)')
       .eq('id', orderId)
       .single();
 
@@ -817,6 +1030,24 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
       .single();
 
     if (error) throw error;
+
+    // Transition-guarded FCM Notification: ONLY fires when previous status was NOT ready, and new status IS ready
+    if (currentStatus !== 'ready' && status === 'ready' && currentOrder.user_id) {
+      const tableNum = currentOrder.restaurant_tables?.table_number || currentOrder.table_id || '';
+      fcmService.sendToUser(currentOrder.user_id, {
+        title: '🍽️ Order Ready!',
+        body: tableNum ? `Your food for Table #${tableNum} is hot and ready to serve!` : 'Your food is hot and ready to serve!',
+        data: {
+          type: 'order_ready',
+          orderId,
+          tableId: currentOrder.table_id || ''
+        },
+        type: 'order_ready'
+      }).catch(err => {
+        console.error('[FCM] Kitchen order ready dispatch error:', err.message);
+      });
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -854,6 +1085,144 @@ app.get('/api/queue/:id/position', async (req, res) => {
 
     // position is people ahead + 1
     res.json({ position: count + 1, ahead: count, queue_number: myEntry.queue_number });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Transition-guarded single queue notification
+app.post('/api/queue/:id/notify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: entry, error } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id, status, pax, queue_number')
+      .eq('id', id)
+      .single();
+
+    if (error || !entry) {
+      return res.status(404).json({ error: 'Queue entry not found' });
+    }
+
+    const prevStatus = entry.status;
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('queue_entries')
+      .update({ status: 'notified' })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // Transition guard: only push if not already notified
+    let pushResult = null;
+    if (prevStatus !== 'notified' && entry.user_id) {
+      pushResult = await fcmService.sendToUser(entry.user_id, {
+        title: '🔔 Your Table is Ready!',
+        body: `We have prepared a table for ${entry.pax || 2} guests! Please proceed to the host desk.`,
+        data: {
+          type: 'queue_ready',
+          queueId: id,
+          queueNumber: String(entry.queue_number || '')
+        },
+        type: 'queue_ready'
+      });
+    }
+
+    res.json({ success: true, entry: updated, push: pushResult });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk queue notification for multiple entries at once
+app.post('/api/queue/notify-batch', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids array is required' });
+    }
+
+    const { data: entries, error } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id, status, pax, queue_number')
+      .in('id', ids);
+
+    if (error) throw error;
+
+    // Filter to entries transitioning to notified
+    const toNotify = (entries || []).filter(e => e.status !== 'notified');
+    const toNotifyIds = toNotify.map(e => e.id);
+
+    if (toNotifyIds.length > 0) {
+      await supabaseAdmin
+        .from('queue_entries')
+        .update({ status: 'notified' })
+        .in('id', toNotifyIds);
+    }
+
+    const userIdsToPush = toNotify.map(e => e.user_id).filter(Boolean);
+    const pushResult = await fcmService.sendBatchToUsers(userIdsToPush, {
+      title: '🔔 Your Table is Ready!',
+      body: 'Your table is now ready! Please head to the reception.',
+      data: { type: 'queue_ready' },
+      type: 'queue_ready'
+    });
+
+    res.json({
+      success: true,
+      notified_count: toNotifyIds.length,
+      push_result: pushResult
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update queue entry status with transition guard
+app.patch('/api/queue/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!['waiting', 'notified', 'seated', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid queue status' });
+    }
+
+    const { data: entry, error: fetchErr } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id, status, pax, queue_number')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !entry) {
+      return res.status(404).json({ error: 'Queue entry not found' });
+    }
+
+    const prevStatus = entry.status;
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('queue_entries')
+      .update({ status })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // If transitioned to 'notified', dispatch FCM notification
+    if (prevStatus !== 'notified' && status === 'notified' && entry.user_id) {
+      fcmService.sendToUser(entry.user_id, {
+        title: '🔔 Your Table is Ready!',
+        body: `We have prepared a table for ${entry.pax || 2} guests! Please proceed to the host desk.`,
+        data: {
+          type: 'queue_ready',
+          queueId: id,
+          queueNumber: String(entry.queue_number || '')
+        },
+        type: 'queue_ready'
+      }).catch(err => console.error('[FCM] Queue notify error:', err.message));
+    }
+
+    res.json({ success: true, entry: updated });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1085,6 +1454,28 @@ app.post('/api/service-requests', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Dispatch real-time push alert to staff topic
+    try {
+      const { data: tableData } = await supabaseAdmin
+        .from('restaurant_tables')
+        .select('table_number')
+        .eq('id', table_id)
+        .maybeSingle();
+      const tNum = tableData?.table_number || table_id;
+      fcmService.sendToTopic('staff-service-calls', {
+        title: '🛎️ Guest Service Request',
+        body: `Table #${tNum} requested: ${request_type.toUpperCase()}`,
+        data: {
+          type: 'service_request',
+          requestId: data.id,
+          tableId: table_id,
+          tableNumber: String(tNum),
+          requestType: request_type
+        }
+      }).catch(err => console.error('[FCM] Staff service call error:', err.message));
+    } catch (_) {}
+
     res.status(201).json({ message: 'Request sent to staff', request: data });
   } catch (error) {
     res.status(500).json({ error: error.message });

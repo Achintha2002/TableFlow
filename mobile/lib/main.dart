@@ -4,6 +4,7 @@ import 'providers/cart_provider.dart';
 import 'core/theme.dart';
 import 'core/routes.dart';
 import 'services/supabase_service.dart';
+import 'services/fcm_service.dart';
 import 'widgets/notification_wrapper.dart';
 
 import 'providers/settings_provider.dart';
@@ -13,6 +14,9 @@ void main() async {
   
   // Initialize Supabase real-time connection
   await SupabaseService.initialize();
+  
+  // Initialize FCM service with platform guards
+  await FCMService.initialize();
   
   runApp(const TableFlowApp());
 }
