@@ -18,11 +18,26 @@ class _MenuScreenState extends State<MenuScreen> {
   List<Map<String, dynamic>> _menuItems = [];
   bool _isLoading = true;
   String _selectedCategory = 'All';
+  final ScrollController _scrollController = ScrollController();
+  bool _isCollapsed = false;
 
   @override
   void initState() {
     super.initState();
     _fetchMenu();
+    _scrollController.addListener(() {
+      // Collapsed when scrolled past the expanded area minus the AppBar height
+      final collapsed = _scrollController.offset > (140.0 - kToolbarHeight);
+      if (collapsed != _isCollapsed) {
+        setState(() => _isCollapsed = collapsed);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchMenu() async {
@@ -53,82 +68,182 @@ class _MenuScreenState extends State<MenuScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
-          // App Bar with Hero title
+          // ── Animated SliverAppBar ──────────────────────────────
           SliverAppBar(
-            expandedHeight: 140.0,
+            expandedHeight: 160.0,
             floating: false,
             pinned: true,
+            snap: false,
             elevation: 0,
-            backgroundColor: AppTheme.background,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              title: Text(
-                'Menu',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  fontFamily: 'Playfair Display',
-                  color: AppTheme.secondary,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              centerTitle: false,
+            backgroundColor: Colors.transparent,
+            // Frosted glass collapsed bar
+            flexibleSpace: LayoutBuilder(
+              builder: (context, constraints) {
+                // How far we've scrolled (0.0 → 1.0)
+                final expandedHeight = 160.0;
+                final collapsedHeight = kToolbarHeight;
+                final scrolled = ((expandedHeight - constraints.maxHeight) /
+                        (expandedHeight - collapsedHeight))
+                    .clamp(0.0, 1.0);
+
+                return ClipRect(
+                  child: BackdropFilter(
+                    // Only blur when collapsed
+                    filter: ImageFilter.blur(
+                      sigmaX: scrolled * 18,
+                      sigmaY: scrolled * 18,
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.background.withValues(
+                            alpha: 0.4 + scrolled * 0.55),
+                        border: scrolled > 0.5
+                            ? Border(
+                                bottom: BorderSide(
+                                  color: AppTheme.secondary
+                                      .withValues(alpha: 0.08 * scrolled),
+                                ),
+                              )
+                            : null,
+                      ),
+                      child: SafeArea(
+                        child: Stack(
+                          children: [
+                            // ── Big expanded title (fades out) ──────
+                            Positioned(
+                              left: 24,
+                              bottom: 20,
+                              right: 24,
+                              child: Opacity(
+                                opacity: (1.0 - scrolled * 2.5).clamp(0.0, 1.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Menu',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .displayLarge
+                                          ?.copyWith(
+                                            fontFamily: 'Playfair Display',
+                                            color: AppTheme.secondary,
+                                            fontSize: 38,
+                                            fontWeight: FontWeight.bold,
+                                            height: 1.1,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // ── Compact collapsed title (fades in) ──
+                            Positioned.fill(
+                              child: Opacity(
+                                opacity: ((scrolled - 0.6) * 2.5)
+                                    .clamp(0.0, 1.0),
+                                child: Center(
+                                  child: Text(
+                                    'Menu',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(
+                                          fontFamily: 'Playfair Display',
+                                          color: AppTheme.secondary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 20,
+                                          letterSpacing: 0.5,
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          
-          // Subtitle
+
+          // ── Subtitle ──────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
               child: Text(
                 'Explore our seasonal offerings, crafted with intention and presented with care.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontSize: 16,
-                  height: 1.5,
-                  color: AppTheme.secondary.withValues(alpha: 0.7),
-                ),
+                      fontSize: 15,
+                      height: 1.5,
+                      color: AppTheme.secondary.withValues(alpha: 0.65),
+                    ),
               ),
             ),
           ),
-          
-          // Sticky Categories Filter
+
+          // ── Sticky Category Chips ─────────────────────────────
           SliverPersistentHeader(
             pinned: true,
             delegate: _StickyCategoryDelegate(
-              child: Container(
-                color: AppTheme.background.withValues(alpha: 0.95),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                  child: Row(
-                    children: [
-                      _buildCategoryChip('All'),
-                      const SizedBox(width: 12),
-                      _buildCategoryChip('Starters'),
-                      const SizedBox(width: 12),
-                      _buildCategoryChip('Mains'),
-                      const SizedBox(width: 12),
-                      _buildCategoryChip('Desserts'),
-                      const SizedBox(width: 12),
-                      _buildCategoryChip('Drinks'),
-                    ],
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.background.withValues(alpha: 0.88),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.secondary.withValues(alpha: 0.07),
+                        ),
+                      ),
+                    ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24.0, vertical: 14.0),
+                      child: Row(
+                        children: [
+                          _buildCategoryChip('All'),
+                          const SizedBox(width: 10),
+                          _buildCategoryChip('Starters'),
+                          const SizedBox(width: 10),
+                          _buildCategoryChip('Mains'),
+                          const SizedBox(width: 10),
+                          _buildCategoryChip('Desserts'),
+                          const SizedBox(width: 10),
+                          _buildCategoryChip('Drinks'),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-          
-          // Menu Items List
-          _isLoading 
+
+          // ── Menu Items ────────────────────────────────────────
+          _isLoading
               ? const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+                  child: Center(
+                      child: CircularProgressIndicator(
+                          color: AppTheme.primary)),
                 )
               : _filteredItems.isEmpty
                   ? const SliverFillRemaining(
-                      child: Center(child: Text("No items available in this category.")),
+                      child: Center(
+                          child:
+                              Text("No items available in this category.")),
                     )
                   : SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24.0, vertical: 16.0),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
@@ -161,11 +276,11 @@ class _MenuScreenState extends State<MenuScreen> {
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 9),
           decoration: BoxDecoration(
             color: isSelected ? AppTheme.primary : AppTheme.white,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: isSelected 
+            boxShadow: isSelected
                 ? [
                     BoxShadow(
                       color: AppTheme.primary.withValues(alpha: 0.3),
@@ -181,7 +296,9 @@ class _MenuScreenState extends State<MenuScreen> {
                     )
                   ],
             border: Border.all(
-              color: isSelected ? Colors.transparent : AppTheme.secondary.withValues(alpha: 0.1),
+              color: isSelected
+                  ? Colors.transparent
+                  : AppTheme.secondary.withValues(alpha: 0.1),
             ),
           ),
           child: Text(
@@ -190,6 +307,7 @@ class _MenuScreenState extends State<MenuScreen> {
               color: isSelected ? AppTheme.white : AppTheme.secondary,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.5,
+              fontSize: 13,
             ),
           ),
         ),
@@ -202,7 +320,8 @@ class _MenuScreenState extends State<MenuScreen> {
     final title = item['name'] ?? '';
     final description = item['description'] ?? '';
     final price = (item['price'] as num?)?.toDouble() ?? 0.0;
-    final imageUrl = item['image_url'] ?? 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop';
+    final imageUrl = item['image_url'] ??
+        'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop';
     final hasCustomizations = item['customizations'] != null;
 
     return Container(
@@ -243,11 +362,13 @@ class _MenuScreenState extends State<MenuScreen> {
             if (hasCustomizations) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppTheme.tertiary.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.tertiary.withValues(alpha: 0.5)),
+                  border: Border.all(
+                      color: AppTheme.tertiary.withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -276,23 +397,29 @@ class _MenuScreenState extends State<MenuScreen> {
                     children: [
                       Text(
                         title,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontFamily: 'Playfair Display',
-                          fontSize: 23,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.white,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(
+                              fontFamily: 'Playfair Display',
+                              fontSize: 23,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.white,
+                            ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         description,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.white.withValues(alpha: 0.8),
-                          height: 1.35,
-                          fontSize: 13,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color: AppTheme.white.withValues(alpha: 0.8),
+                              height: 1.35,
+                              fontSize: 13,
+                            ),
                       ),
                     ],
                   ),
@@ -303,14 +430,18 @@ class _MenuScreenState extends State<MenuScreen> {
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppTheme.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.white.withValues(alpha: 0.3)),
+                        border: Border.all(
+                            color: AppTheme.white.withValues(alpha: 0.3)),
                       ),
                       child: Text(
-                        hasCustomizations ? 'From LKR ${price.toStringAsFixed(0)}' : 'LKR ${price.toStringAsFixed(0)}',
+                        hasCustomizations
+                            ? 'From LKR ${price.toStringAsFixed(0)}'
+                            : 'LKR ${price.toStringAsFixed(0)}',
                         style: const TextStyle(
                           color: AppTheme.white,
                           fontWeight: FontWeight.bold,
@@ -330,12 +461,14 @@ class _MenuScreenState extends State<MenuScreen> {
                   if (hasCustomizations) {
                     ItemCustomizationSheet.show(context, menuItem: item);
                   } else {
-                    context.read<CartProvider>().addItem(id, title, price, imageUrl);
+                    context.read<CartProvider>().addItem(
+                        id, title, price, imageUrl);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('$title added to cart'),
                         behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
                         action: SnackBarAction(
                           label: 'View Cart',
                           textColor: AppTheme.tertiary,
@@ -360,11 +493,15 @@ class _MenuScreenState extends State<MenuScreen> {
                     if (hasCustomizations) ...[
                       const Icon(Icons.tune, size: 18),
                       const SizedBox(width: 8),
-                      const Text('Customize & Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const Text('Customize & Order',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
                     ] else ...[
                       const Icon(Icons.add_shopping_cart, size: 18),
                       const SizedBox(width: 8),
-                      const Text('Add to Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const Text('Add to Order',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ],
                 ),
@@ -376,6 +513,7 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 }
+
 
 class _StickyCategoryDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
