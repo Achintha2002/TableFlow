@@ -19,19 +19,11 @@ class _MenuScreenState extends State<MenuScreen> {
   bool _isLoading = true;
   String _selectedCategory = 'All';
   final ScrollController _scrollController = ScrollController();
-  bool _isCollapsed = false;
 
   @override
   void initState() {
     super.initState();
     _fetchMenu();
-    _scrollController.addListener(() {
-      // Collapsed when scrolled past the expanded area minus the AppBar height
-      final collapsed = _scrollController.offset > (140.0 - kToolbarHeight);
-      if (collapsed != _isCollapsed) {
-        setState(() => _isCollapsed = collapsed);
-      }
-    });
   }
 
   @override
@@ -229,36 +221,39 @@ class _MenuScreenState extends State<MenuScreen> {
           ),
 
           // ── Menu Items ────────────────────────────────────────
-          _isLoading
-              ? const SliverFillRemaining(
-                  child: Center(
-                      child: CircularProgressIndicator(
-                          color: AppTheme.primary)),
-                )
-              : _filteredItems.isEmpty
-                  ? const SliverFillRemaining(
-                      child: Center(
-                          child:
-                              Text("No items available in this category.")),
-                    )
-                  : SliverPadding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24.0, vertical: 16.0),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final item = _filteredItems[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 24.0),
-                              child: _buildMenuItem(context, item),
-                            );
-                          },
-                          childCount: _filteredItems.length,
-                        ),
-                      ),
-                    ),
-          // Padding for floating bottom nav
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          if (_isLoading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: CircularProgressIndicator(color: AppTheme.primary),
+              ),
+            )
+          else if (_filteredItems.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text("No items available in this category."),
+              ),
+            )
+          else ...[
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0, vertical: 16.0),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final item = _filteredItems[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 24.0),
+                      child: _buildMenuItem(context, item),
+                    );
+                  },
+                  childCount: _filteredItems.length,
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
         ],
       ),
     );
@@ -528,7 +523,7 @@ class _StickyCategoryDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return child;
+    return SizedBox.expand(child: child);
   }
 
   @override
