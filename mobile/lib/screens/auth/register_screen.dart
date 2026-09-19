@@ -27,8 +27,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
       );
-      // Navigate to Home after successful registration
-      if (mounted) context.go('/home');
+      // Navigate to Onboarding for new users
+      if (mounted) context.go('/onboarding');
     } on AuthException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
@@ -43,7 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final response = await SupabaseService.signInWithGoogle();
       if (response != null && mounted) {
-        context.go('/home');
+        context.go('/onboarding');
       }
     } on AuthException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

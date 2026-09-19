@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 
 // ─────────────────────────────────────────────
@@ -11,7 +12,7 @@ class _OnboardingSlide {
   final String title;
   final String subtitle;
   final String description;
-  final IconData icon;
+  final String imagePath;
   final Color accentColor;
   final List<Color> gradientColors;
 
@@ -19,7 +20,7 @@ class _OnboardingSlide {
     required this.title,
     required this.subtitle,
     required this.description,
-    required this.icon,
+    required this.imagePath,
     required this.accentColor,
     required this.gradientColors,
   });
@@ -31,7 +32,7 @@ const List<_OnboardingSlide> _slides = [
     subtitle: 'Boutique Dining, Reimagined',
     description:
         'Experience restaurant dining the way it was meant to be — effortless, elegant, and entirely at your fingertips.',
-    icon: Icons.restaurant_menu_rounded,
+    imagePath: 'assets/images/onboarding_1.jpg',
     accentColor: AppTheme.primary,
     gradientColors: [Color(0xFFB87F5C), Color(0xFFD4AF37)],
   ),
@@ -40,7 +41,7 @@ const List<_OnboardingSlide> _slides = [
     subtitle: 'From table to taste',
     description:
         'Browse our curated menu, add to your cart, and place orders in seconds. Track your order status in real time.',
-    icon: Icons.shopping_bag_outlined,
+    imagePath: 'assets/images/onboarding_2.jpg',
     accentColor: Color(0xFF3A2E28),
     gradientColors: [Color(0xFF3A2E28), Color(0xFF6B4F3A)],
   ),
@@ -49,7 +50,7 @@ const List<_OnboardingSlide> _slides = [
     subtitle: 'Your table awaits',
     description:
         'Book a table, join the live queue, or scan a QR code on arrival. Your premium dining experience starts before you walk in.',
-    icon: Icons.event_seat_rounded,
+    imagePath: 'assets/images/onboarding_3.jpg',
     accentColor: AppTheme.tertiary,
     gradientColors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
   ),
@@ -115,7 +116,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _markSeenAndNavigate(BuildContext ctx) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_seen', true);
-    if (ctx.mounted) ctx.go('/login');
+    if (!ctx.mounted) return;
+
+    // If the user just registered they are already authenticated → go home
+    // Otherwise (first launch, not logged in) → go to login
+    final isAuth = Supabase.instance.client.auth.currentSession != null;
+    ctx.go(isAuth ? '/home' : '/login');
   }
 
   void _nextPage() {
@@ -343,7 +349,7 @@ class _SlideContent extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-//  Illustration card with gradient background
+//  Image-based illustration card
 // ─────────────────────────────────────────────
 class _IllustrationCard extends StatelessWidget {
   final _OnboardingSlide slide;
@@ -353,43 +359,23 @@ class _IllustrationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 260,
-      height: 260,
+      width: 300,
+      height: 280,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [
-            slide.gradientColors.first.withValues(alpha: 0.18),
-            slide.gradientColors.last.withValues(alpha: 0.06),
-            AppTheme.background,
-          ],
-          stops: const [0.0, 0.65, 1.0],
-        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: slide.gradientColors.first.withValues(alpha: 0.22),
+            blurRadius: 32,
+            offset: const Offset(0, 14),
+          ),
+        ],
       ),
-      child: Center(
-        child: Container(
-          width: 160,
-          height: 160,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: slide.gradientColors,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: slide.gradientColors.first.withValues(alpha: 0.35),
-                blurRadius: 32,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Icon(
-            slide.icon,
-            size: 72,
-            color: Colors.white.withValues(alpha: 0.95),
-          ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: Image.asset(
+          slide.imagePath,
+          fit: BoxFit.cover,
         ),
       ),
     );

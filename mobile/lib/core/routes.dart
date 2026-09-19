@@ -62,17 +62,18 @@ class AppRoutes {
       final isAuth = Supabase.instance.client.auth.currentSession != null;
       final isSplash = state.matchedLocation == splash;
       final isOnboarding = state.matchedLocation == onboarding;
-      final isAuthRoute = state.matchedLocation == login ||
-          state.matchedLocation == register ||
-          isOnboarding;
+      final isLoginOrRegister = state.matchedLocation == login ||
+          state.matchedLocation == register;
 
-      // If not logged in and trying to access a protected route, go to login
-      if (!isAuth && !isSplash && !isAuthRoute) {
+      // If not logged in and trying to access a protected route, redirect to login
+      // (onboarding is always allowed — accessible to both auth & unauth users)
+      if (!isAuth && !isSplash && !isLoginOrRegister && !isOnboarding) {
         return login;
       }
 
-      // If logged in and trying to access auth screens, splash or onboarding → go home
-      if (isAuth && (isAuthRoute || isSplash)) {
+      // If logged in and on splash or login/register screens → go home
+      // But allow onboarding for newly registered users
+      if (isAuth && (isLoginOrRegister || isSplash)) {
         return home;
       }
 
