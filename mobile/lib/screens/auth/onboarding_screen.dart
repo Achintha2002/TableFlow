@@ -1,64 +1,94 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 
-// ─────────────────────────────────────────────
-//  Data model for each onboarding slide
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+//  Data model for each realistic onboarding slide
+// ─────────────────────────────────────────────────────────────────────────────
 class _OnboardingSlide {
-  final String title;
-  final String subtitle;
+  final String brandSubtitle;
+  final String headline1;
+  final String headline2;
+  final String headline3;
   final String description;
   final String imagePath;
-  final Color accentColor;
-  final List<Color> gradientColors;
+  final String floatingBadge;
+  final IconData badgeIcon;
+  final List<Color> bgGradient;
+  final List<Color> waveGradient;
+  final List<Color> backWaveGradient;
+  final List<Color> buttonGradient;
 
   const _OnboardingSlide({
-    required this.title,
-    required this.subtitle,
+    required this.brandSubtitle,
+    required this.headline1,
+    required this.headline2,
+    required this.headline3,
     required this.description,
     required this.imagePath,
-    required this.accentColor,
-    required this.gradientColors,
+    required this.floatingBadge,
+    required this.badgeIcon,
+    required this.bgGradient,
+    required this.waveGradient,
+    required this.backWaveGradient,
+    required this.buttonGradient,
   });
 }
 
 const List<_OnboardingSlide> _slides = [
   _OnboardingSlide(
-    title: 'TableFlow',
-    subtitle: 'Boutique Dining, Reimagined',
+    brandSubtitle: 'Boutique Dining, Reimagined',
+    headline1: 'Elegance.',
+    headline2: 'Ambience.',
+    headline3: 'Perfection.',
     description:
-        'Experience restaurant dining the way it was meant to be — effortless, elegant, and entirely at your fingertips.',
+        'Experience restaurant dining the way it was meant to be — effortless, sophisticated, and entirely at your fingertips.',
     imagePath: 'assets/images/onboarding_1.jpg',
-    accentColor: AppTheme.primary,
-    gradientColors: [Color(0xFFB87F5C), Color(0xFFD4AF37)],
+    floatingBadge: 'Michelin Star Atmosphere',
+    badgeIcon: Icons.auto_awesome,
+    bgGradient: [Color(0xFFFCF5EE), Color(0xFFF6DEC9), Color(0xFFE89A65)],
+    waveGradient: [Color(0xFFCA6B33), Color(0xFFB05322), Color(0xFF7E350E)],
+    backWaveGradient: [Color(0xFFE38848), Color(0xFFC46429)],
+    buttonGradient: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
   ),
   _OnboardingSlide(
-    title: 'Order & Pay',
-    subtitle: 'From table to taste',
+    brandSubtitle: 'From Kitchen to Table',
+    headline1: 'Curated Menus.',
+    headline2: 'Instant Orders.',
+    headline3: 'Live Tracking.',
     description:
-        'Browse our curated menu, add to your cart, and place orders in seconds. Track your order status in real time.',
+        'Explore chef-crafted dishes, customize every ingredient, and track your order preparation in real time.',
     imagePath: 'assets/images/onboarding_2.jpg',
-    accentColor: Color(0xFF3A2E28),
-    gradientColors: [Color(0xFF3A2E28), Color(0xFF6B4F3A)],
+    floatingBadge: "Artisanal Gourmet Flavors",
+    badgeIcon: Icons.restaurant_menu_rounded,
+    bgGradient: [Color(0xFFFAF0E6), Color(0xFFF2D1B8), Color(0xFFDC8B52)],
+    waveGradient: [Color(0xFFB85A23), Color(0xFF964016), Color(0xFF67250A)],
+    backWaveGradient: [Color(0xFFD8783A), Color(0xFFB2531E)],
+    buttonGradient: [Color(0xFFE5A642), Color(0xFFB85A23)],
   ),
   _OnboardingSlide(
-    title: 'Reserve & Relax',
-    subtitle: 'Your table awaits',
+    brandSubtitle: 'Priority VIP Access',
+    headline1: 'VIP Seating.',
+    headline2: 'Zero Queues.',
+    headline3: 'Peace of Mind.',
     description:
-        'Book a table, join the live queue, or scan a QR code on arrival. Your premium dining experience starts before you walk in.',
+        'Reserve your preferred table in seconds, join live queues effortlessly, or scan your table QR code upon arrival.',
     imagePath: 'assets/images/onboarding_3.jpg',
-    accentColor: AppTheme.tertiary,
-    gradientColors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
+    floatingBadge: 'Guaranteed Priority Reservation',
+    badgeIcon: Icons.verified_rounded,
+    bgGradient: [Color(0xFFF9F1E6), Color(0xFFEED4B6), Color(0xFFDF9B5D)],
+    waveGradient: [Color(0xFFA6642C), Color(0xFF834418), Color(0xFF592B0A)],
+    backWaveGradient: [Color(0xFFC78342), Color(0xFF9E5C25)],
+    buttonGradient: [Color(0xFFD4AF37), Color(0xFF9E652E)],
   ),
 ];
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 //  OnboardingScreen widget
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -76,30 +106,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late final Animation<double> _entryFade;
   late final Animation<Offset> _entrySlide;
 
-  // Icon bounce animation
-  late final AnimationController _iconController;
-  late final Animation<double> _iconBounce;
+  // Badge subtle float
+  late final AnimationController _badgeFloatController;
+  late final Animation<double> _badgeFloat;
 
   @override
   void initState() {
     super.initState();
 
-    // Entry fade + slide
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 750),
     );
     _entryFade = CurvedAnimation(parent: _entryController, curve: Curves.easeOut);
-    _entrySlide = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+    _entrySlide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic));
 
-    // Icon float animation
-    _iconController = AnimationController(
+    _badgeFloatController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 2400),
     )..repeat(reverse: true);
-    _iconBounce = Tween<double>(begin: -8.0, end: 8.0).animate(
-      CurvedAnimation(parent: _iconController, curve: Curves.easeInOut),
+    _badgeFloat = Tween<double>(begin: -4.0, end: 4.0).animate(
+      CurvedAnimation(parent: _badgeFloatController, curve: Curves.easeInOut),
     );
 
     _entryController.forward();
@@ -109,7 +137,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void dispose() {
     _pageController.dispose();
     _entryController.dispose();
-    _iconController.dispose();
+    _badgeFloatController.dispose();
     super.dispose();
   }
 
@@ -124,7 +152,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void _nextPage() {
     if (_currentPage < _slides.length - 1) {
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 550),
         curve: Curves.easeInOutCubic,
       );
     } else {
@@ -134,113 +162,158 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final slide = _slides[_currentPage];
+    final currentSlide = _slides[_currentPage];
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: SafeArea(
-        child: FadeTransition(
-          opacity: _entryFade,
-          child: SlideTransition(
-            position: _entrySlide,
-            child: Column(
-              children: [
-                // ── Skip button ──────────────────────────────────────────
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 16, 20, 0),
-                    child: TextButton(
-                      onPressed: () => _markSeenAndNavigate(context),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.secondary.withValues(alpha: 0.5),
-                      ),
-                      child: Text(
-                        'Skip',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── PageView ─────────────────────────────────────────────
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pageController,
-                    physics: const BouncingScrollPhysics(),
-                    onPageChanged: (i) => setState(() => _currentPage = i),
-                    itemCount: _slides.length,
-                    itemBuilder: (context, index) {
-                      return _SlideContent(
-                        slide: _slides[index],
-                        iconBounce: _iconBounce,
-                        isActive: index == _currentPage,
-                      );
-                    },
-                  ),
-                ),
-
-                // ── Dots ─────────────────────────────────────────────────
-                _DotIndicator(
-                  count: _slides.length,
-                  current: _currentPage,
-                  activeColor: slide.accentColor,
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── CTA button ───────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: _AnimatedCTAButton(
-                    label: _currentPage == _slides.length - 1
-                        ? 'Get Started'
-                        : 'Continue',
-                    gradient: slide.gradientColors,
-                    onTap: _nextPage,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Already have account (only when not logged in) ────────
-                if (Supabase.instance.client.auth.currentSession == null &&
-                    _currentPage == _slides.length - 1)
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: currentSlide.bgGradient,
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: FadeTransition(
+            opacity: _entryFade,
+            child: SlideTransition(
+              position: _entrySlide,
+              child: Column(
+                children: [
+                  // ── Top Bar with Logo, Tagline & Skip ─────────────────────
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Text(
-                          'Already have an account?',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: AppTheme.secondary.withValues(alpha: 0.6),
+                        // Glowing Brand Emblem
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFD4AF37).withValues(alpha: 0.45),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.dinner_dining_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
                           ),
                         ),
-                        TextButton(
-                          onPressed: () => _markSeenAndNavigate(context),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppTheme.primary,
+                        const SizedBox(width: 12),
+                        // Brand Name & Dynamic Subtitle
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'TableFlow',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.6,
+                                  color: const Color(0xFF2E1C12),
+                                ),
+                              ),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                child: Text(
+                                  currentSlide.brandSubtitle,
+                                  key: ValueKey(currentSlide.brandSubtitle),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.0,
+                                    color: const Color(0xFF7A4828),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          child: Text(
-                            'Sign in',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
+                        ),
+                        // Glassmorphic Skip Pill
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.35),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.60),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(20),
+                                  onTap: () => _markSeenAndNavigate(context),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 6,
+                                    ),
+                                    child: Text(
+                                      'Skip',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF2E1C12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  )
-                else
-                  const SizedBox(height: 24),
-              ],
+                  ),
+
+                  // ── PageView for Realistic Photo & Content ────────────────
+                  Expanded(
+                    child: PageView.builder(
+                      controller: _pageController,
+                      physics: const BouncingScrollPhysics(),
+                      onPageChanged: (i) => setState(() => _currentPage = i),
+                      itemCount: _slides.length,
+                      itemBuilder: (context, index) {
+                        return _SlideBody(
+                          slide: _slides[index],
+                          badgeFloat: _badgeFloat,
+                          isActive: index == _currentPage,
+                        );
+                      },
+                    ),
+                  ),
+
+                  // ── Bottom Wave Overlay with Typography & Navigation ──────
+                  _BottomWaveCard(
+                    slide: currentSlide,
+                    currentPage: _currentPage,
+                    pageCount: _slides.length,
+                    onNext: _nextPage,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -249,93 +322,238 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 }
 
-// ─────────────────────────────────────────────
-//  Individual slide content
-// ─────────────────────────────────────────────
-class _SlideContent extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+//  Upper Realistic Photo Section with Floating Glass Badge
+// ─────────────────────────────────────────────────────────────────────────────
+class _SlideBody extends StatelessWidget {
   final _OnboardingSlide slide;
-  final Animation<double> iconBounce;
+  final Animation<double> badgeFloat;
   final bool isActive;
 
-  const _SlideContent({
+  const _SlideBody({
     required this.slide,
-    required this.iconBounce,
+    required this.badgeFloat,
     required this.isActive,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: Stack(
         children: [
-          const SizedBox(height: 16),
-
-          // ── Illustration card ──────────────────────────────────────
-          Expanded(
-            flex: 5,
-            child: Center(
-              child: AnimatedBuilder(
-                animation: iconBounce,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, isActive ? iconBounce.value : 0),
-                    child: child,
-                  );
-                },
-                child: _IllustrationCard(slide: slide),
+          // ── Cinematic Realistic Photograph Card ────────────────────
+          Positioned.fill(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.22),
+                    blurRadius: 28,
+                    offset: const Offset(0, 14),
+                  ),
+                  BoxShadow(
+                    color: slide.waveGradient.first.withValues(alpha: 0.28),
+                    blurRadius: 36,
+                    offset: const Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.asset(
+                      slide.imagePath,
+                      fit: BoxFit.cover,
+                    ),
+                    // Ambient light gradient to soften top and bottom
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.15),
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.35),
+                          ],
+                          stops: const [0.0, 0.5, 1.0],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
 
-          const SizedBox(height: 36),
+          // ── Floating Luxury Glass Badge ────────────────────────────
+          Positioned(
+            bottom: 38,
+            left: 16,
+            right: 16,
+            child: AnimatedBuilder(
+              animation: badgeFloat,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, isActive ? badgeFloat.value : 0),
+                  child: child,
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.42),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.25),
+                          ),
+                          child: Icon(
+                            slide.badgeIcon,
+                            color: const Color(0xFFFFD54F),
+                            size: 15,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            slide.floatingBadge,
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-          // ── Text content ──────────────────────────────────────────
-          Expanded(
-            flex: 3,
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bottom Multi-Layer Organic Wave Card (Inspired by reference design)
+// ─────────────────────────────────────────────────────────────────────────────
+class _BottomWaveCard extends StatelessWidget {
+  final _OnboardingSlide slide;
+  final int currentPage;
+  final int pageCount;
+  final VoidCallback onNext;
+
+  const _BottomWaveCard({
+    required this.slide,
+    required this.currentPage,
+    required this.pageCount,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 330,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // ── Layer 1: 3D Layered Wave Painter with Ambient Elevation ──
+          CustomPaint(
+            painter: _LayeredWavePainter(
+              frontColors: slide.waveGradient,
+              backColors: slide.backWaveGradient,
+            ),
+          ),
+
+          // ── Layer 2: Foreground Typography & Controls ──────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 48, 28, 24),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Accent line
-                Container(
-                  width: 48,
-                  height: 3,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: slide.gradientColors),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                // ── 3-Line Punchy Statement (Matches reference design) ──
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${slide.headline1}\n${slide.headline2}\n${slide.headline3}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 27,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.15,
+                        letterSpacing: -0.3,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            offset: const Offset(0, 2),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      slide.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white.withValues(alpha: 0.90),
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
 
-                Text(
-                  slide.title,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.playfairDisplay(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.secondary,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  slide.subtitle,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                    color: slide.accentColor,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  slide.description,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    height: 1.65,
-                    color: AppTheme.secondary.withValues(alpha: 0.65),
-                  ),
+                // ── Bottom Controls: Segmented Progress & CTA Button ────
+                Column(
+                  children: [
+                    // Segmented Story/Bar Indicator (like reference design)
+                    _SegmentedProgressBar(
+                      count: pageCount,
+                      current: currentPage,
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Primary Glow CTA Button
+                    _GlowingCTAButton(
+                      label: currentPage == pageCount - 1
+                          ? 'Get Started'
+                          : 'Continue',
+                      gradient: slide.buttonGradient,
+                      isLast: currentPage == pageCount - 1,
+                      onTap: onNext,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -346,71 +564,122 @@ class _SlideContent extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Image-based illustration card
-// ─────────────────────────────────────────────
-class _IllustrationCard extends StatelessWidget {
-  final _OnboardingSlide slide;
+// ─────────────────────────────────────────────────────────────────────────────
+//  Custom Wave Painter with 3D Bezier Curves and Dynamic Shadows
+// ─────────────────────────────────────────────────────────────────────────────
+class _LayeredWavePainter extends CustomPainter {
+  final List<Color> frontColors;
+  final List<Color> backColors;
 
-  const _IllustrationCard({required this.slide});
+  _LayeredWavePainter({
+    required this.frontColors,
+    required this.backColors,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 300,
-      height: 280,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: slide.gradientColors.first.withValues(alpha: 0.22),
-            blurRadius: 32,
-            offset: const Offset(0, 14),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: Image.asset(
-          slide.imagePath,
-          fit: BoxFit.cover,
-        ),
-      ),
+  void paint(Canvas canvas, Size size) {
+    // ── 1. Back Layer Wave (Secondary Crest) ─────────────────────
+    final backPath = Path();
+    backPath.moveTo(0, size.height * 0.12);
+    backPath.cubicTo(
+      size.width * 0.32, 0,
+      size.width * 0.70, size.height * 0.22,
+      size.width, size.height * 0.11,
     );
+    backPath.lineTo(size.width, size.height);
+    backPath.lineTo(0, size.height);
+    backPath.close();
+
+    // Elevation drop shadow for back wave
+    canvas.drawShadow(
+      backPath,
+      Colors.black.withValues(alpha: 0.28),
+      12.0,
+      false,
+    );
+
+    final backPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: backColors,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(backPath, backPaint);
+
+    // ── 2. Front Layer Wave (Primary Fluid Crest) ────────────────
+    final frontPath = Path();
+    frontPath.moveTo(0, size.height * 0.18);
+    frontPath.cubicTo(
+      size.width * 0.30, size.height * 0.27,
+      size.width * 0.65, size.height * 0.02,
+      size.width, size.height * 0.08,
+    );
+    frontPath.lineTo(size.width, size.height);
+    frontPath.lineTo(0, size.height);
+    frontPath.close();
+
+    // Elevation drop shadow for front wave
+    canvas.drawShadow(
+      frontPath,
+      Colors.black.withValues(alpha: 0.36),
+      18.0,
+      false,
+    );
+
+    final frontPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: frontColors,
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(frontPath, frontPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LayeredWavePainter oldDelegate) {
+    return oldDelegate.frontColors != frontColors ||
+        oldDelegate.backColors != backColors;
   }
 }
 
-// ─────────────────────────────────────────────
-//  Animated dot indicator
-// ─────────────────────────────────────────────
-class _DotIndicator extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+//  Modern Segmented Progress Bar (Directly from reference design)
+// ─────────────────────────────────────────────────────────────────────────────
+class _SegmentedProgressBar extends StatelessWidget {
   final int count;
   final int current;
-  final Color activeColor;
 
-  const _DotIndicator({
+  const _SegmentedProgressBar({
     required this.count,
     required this.current,
-    required this.activeColor,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(count, (i) {
-        final isActive = i == current;
+      children: List.generate(count, (index) {
+        final isActive = index == current;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOutCubic,
           margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: isActive ? 28 : 8,
-          height: 8,
+          height: 4.5,
+          width: isActive ? 48 : 20,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(3),
             color: isActive
-                ? activeColor
-                : AppTheme.secondary.withValues(alpha: 0.18),
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.35),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.70),
+                      blurRadius: 8,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
           ),
         );
       }),
@@ -418,79 +687,84 @@ class _DotIndicator extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-//  Gradient CTA button with tap animation
-// ─────────────────────────────────────────────
-class _AnimatedCTAButton extends StatefulWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+//  Luminous CTA Button with Spring Tap Physics
+// ─────────────────────────────────────────────────────────────────────────────
+class _GlowingCTAButton extends StatefulWidget {
   final String label;
   final List<Color> gradient;
+  final bool isLast;
   final VoidCallback onTap;
 
-  const _AnimatedCTAButton({
+  const _GlowingCTAButton({
     required this.label,
     required this.gradient,
+    required this.isLast,
     required this.onTap,
   });
 
   @override
-  State<_AnimatedCTAButton> createState() => _AnimatedCTAButtonState();
+  State<_GlowingCTAButton> createState() => _GlowingCTAButtonState();
 }
 
-class _AnimatedCTAButtonState extends State<_AnimatedCTAButton>
+class _GlowingCTAButtonState extends State<_GlowingCTAButton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _tapCtrl;
-  late final Animation<double> _tapScale;
+  late final AnimationController _tapController;
+  late final Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _tapCtrl = AnimationController(
+    _tapController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 100),
-      reverseDuration: const Duration(milliseconds: 200),
-      lowerBound: 0.95,
+      reverseDuration: const Duration(milliseconds: 180),
+      lowerBound: 0.96,
       upperBound: 1.0,
       value: 1.0,
     );
-    _tapScale = _tapCtrl;
+    _scaleAnimation = _tapController;
   }
 
   @override
   void dispose() {
-    _tapCtrl.dispose();
+    _tapController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => _tapCtrl.reverse(),
+      onTapDown: (_) => _tapController.reverse(),
       onTapUp: (_) async {
-        await _tapCtrl.forward();
+        await _tapController.forward();
         widget.onTap();
       },
-      onTapCancel: () => _tapCtrl.forward(),
+      onTapCancel: () => _tapController.forward(),
       child: ScaleTransition(
-        scale: _tapScale,
+        scale: _scaleAnimation,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOutCubic,
+          duration: const Duration(milliseconds: 350),
           width: double.infinity,
-          height: 56,
+          height: 54,
           decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
+              colors: widget.gradient,
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: widget.gradient,
             ),
-            borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: widget.gradient.first.withValues(alpha: 0.40),
+                color: widget.gradient.first.withValues(alpha: 0.50),
                 blurRadius: 18,
-                offset: const Offset(0, 6),
+                offset: const Offset(0, 8),
               ),
             ],
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.35),
+              width: 1,
+            ),
           ),
           child: Center(
             child: Row(
@@ -501,15 +775,17 @@ class _AnimatedCTAButtonState extends State<_AnimatedCTAButton>
                   style: GoogleFonts.inter(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
+                    letterSpacing: 0.6,
                     color: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(
-                  Icons.arrow_forward_rounded,
+                Icon(
+                  widget.isLast
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.arrow_forward_rounded,
                   color: Colors.white,
-                  size: 18,
+                  size: 19,
                 ),
               ],
             ),
