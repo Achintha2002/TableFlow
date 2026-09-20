@@ -482,6 +482,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     DateTime tempDate = _selectedDate;
     await showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
@@ -540,6 +541,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     DateTime tempTime = DateTime(2020, 1, 1, _selectedTime.hour, _selectedTime.minute);
     await showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(

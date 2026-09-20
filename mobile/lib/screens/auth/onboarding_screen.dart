@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Data model for each realistic onboarding slide
+//  Data model for authentic onboarding slides
 // ─────────────────────────────────────────────────────────────────────────────
 class _OnboardingSlide {
   final String brandSubtitle;
@@ -15,8 +15,6 @@ class _OnboardingSlide {
   final String headline3;
   final String description;
   final String imagePath;
-  final String floatingBadge;
-  final IconData badgeIcon;
   final List<Color> bgGradient;
   final List<Color> waveGradient;
   final List<Color> backWaveGradient;
@@ -29,8 +27,6 @@ class _OnboardingSlide {
     required this.headline3,
     required this.description,
     required this.imagePath,
-    required this.floatingBadge,
-    required this.badgeIcon,
     required this.bgGradient,
     required this.waveGradient,
     required this.backWaveGradient,
@@ -40,18 +36,16 @@ class _OnboardingSlide {
 
 const List<_OnboardingSlide> _slides = [
   _OnboardingSlide(
-    brandSubtitle: 'Boutique Dining, Reimagined',
+    brandSubtitle: 'Boutique Dining • Reimagined',
     headline1: 'Elegance.',
     headline2: 'Ambience.',
     headline3: 'Perfection.',
     description:
-        'Experience restaurant dining the way it was meant to be — effortless, sophisticated, and entirely at your fingertips.',
+        'Experience restaurant dining at its finest — effortless, warm, and entirely at your fingertips.',
     imagePath: 'assets/images/onboarding_1.jpg',
-    floatingBadge: 'Michelin Star Atmosphere',
-    badgeIcon: Icons.auto_awesome,
-    bgGradient: [Color(0xFFFCF5EE), Color(0xFFF6DEC9), Color(0xFFE89A65)],
-    waveGradient: [Color(0xFFCA6B33), Color(0xFFB05322), Color(0xFF7E350E)],
-    backWaveGradient: [Color(0xFFE38848), Color(0xFFC46429)],
+    bgGradient: [Color(0xFFFCF6F0), Color(0xFFF7E2CF), Color(0xFFEAA26F)],
+    waveGradient: [Color(0xFFC86731), Color(0xFFAD4E1D), Color(0xFF78310B)],
+    backWaveGradient: [Color(0xFFE28543), Color(0xFFC15F24)],
     buttonGradient: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
   ),
   _OnboardingSlide(
@@ -60,28 +54,24 @@ const List<_OnboardingSlide> _slides = [
     headline2: 'Instant Orders.',
     headline3: 'Live Tracking.',
     description:
-        'Explore chef-crafted dishes, customize every ingredient, and track your order preparation in real time.',
+        'Explore chef-crafted specialties, customize your meal, and track every course in real time.',
     imagePath: 'assets/images/onboarding_2.jpg',
-    floatingBadge: "Artisanal Gourmet Flavors",
-    badgeIcon: Icons.restaurant_menu_rounded,
-    bgGradient: [Color(0xFFFAF0E6), Color(0xFFF2D1B8), Color(0xFFDC8B52)],
-    waveGradient: [Color(0xFFB85A23), Color(0xFF964016), Color(0xFF67250A)],
-    backWaveGradient: [Color(0xFFD8783A), Color(0xFFB2531E)],
+    bgGradient: [Color(0xFFFBF1E8), Color(0xFFF3D4BC), Color(0xFFDE9159)],
+    waveGradient: [Color(0xFFB65620), Color(0xFF933C14), Color(0xFF642207)],
+    backWaveGradient: [Color(0xFFD67436), Color(0xFFAF4F1A)],
     buttonGradient: [Color(0xFFE5A642), Color(0xFFB85A23)],
   ),
   _OnboardingSlide(
-    brandSubtitle: 'Priority VIP Access',
+    brandSubtitle: 'Priority Table Access',
     headline1: 'VIP Seating.',
     headline2: 'Zero Queues.',
     headline3: 'Peace of Mind.',
     description:
-        'Reserve your preferred table in seconds, join live queues effortlessly, or scan your table QR code upon arrival.',
+        'Reserve your preferred table in seconds, join live queues seamlessly, or scan your table QR code.',
     imagePath: 'assets/images/onboarding_3.jpg',
-    floatingBadge: 'Guaranteed Priority Reservation',
-    badgeIcon: Icons.verified_rounded,
-    bgGradient: [Color(0xFFF9F1E6), Color(0xFFEED4B6), Color(0xFFDF9B5D)],
-    waveGradient: [Color(0xFFA6642C), Color(0xFF834418), Color(0xFF592B0A)],
-    backWaveGradient: [Color(0xFFC78342), Color(0xFF9E5C25)],
+    bgGradient: [Color(0xFFFAF3E8), Color(0xFFEED6B9), Color(0xFFE09F62)],
+    waveGradient: [Color(0xFFA36029), Color(0xFF804015), Color(0xFF562808)],
+    backWaveGradient: [Color(0xFFC5803E), Color(0xFF9B5822)],
     buttonGradient: [Color(0xFFD4AF37), Color(0xFF9E652E)],
   ),
 ];
@@ -97,18 +87,13 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  // Entry animation controller
   late final AnimationController _entryController;
   late final Animation<double> _entryFade;
   late final Animation<Offset> _entrySlide;
-
-  // Badge subtle float
-  late final AnimationController _badgeFloatController;
-  late final Animation<double> _badgeFloat;
 
   @override
   void initState() {
@@ -116,19 +101,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
     _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 750),
+      duration: const Duration(milliseconds: 700),
     );
     _entryFade = CurvedAnimation(parent: _entryController, curve: Curves.easeOut);
-    _entrySlide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
+    _entrySlide = Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero)
         .animate(CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic));
-
-    _badgeFloatController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
-    _badgeFloat = Tween<double>(begin: -4.0, end: 4.0).animate(
-      CurvedAnimation(parent: _badgeFloatController, curve: Curves.easeInOut),
-    );
 
     _entryController.forward();
   }
@@ -137,7 +114,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void dispose() {
     _pageController.dispose();
     _entryController.dispose();
-    _badgeFloatController.dispose();
     super.dispose();
   }
 
@@ -152,7 +128,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void _nextPage() {
     if (_currentPage < _slides.length - 1) {
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 550),
+        duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOutCubic,
       );
     } else {
@@ -166,7 +142,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
     return Scaffold(
       body: AnimatedContainer(
-        duration: const Duration(milliseconds: 500),
+        duration: const Duration(milliseconds: 450),
         curve: Curves.easeInOut,
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -183,99 +159,99 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               position: _entrySlide,
               child: Column(
                 children: [
-                  // ── Top Bar with Logo, Tagline & Skip ─────────────────────
+                  // ── Top Brand Header (Clean, balanced & centered) ─────────
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+                    child: Stack(
+                      alignment: Alignment.center,
                       children: [
-                        // Glowing Brand Emblem
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFD4AF37).withValues(alpha: 0.45),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
+                        // Centered Logo & Title
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFD4AF37).withValues(alpha: 0.40),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.dinner_dining_rounded,
-                              color: Colors.white,
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Brand Name & Dynamic Subtitle
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'TableFlow',
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.6,
-                                  color: const Color(0xFF2E1C12),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.dinner_dining_rounded,
+                                  color: Colors.white,
+                                  size: 20,
                                 ),
                               ),
-                              AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
-                                child: Text(
-                                  currentSlide.brandSubtitle,
-                                  key: ValueKey(currentSlide.brandSubtitle),
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 1.0,
-                                    color: const Color(0xFF7A4828),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'TableFlow',
+                              style: GoogleFonts.playfairDisplay(
+                                fontSize: 21,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                                color: const Color(0xFF2B1B12),
+                              ),
+                            ),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: Text(
+                                currentSlide.brandSubtitle,
+                                key: ValueKey(currentSlide.brandSubtitle),
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.8,
+                                  color: const Color(0xFF7A4526),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        // Skip button in top right
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.70),
+                                    width: 1,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Glassmorphic Skip Pill
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.35),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.60),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(20),
-                                  onTap: () => _markSeenAndNavigate(context),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 6,
-                                    ),
-                                    child: Text(
-                                      'Skip',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF2E1C12),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(18),
+                                    onTap: () => _markSeenAndNavigate(context),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 13,
+                                        vertical: 5,
+                                      ),
+                                      child: Text(
+                                        'Skip',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF2B1B12),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -288,7 +264,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                   ),
 
-                  // ── PageView for Realistic Photo & Content ────────────────
+                  // ── PageView with Authentic Photograph ────────────────────
                   Expanded(
                     child: PageView.builder(
                       controller: _pageController,
@@ -296,10 +272,29 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       onPageChanged: (i) => setState(() => _currentPage = i),
                       itemCount: _slides.length,
                       itemBuilder: (context, index) {
-                        return _SlideBody(
-                          slide: _slides[index],
-                          badgeFloat: _badgeFloat,
-                          isActive: index == _currentPage,
+                        final slide = _slides[index];
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(28),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.18),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: Image.asset(
+                                slide.imagePath,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                              ),
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -323,143 +318,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Upper Realistic Photo Section with Floating Glass Badge
-// ─────────────────────────────────────────────────────────────────────────────
-class _SlideBody extends StatelessWidget {
-  final _OnboardingSlide slide;
-  final Animation<double> badgeFloat;
-  final bool isActive;
-
-  const _SlideBody({
-    required this.slide,
-    required this.badgeFloat,
-    required this.isActive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: Stack(
-        children: [
-          // ── Cinematic Realistic Photograph Card ────────────────────
-          Positioned.fill(
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(32),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.22),
-                    blurRadius: 28,
-                    offset: const Offset(0, 14),
-                  ),
-                  BoxShadow(
-                    color: slide.waveGradient.first.withValues(alpha: 0.28),
-                    blurRadius: 36,
-                    offset: const Offset(0, 18),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(32),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image.asset(
-                      slide.imagePath,
-                      fit: BoxFit.cover,
-                    ),
-                    // Ambient light gradient to soften top and bottom
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.15),
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.35),
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ── Floating Luxury Glass Badge ────────────────────────────
-          Positioned(
-            bottom: 38,
-            left: 16,
-            right: 16,
-            child: AnimatedBuilder(
-              animation: badgeFloat,
-              builder: (context, child) {
-                return Transform.translate(
-                  offset: Offset(0, isActive ? badgeFloat.value : 0),
-                  child: child,
-                );
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.42),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFFD4AF37).withValues(alpha: 0.25),
-                          ),
-                          child: Icon(
-                            slide.badgeIcon,
-                            color: const Color(0xFFFFD54F),
-                            size: 15,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            slide.floatingBadge,
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Bottom Multi-Layer Organic Wave Card (Inspired by reference design)
+//  Bottom Multi-Layer Organic Wave Card (Matches user reference design)
 // ─────────────────────────────────────────────────────────────────────────────
 class _BottomWaveCard extends StatelessWidget {
   final _OnboardingSlide slide;
@@ -478,7 +337,7 @@ class _BottomWaveCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 330,
+      height: 310,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -492,7 +351,7 @@ class _BottomWaveCard extends StatelessWidget {
 
           // ── Layer 2: Foreground Typography & Controls ──────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(28, 48, 28, 24),
+            padding: const EdgeInsets.fromLTRB(28, 42, 28, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -511,9 +370,9 @@ class _BottomWaveCard extends StatelessWidget {
                         letterSpacing: -0.3,
                         shadows: [
                           Shadow(
-                            color: Colors.black.withValues(alpha: 0.35),
+                            color: Colors.black.withValues(alpha: 0.30),
                             offset: const Offset(0, 2),
-                            blurRadius: 6,
+                            blurRadius: 5,
                           ),
                         ],
                       ),
@@ -542,7 +401,7 @@ class _BottomWaveCard extends StatelessWidget {
                       current: currentPage,
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
 
                     // Primary Glow CTA Button
                     _GlowingCTAButton(
@@ -593,7 +452,7 @@ class _LayeredWavePainter extends CustomPainter {
     // Elevation drop shadow for back wave
     canvas.drawShadow(
       backPath,
-      Colors.black.withValues(alpha: 0.28),
+      Colors.black.withValues(alpha: 0.24),
       12.0,
       false,
     );
@@ -621,7 +480,7 @@ class _LayeredWavePainter extends CustomPainter {
     // Elevation drop shadow for front wave
     canvas.drawShadow(
       frontPath,
-      Colors.black.withValues(alpha: 0.36),
+      Colors.black.withValues(alpha: 0.32),
       18.0,
       false,
     );
@@ -746,7 +605,7 @@ class _GlowingCTAButtonState extends State<_GlowingCTAButton>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 350),
           width: double.infinity,
-          height: 54,
+          height: 52,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
