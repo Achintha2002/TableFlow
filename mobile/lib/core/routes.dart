@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_service.dart';
 import '../screens/customer/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/onboarding_screen.dart';
@@ -58,23 +59,31 @@ class AppRoutes {
   static final router = GoRouter(
     initialLocation: splash,
     refreshListenable: GoRouterRefreshStream(Supabase.instance.client.auth.onAuthStateChange),
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final isAuth = Supabase.instance.client.auth.currentSession != null;
       final isSplash = state.matchedLocation == splash;
       final isOnboarding = state.matchedLocation == onboarding;
       final isLoginOrRegister = state.matchedLocation == login ||
           state.matchedLocation == register;
 
-      // If not logged in and trying to access a protected route, redirect to login
-      // (onboarding is always allowed — accessible to both auth & unauth users)
-      if (!isAuth && !isSplash && !isLoginOrRegister && !isOnboarding) {
+      // If not logged in and trying to access a protected route (or onboarding without login),
+      // redirect to login.
+      if (!isAuth && !isSplash && !isLoginOrRegister) {
         return login;
       }
 
-      // If logged in and on splash or login/register screens → go home
-      // But allow onboarding for newly registered users
-      if (isAuth && (isLoginOrRegister || isSplash)) {
-        return home;
+      // If logged in and on login/register screens, route according to onboarding status.
+      if (isAuth && isLoginOrRegister) {
+        final hasSeen = await SupabaseService.hasUserSeenOnboarding();
+        return hasSeen ? home : onboarding;
+      }
+
+      // If logged in and on onboarding screen, check if they already finished it
+      if (isAuth && isOnboarding) {
+        final hasSeen = await SupabaseService.hasUserSeenOnboarding();
+        if (hasSeen) {
+          return home;
+        }
       }
 
       return null;

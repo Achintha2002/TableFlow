@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 
@@ -26,22 +25,18 @@ class _SplashScreenState extends State<SplashScreen> {
     // Check if user is already logged in via Supabase session
     final currentUser = SupabaseService.currentUser;
     if (currentUser != null) {
-      // Already logged in → go to Home
-      context.go('/home');
+      final hasSeen = await SupabaseService.hasUserSeenOnboarding(currentUser.id);
+      if (!mounted) return;
+      if (hasSeen) {
+        context.go('/home');
+      } else {
+        context.go('/onboarding');
+      }
       return;
     }
 
-    // Not logged in → check if they've seen onboarding before
-    final prefs = await SharedPreferences.getInstance();
-    final hasSeenOnboarding = prefs.getBool('onboarding_seen') ?? false;
-
-    if (!mounted) return;
-
-    if (hasSeenOnboarding) {
-      context.go('/login');
-    } else {
-      context.go('/onboarding');
-    }
+    // Not logged in → go directly to Login (onboarding shows when user logs in)
+    context.go('/login');
   }
 
 

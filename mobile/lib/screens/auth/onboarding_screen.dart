@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../services/supabase_service.dart';
 
 // ─────────────────────────────────────────────
 //  Data model for each onboarding slide
@@ -114,12 +114,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Future<void> _markSeenAndNavigate(BuildContext ctx) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_seen', true);
+    await SupabaseService.markOnboardingSeen();
     if (!ctx.mounted) return;
 
-    // If the user just registered they are already authenticated → go home
-    // Otherwise (first launch, not logged in) → go to login
     final isAuth = Supabase.instance.client.auth.currentSession != null;
     ctx.go(isAuth ? '/home' : '/login');
   }
@@ -210,8 +207,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                 const SizedBox(height: 16),
 
-                // ── Already have account ─────────────────────────────────
-                if (_currentPage == _slides.length - 1)
+                // ── Already have account (only when not logged in) ────────
+                if (Supabase.instance.client.auth.currentSession == null &&
+                    _currentPage == _slides.length - 1)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(

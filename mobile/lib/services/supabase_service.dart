@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -109,6 +110,49 @@ class SupabaseService {
 
   /// Get current user
   static User? get currentUser => _client.auth.currentUser;
+
+  /// Check if a user has completed/seen onboarding.
+  /// Checks both SharedPreferences (local cache) and Supabase user metadata.
+  static Future<bool> hasUserSeenOnboarding([String? userId]) async {
+    final uid = userId ?? currentUser?.id;
+    if (uid == null) return false;
+
+    // 1. Check local SharedPreferences for this specific user
+    final prefs = await SharedPreferences.getInstance();
+    final localSeen = prefs.getBool('onboarding_seen_$uid');
+    if (localSeen != null) return localSeen;
+
+    // 2. Check Supabase user metadata
+    final metadata = currentUser?.userMetadata;
+    if (metadata != null &&
+        (metadata['has_seen_onboarding'] == true ||
+            metadata['has_seen_onboarding'] == 'true')) {
+      // Cache locally
+      await prefs.setBool('onboarding_seen_$uid', true);
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Mark onboarding as completed for a user.
+  /// Saves to local SharedPreferences and updates Supabase user metadata.
+  static Future<void> markOnboardingSeen([String? userId]) async {
+    final uid = userId ?? currentUser?.id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_seen', true);
+
+    if (uid != null) {
+      await prefs.setBool('onboarding_seen_$uid', true);
+      try {
+        await _client.auth.updateUser(
+          UserAttributes(data: {'has_seen_onboarding': true}),
+        );
+      } catch (e) {
+        debugPrint('SupabaseService: Note - could not update user metadata: $e');
+      }
+    }
+  }
 
   // ─────────────────────────────────────────
   // PROFILE & SETTINGS

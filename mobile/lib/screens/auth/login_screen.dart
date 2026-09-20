@@ -20,11 +20,17 @@ class _LoginScreenState extends State<LoginScreen> {
   void _handleLogin() async {
     setState(() { _isLoading = true; _errorMessage = null; });
     try {
-      await SupabaseService.signIn(
+      final res = await SupabaseService.signIn(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      if (mounted) context.go('/home');
+      if (mounted) {
+        final userId = res.user?.id;
+        final hasSeen = await SupabaseService.hasUserSeenOnboarding(userId);
+        if (mounted) {
+          context.go(hasSeen ? '/home' : '/onboarding');
+        }
+      }
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
@@ -39,7 +45,11 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final response = await SupabaseService.signInWithGoogle();
       if (response != null && mounted) {
-        context.go('/home');
+        final userId = response.user?.id;
+        final hasSeen = await SupabaseService.hasUserSeenOnboarding(userId);
+        if (mounted) {
+          context.go(hasSeen ? '/home' : '/onboarding');
+        }
       }
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
