@@ -55,7 +55,7 @@ class _CartScreenState extends State<CartScreen> {
       debugPrint('Error opening customization sheet for edit: $e');
     }
   }
-  String _paymentMethod = 'cash'; // 'cash', 'card_at_counter', 'online_card'
+  final String _paymentMethod = 'pay_at_counter';
 
   @override
   void initState() {
@@ -279,12 +279,10 @@ class _CartScreenState extends State<CartScreen> {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final orderId = respData['order']['id'];
-        final totalPaid = respData['breakdown']?['total'] ?? cart.grandTotal;
 
         if (mounted) {
           cart.clear();
-          _showDigitalReceipt(orderId, totalPaid, effectiveTableId);
-          _listenToOrder(orderId.toString());
+          context.push('/order-tracker', extra: {'orderId': orderId.toString()});
         }
       } else {
         throw Exception(respData['error'] ?? 'Server error placing order');
@@ -303,101 +301,6 @@ class _CartScreenState extends State<CartScreen> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
-  }
-
-  void _showDigitalReceipt(String orderId, num total, int? tableId) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(24),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_circle, color: Colors.green, size: 56),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Order Placed!',
-              style: TextStyle(fontFamily: 'Playfair Display', fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Sent to the Kitchen. Order #${orderId.substring(0, 8)}',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.6), fontSize: 13),
-            ),
-            if (tableId != null) ...[
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Dine-in Table #$tableId',
-                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-            ],
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Divider(),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Payment Method:'),
-                Text(
-                  _paymentMethod == 'online_card'
-                      ? 'Card (Online)'
-                      : _paymentMethod == 'card_at_counter'
-                          ? 'Card at Counter'
-                          : 'Cash on Dine-in',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total Amount:'),
-                Text(
-                  'LKR ${total.toStringAsFixed(2)}',
-                  style: const TextStyle(color: AppTheme.primary, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  context.go('/home');
-                },
-                child: const Text('Back to Home', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -657,33 +560,35 @@ class _CartScreenState extends State<CartScreen> {
                 ),
               ),
 
-            // Payment Method Selector
+            // Payment Method (Fixed to Pay at Counter per master plan)
             Container(
               margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: AppTheme.background,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
               ),
               child: Row(
                 children: [
-                  const Text('Payment:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        isExpanded: true,
-                        value: _paymentMethod,
-                        items: const [
-                          DropdownMenuItem(value: 'cash', child: Text('Cash on Dine-in', style: TextStyle(fontSize: 13))),
-                          DropdownMenuItem(value: 'card_at_counter', child: Text('Card at Counter', style: TextStyle(fontSize: 13))),
-                          DropdownMenuItem(value: 'online_card', child: Text('Online Card Payment', style: TextStyle(fontSize: 13))),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) setState(() => _paymentMethod = val);
-                        },
-                      ),
+                  const Icon(Icons.point_of_sale_rounded, color: AppTheme.secondary, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Payment Method', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                        Text('Pay at Counter (Cash / Card with Waiter)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.secondary)),
+                      ],
                     ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('Dine-In', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -986,21 +891,36 @@ class _CartScreenState extends State<CartScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
       decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: 0.12),
+        color: statusColor.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: statusColor.withValues(alpha: 0.3)),
       ),
-      child: Row(
-        children: [
-          Icon(statusIcon, color: statusColor),
-          const SizedBox(width: 14),
-          Text(
-            statusText,
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.push('/order-tracker'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Row(
+              children: [
+                Icon(statusIcon, color: statusColor, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    statusText,
+                    style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 13.5),
+                  ),
+                ),
+                Text(
+                  'Live Tracker →',
+                  style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }

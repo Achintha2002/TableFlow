@@ -228,6 +228,24 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                                 Text('LKR ${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primary)),
                               ],
                             ),
+                            if (order['status'] != 'served' && order['status'] != 'cancelled') ...[
+                              const SizedBox(height: 14),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primary,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  icon: const Icon(Icons.room_service_outlined, size: 16),
+                                  label: const Text('Track Live Preparation', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  onPressed: () {
+                                    context.push('/order-tracker', extra: {'orderId': order['id'].toString()});
+                                  },
+                                ),
+                              ),
+                            ],
                             if (order['status'] == 'served' && !hasReviewed) ...[
                               const SizedBox(height: 16),
                               SizedBox(

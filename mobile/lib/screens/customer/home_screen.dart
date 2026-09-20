@@ -10,6 +10,7 @@ import '../../services/supabase_service.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/call_waiter_sheet.dart';
+import '../../widgets/active_order_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -64,7 +65,8 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeroSection(),
-            const SizedBox(height: 32),
+            const ActiveOrderCard(),
+            const SizedBox(height: 16),
             _buildQuickActions(),
             const SizedBox(height: 32),
             _buildFeaturedSection(),

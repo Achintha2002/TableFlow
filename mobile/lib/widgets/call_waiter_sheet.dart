@@ -5,15 +5,29 @@ import '../providers/cart_provider.dart';
 import '../services/api_service.dart';
 
 class CallWaiterSheet extends StatefulWidget {
-  const CallWaiterSheet({super.key});
+  final dynamic tableId;
+  final String? tableNumber;
 
-  static Future<void> show(BuildContext context) {
+  const CallWaiterSheet({
+    super.key,
+    this.tableId,
+    this.tableNumber,
+  });
+
+  static Future<void> show(
+    BuildContext context, {
+    dynamic tableId,
+    String? tableNumber,
+  }) {
     return showModalBottomSheet(
       context: context,
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => const CallWaiterSheet(),
+      builder: (_) => CallWaiterSheet(
+        tableId: tableId,
+        tableNumber: tableNumber,
+      ),
     );
   }
 
@@ -26,10 +40,12 @@ class _CallWaiterSheetState extends State<CallWaiterSheet> {
 
   Future<void> _sendRequest(String requestType, String label) async {
     final cart = context.read<CartProvider>();
-    final tableId = cart.selectedTableId;
-    final tableNum = cart.selectedTableNumber;
+    final int? targetTableId = widget.tableId is int
+        ? widget.tableId as int
+        : (int.tryParse(widget.tableId?.toString() ?? '') ?? cart.selectedTableId);
+    final targetTableNum = widget.tableNumber ?? cart.selectedTableNumber ?? targetTableId?.toString();
 
-    if (tableId == null) {
+    if (targetTableId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please scan a Table QR code first before calling a waiter.'),
@@ -44,7 +60,7 @@ class _CallWaiterSheetState extends State<CallWaiterSheet> {
 
     try {
       await ApiService.submitServiceRequest(
-        tableId: tableId,
+        tableId: targetTableId,
         requestType: requestType,
       );
 
@@ -52,7 +68,7 @@ class _CallWaiterSheetState extends State<CallWaiterSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Staff notified for Table #$tableNum: "$label". Someone will attend to you shortly!'),
+          content: Text('Staff notified for Table #$targetTableNum: "$label". Someone will attend to you shortly!'),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),

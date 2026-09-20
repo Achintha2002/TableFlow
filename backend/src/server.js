@@ -2139,11 +2139,14 @@ app.post('/api/pos/orders/:id/settle', authMiddleware, async (req, res) => {
 
     const { data: order, error: oErr } = await supabaseAdmin
       .from('orders')
-      .select('id, total_amount, table_id, special_notes')
+      .select('id, total_amount, table_id, special_notes, payment_status')
       .eq('id', orderId)
       .single();
 
     if (oErr || !order) return res.status(404).json({ error: 'Order not found' });
+    if (order.payment_status === 'paid') {
+      return res.status(409).json({ error: 'This order has already been settled.' });
+    }
 
     const updatedNotes = [
       order.special_notes,
@@ -2158,25 +2161,99 @@ app.post('/api/pos/orders/:id/settle', authMiddleware, async (req, res) => {
         special_notes: updatedNotes
       })
       .eq('id', orderId)
+      .eq('payment_status', 'pending')
       .select()
-      .single();
+      .maybeSingle();
 
     if (sErr) throw sErr;
+    if (!settled) {
+      return res.status(409).json({ error: 'Concurrent settlement detected: order was already paid.' });
+    }
 
     // Release in-memory lock
     posBillLocks.delete(orderId);
 
     const targetTable = table_id || order.table_id;
     if (targetTable) {
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'cleaning' })
-        .eq('id', targetTable);
+      const { data: remainingOrders } = await supabaseAdmin
+        .from('orders')
+        .select('id')
+        .eq('table_id', targetTable)
+        .eq('payment_status', 'pending')
+        .neq('status', 'cancelled');
+
+      if (!remainingOrders || remainingOrders.length === 0) {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'cleaning' })
+          .eq('id', targetTable);
+      }
     }
 
-    res.json({ message: 'Bill settled successfully and table freed', order: settled });
+    res.json({ message: 'Bill settled successfully', order: settled });
   } catch (error) {
     console.error('POS settle error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/pos/tables/:id/settle', authMiddleware, async (req, res) => {
+  try {
+    const tableId = req.params.id;
+    const { payment_method = 'cash', discount_amount = 0 } = req.body;
+
+    // 1. Find all active unsettled orders for this table
+    const { data: activeOrders, error: oErr } = await supabaseAdmin
+      .from('orders')
+      .select('id, total_amount, special_notes, payment_status')
+      .eq('table_id', tableId)
+      .eq('payment_status', 'pending')
+      .neq('status', 'cancelled');
+
+    if (oErr) throw oErr;
+    if (!activeOrders || activeOrders.length === 0) {
+      return res.status(400).json({ error: 'No active unsettled orders found for this table.' });
+    }
+
+    const settledOrderIds = [];
+
+    // 2. Mark all orders as paid & served
+    for (const order of activeOrders) {
+      const updatedNotes = [
+        order.special_notes,
+        `[Table Settled: ${payment_method.toUpperCase()}${discount_amount > 0 ? `, Discount: LKR ${discount_amount}` : ''}]`
+      ].filter(Boolean).join(' ');
+
+      const { data: settled } = await supabaseAdmin
+        .from('orders')
+        .update({
+          payment_status: 'paid',
+          status: 'served',
+          special_notes: updatedNotes
+        })
+        .eq('id', order.id)
+        .eq('payment_status', 'pending')
+        .select()
+        .maybeSingle();
+
+      if (settled) {
+        settledOrderIds.push(order.id);
+        posBillLocks.delete(order.id);
+      }
+    }
+
+    // 3. Mark table as cleaning
+    await supabaseAdmin
+      .from('restaurant_tables')
+      .update({ status: 'cleaning' })
+      .eq('id', tableId);
+
+    res.json({
+      message: `Table check settled successfully (${settledOrderIds.length} tickets consolidated) and table marked for cleaning.`,
+      settledOrderIds
+    });
+  } catch (error) {
+    console.error('POS table settle error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -26,8 +26,8 @@ export default function PosBillingPage() {
   const [tables, setTables] = useState([]);
   const [serviceRequests, setServiceRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTable, setSelectedTable] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [settleMode, setSettleMode] = useState('table'); // 'table' | 'order'
   const [userRole, setUserRole] = useState('cashier');
   const [filterMode, setFilterMode] = useState('active'); // 'all' | 'active' | 'available' | 'cleaning'
 
@@ -97,6 +97,7 @@ export default function PosBillingPage() {
     setDiscountPercent(0);
     setCashTendered('');
     setManagerPin('');
+    setSettleMode('table');
 
     const activeOrder = table.activeOrders?.[0] || null;
     setSelectedOrder(activeOrder);
@@ -110,7 +111,7 @@ export default function PosBillingPage() {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
           });
           if (res.ok) {
-            setLockStatus({ locked: true, message: 'Bill secured for your cashier session' });
+            setLockStatus({ locked: true, message: 'Table check secured for your cashier session' });
           } else {
             const err = await res.json();
             setLockStatus({ locked: false, message: err.error || 'Concurrent access notice' });
@@ -125,7 +126,7 @@ export default function PosBillingPage() {
   }
 
   async function handleSettleBill() {
-    if (!selectedOrder) return;
+    if (!selectedTable) return;
     setIsProcessing(true);
 
     // Enforce role authorization on discounts > 10%
@@ -139,7 +140,10 @@ export default function PosBillingPage() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const baseSubtotal = parseFloat(selectedOrder.subtotal || selectedOrder.total_amount || 0);
+      const isTableCheck = settleMode === 'table';
+      const baseSubtotal = isTableCheck
+        ? parseFloat(selectedTable.runningTotal || 0)
+        : parseFloat(selectedOrder?.subtotal || selectedOrder?.total_amount || 0);
       const discountAmount = Math.round((baseSubtotal * (discountPercent / 100)) * 100) / 100;
 
       const headers = { 'Content-Type': 'application/json' };
@@ -147,7 +151,11 @@ export default function PosBillingPage() {
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
 
-      const res = await fetch(`${API_BASE}/api/pos/orders/${selectedOrder.id}/settle`, {
+      const endpoint = isTableCheck
+        ? `${API_BASE}/api/pos/tables/${selectedTable.id}/settle`
+        : `${API_BASE}/api/pos/orders/${selectedOrder.id}/settle`;
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -211,7 +219,11 @@ export default function PosBillingPage() {
   }
 
   // Calculations for bill modal
-  const subtotal = selectedOrder ? parseFloat(selectedOrder.subtotal || selectedOrder.total_amount || 0) : 0;
+  const activeOrdersList = selectedTable?.activeOrders || [];
+  const isTableWide = settleMode === 'table';
+  const subtotal = isTableWide
+    ? parseFloat(selectedTable?.runningTotal || 0)
+    : (selectedOrder ? parseFloat(selectedOrder.subtotal || selectedOrder.total_amount || 0) : 0);
   const discountVal = (subtotal * (discountPercent / 100));
   const postDiscount = Math.max(0, subtotal - discountVal);
   const serviceCharge = (postDiscount * 0.10);
@@ -219,6 +231,20 @@ export default function PosBillingPage() {
   const finalTotal = (postDiscount + serviceCharge + taxAmount);
   const tenderedNum = parseFloat(cashTendered) || 0;
   const changeDue = Math.max(0, tenderedNum - finalTotal);
+
+  const displayedItems = isTableWide
+    ? activeOrdersList.flatMap((o, oIdx) =>
+        (o.order_items || []).map(item => ({
+          ...item,
+          orderIdShort: o.id.substring(0, 8),
+          ticketNum: oIdx + 1
+        }))
+      )
+    : (selectedOrder?.order_items || []).map(item => ({
+        ...item,
+        orderIdShort: selectedOrder.id.substring(0, 8),
+        ticketNum: 1
+      }));
 
   // Filtered tables
   const filteredTables = tables.filter(t => {
@@ -538,13 +564,15 @@ export default function PosBillingPage() {
             fontFamily: 'var(--font-body)'
           }}>
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
                 <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
                   Settle Bill: Table #{selectedTable.table_number}
                 </h2>
                 <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
-                  Order #{selectedOrder.id.substring(0, 8)} • Guest: <strong>{selectedOrder.users?.full_name || 'Dine-in Customer'}</strong>
+                  {isTableWide 
+                    ? `Consolidated Check (${activeOrdersList.length} Tickets) • Running Tab: LKR ${subtotal.toLocaleString()}` 
+                    : `Ticket #${selectedOrder?.id?.substring(0, 8)} • Guest: ${selectedOrder?.users?.full_name || 'Dine-in Customer'}`}
                 </div>
               </div>
               <button
@@ -554,6 +582,49 @@ export default function PosBillingPage() {
                 <X size={22} />
               </button>
             </div>
+
+            {/* Multi-Ticket Selector Toggle */}
+            {activeOrdersList.length > 1 && (
+              <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '10px', background: 'rgba(184, 127, 92, 0.06)', borderRadius: '10px', border: '1px dashed var(--primary)' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary)', alignSelf: 'center' }}>Check Scope:</span>
+                <button
+                  onClick={() => setSettleMode('table')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: isTableWide ? '700' : '500',
+                    background: isTableWide ? 'var(--primary)' : '#ffffff',
+                    color: isTableWide ? '#ffffff' : 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  All Tickets (Table Total: LKR {Number(selectedTable.runningTotal).toLocaleString()})
+                </button>
+                {activeOrdersList.map((o, idx) => (
+                  <button
+                    key={o.id}
+                    onClick={() => {
+                      setSettleMode('order');
+                      setSelectedOrder(o);
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: (!isTableWide && selectedOrder?.id === o.id) ? '700' : '500',
+                      background: (!isTableWide && selectedOrder?.id === o.id) ? 'var(--primary)' : '#ffffff',
+                      color: (!isTableWide && selectedOrder?.id === o.id) ? '#ffffff' : 'var(--text-primary)',
+                      border: '1px solid var(--border)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Ticket #{idx + 1} (LKR {Number(o.total_amount).toLocaleString()})
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Lock Status Banner */}
             <div style={{
@@ -574,12 +645,21 @@ export default function PosBillingPage() {
 
             {/* Itemized Order List */}
             <div style={{ marginBottom: '20px', background: 'var(--bg-surface)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '10px', color: 'var(--text-primary)' }}>Line Items on Check:</div>
-              {(selectedOrder.order_items || []).map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    {item.quantity}x {item.menu_items?.name || 'Item'}
-                  </span>
+              <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '10px', color: 'var(--text-primary)' }}>
+                Line Items on Check ({displayedItems.length} items):
+              </div>
+              {displayedItems.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isTableWide && activeOrdersList.length > 1 && (
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(184,127,92,0.1)', color: 'var(--primary)', fontWeight: '700' }}>
+                        T#{item.ticketNum}
+                      </span>
+                    )}
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      {item.quantity}x {item.menu_items?.name || 'Item'}
+                    </span>
+                  </div>
                   <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
                     LKR {(item.quantity * parseFloat(item.unit_price)).toLocaleString()}
                   </span>
@@ -816,7 +896,7 @@ export default function PosBillingPage() {
       )}
 
       {/* Hidden Thermal Receipt Print View */}
-      {selectedTable && selectedOrder && (
+      {selectedTable && (selectedOrder || activeOrdersList.length > 0) && (
         <div id="pos-receipt-print" style={{ display: 'none' }}>
           <div style={{ textAlign: 'center', marginBottom: '10px' }}>
             <h2 style={{ margin: '0 0 4px 0', fontSize: '16px' }}>TABLEFLOW BOUTIQUE</h2>
@@ -826,7 +906,9 @@ export default function PosBillingPage() {
           <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }} />
           <div style={{ fontSize: '11px' }}>
             <p style={{ margin: '2px 0' }}>Table: #{selectedTable.table_number}</p>
-            <p style={{ margin: '2px 0' }}>Order ID: #{selectedOrder.id.substring(0, 8)}</p>
+            <p style={{ margin: '2px 0' }}>
+              Check: {isTableWide ? `${activeOrdersList.length} Orders Consolidated` : `Order #${selectedOrder?.id?.substring(0, 8)}`}
+            </p>
             <p style={{ margin: '2px 0' }}>Cashier: {userRole.toUpperCase()}</p>
           </div>
           <div style={{ borderBottom: '1px dashed #000', margin: '8px 0' }} />
@@ -839,7 +921,7 @@ export default function PosBillingPage() {
               </tr>
             </thead>
             <tbody>
-              {(selectedOrder.order_items || []).map((i, idx) => (
+              {displayedItems.map((i, idx) => (
                 <tr key={idx}>
                   <td style={{ padding: '3px 0' }}>{i.menu_items?.name || 'Item'}</td>
                   <td style={{ padding: '3px 0' }}>{i.quantity}</td>
