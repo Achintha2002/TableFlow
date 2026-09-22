@@ -26,6 +26,7 @@ export default function PosBillingPage() {
   const [tables, setTables] = useState([]);
   const [serviceRequests, setServiceRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTable, setSelectedTable] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [settleMode, setSettleMode] = useState('table'); // 'table' | 'order'
   const [userRole, setUserRole] = useState('cashier');
