@@ -108,25 +108,29 @@ class _CallWaiterSheetState extends State<CallWaiterSheet> {
           ),
         ],
       ),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 22),
           ),
-          child: Icon(icon, color: iconColor, size: 22),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.5), fontSize: 12),
+          ),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.black38),
+          onTap: _isLoading ? null : () => _sendRequest(type, title),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(color: Colors.black.withValues(alpha: 0.5), fontSize: 12),
-        ),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.black38),
-        onTap: _isLoading ? null : () => _sendRequest(type, title),
       ),
     );
   }

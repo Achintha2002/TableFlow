@@ -464,25 +464,28 @@ class _CartScreenState extends State<CartScreen> {
           ),
 
           // Loyalty Points Checkbox
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            activeColor: AppTheme.primary,
-            value: _useLoyaltyPoints,
-            onChanged: _userLoyaltyPoints > 0 ? _toggleLoyaltyPoints : null,
-            title: Row(
-              children: [
-                const Icon(Icons.stars, color: AppTheme.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Redeem Loyalty Points ($_userLoyaltyPoints pts)',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-              ],
+          Material(
+            type: MaterialType.transparency,
+            child: CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              activeColor: AppTheme.primary,
+              value: _useLoyaltyPoints,
+              onChanged: _userLoyaltyPoints > 0 ? _toggleLoyaltyPoints : null,
+              title: Row(
+                children: [
+                  const Icon(Icons.stars, color: AppTheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Redeem Loyalty Points ($_userLoyaltyPoints pts)',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ],
+              ),
+              subtitle: _userLoyaltyPoints > 0
+                  ? Text('Save up to LKR $_userLoyaltyPoints on this bill', style: const TextStyle(fontSize: 11))
+                  : const Text('No points available to redeem', style: TextStyle(fontSize: 11, color: Colors.grey)),
             ),
-            subtitle: _userLoyaltyPoints > 0
-                ? Text('Save up to LKR $_userLoyaltyPoints on this bill', style: const TextStyle(fontSize: 11))
-                : const Text('No points available to redeem', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ),
         ],
       ),
