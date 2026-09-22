@@ -170,6 +170,9 @@ a {
 /* ───────── MAIN CONTENT ───────── */
 .main-content {
   margin-left: var(--sidebar-width);
+  width: calc(100vw - var(--sidebar-width));
+  max-width: calc(100vw - var(--sidebar-width));
+  min-width: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -333,26 +336,36 @@ a {
   font-weight: 600;
 }
 
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .data-table {
   width: 100%;
+  border-collapse: collapse;
 }
 
 .data-table th {
   text-align: left;
-  padding: 10px 24px;
+  padding: 12px 16px;
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border-bottom: 2px solid var(--border);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: 14px 24px;
-  font-size: 14px;
-  border-bottom: 1px solid rgba(46, 43, 39, 0.5);
+  padding: 13px 16px;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
+  vertical-align: middle;
 }
 
 .data-table tr:last-child td {

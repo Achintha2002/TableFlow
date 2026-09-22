@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/supabase_service.dart';
+import '../../utils/slip_picker.dart';
 import '../../widgets/item_customization_sheet.dart';
 
 class CartScreen extends StatefulWidget {
@@ -55,7 +57,11 @@ class _CartScreenState extends State<CartScreen> {
       debugPrint('Error opening customization sheet for edit: $e');
     }
   }
-  final String _paymentMethod = 'pay_at_counter';
+
+  String _paymentMethod = 'pay_at_counter'; // 'pay_at_counter' or 'bank_transfer'
+  final TextEditingController _transactionRefController = TextEditingController();
+  final TextEditingController _bankNameController = TextEditingController();
+  PickedSlip? _pickedSlip;
 
   @override
   void initState() {
@@ -70,6 +76,8 @@ class _CartScreenState extends State<CartScreen> {
     _orderSub?.cancel();
     _specialNotesController.dispose();
     _couponController.dispose();
+    _transactionRefController.dispose();
+    _bankNameController.dispose();
     super.dispose();
   }
 
@@ -227,17 +235,42 @@ class _CartScreenState extends State<CartScreen> {
           .order('created_at', ascending: false)
           .limit(1);
 
+      if (!mounted) return;
+
       reservationId = resData.isNotEmpty ? resData.first['id'] : null;
 
       if (reservationId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please scan a Table QR or select a table from the list.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please scan a Table QR or select a table from the list.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    if (_paymentMethod == 'bank_transfer') {
+      if (_pickedSlip == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload your bank transfer payment slip.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_transactionRefController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter your Bank / Transaction Reference Number.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         return;
       }
     }
@@ -256,24 +289,61 @@ class _CartScreenState extends State<CartScreen> {
         'selected_customizations': item.toSelectedCustomizationsJson(),
       }).toList();
 
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/orders'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-          'Idempotency-Key': idempotencyKey,
-        },
-        body: jsonEncode({
-          'reservation_id': reservationId,
-          'table_id': effectiveTableId,
-          'total_amount': cart.grandTotal,
-          'payment_method': _paymentMethod,
-          'coupon_code': cart.couponCode,
-          'redeem_points': cart.redeemedPoints,
-          'special_notes': _specialNotesController.text,
-          'items': orderItems,
-        }),
-      );
+      http.Response response;
+
+      if (_paymentMethod == 'bank_transfer') {
+        final uri = Uri.parse('${ApiService.baseUrl}/orders/with-slip');
+        final request = http.MultipartRequest('POST', uri);
+        if (token != null) {
+          request.headers['Authorization'] = 'Bearer $token';
+        }
+        request.fields['transaction_reference'] = _transactionRefController.text.trim().toUpperCase();
+        if (_bankNameController.text.trim().isNotEmpty) {
+          request.fields['bank_name'] = _bankNameController.text.trim();
+        }
+        if (reservationId != null) {
+          request.fields['reservation_id'] = reservationId;
+        }
+        if (effectiveTableId != null) {
+          request.fields['table_id'] = effectiveTableId.toString();
+        }
+        request.fields['special_notes'] = _specialNotesController.text;
+        if (cart.couponCode != null) {
+          request.fields['coupon_code'] = cart.couponCode!;
+        }
+        request.fields['redeem_points'] = cart.redeemedPoints.toString();
+        request.fields['items'] = jsonEncode(orderItems);
+
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'slip',
+            _pickedSlip!.bytes,
+            filename: _pickedSlip!.fileName,
+          ),
+        );
+
+        final streamedResponse = await request.send();
+        response = await http.Response.fromStream(streamedResponse);
+      } else {
+        response = await http.post(
+          Uri.parse('${ApiService.baseUrl}/orders'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+            'Idempotency-Key': idempotencyKey,
+          },
+          body: jsonEncode({
+            'reservation_id': reservationId,
+            'table_id': effectiveTableId,
+            'total_amount': cart.grandTotal,
+            'payment_method': _paymentMethod,
+            'coupon_code': cart.couponCode,
+            'redeem_points': cart.redeemedPoints,
+            'special_notes': _specialNotesController.text,
+            'items': orderItems,
+          }),
+        );
+      }
 
       final respData = jsonDecode(response.body);
 
@@ -362,6 +432,8 @@ class _CartScreenState extends State<CartScreen> {
                           )),
                           const SizedBox(height: 12),
                           _buildDiscountAndLoyaltySection(cart),
+                          const SizedBox(height: 16),
+                          _buildPaymentMethodSection(),
                         ],
                       ),
               ),
@@ -492,8 +564,314 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  Widget _buildPaymentMethodSection() {
+    final isBankTransfer = _paymentMethod == 'bank_transfer';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.secondary.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.payment_rounded, size: 20, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Payment Method',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Option 1: Pay at Counter
+          InkWell(
+            onTap: () {
+              setState(() => _paymentMethod = 'pay_at_counter');
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: !isBankTransfer ? AppTheme.primary.withValues(alpha: 0.06) : AppTheme.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: !isBankTransfer ? AppTheme.primary : Colors.black.withValues(alpha: 0.08),
+                  width: !isBankTransfer ? 1.5 : 1.0,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    !isBankTransfer ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: !isBankTransfer ? AppTheme.primary : Colors.grey,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Pay at Counter', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.secondary)),
+                        SizedBox(height: 2),
+                        Text('Pay cash or card with waiter when served', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('Instant KDS', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // Option 2: Direct Bank Transfer
+          InkWell(
+            onTap: () {
+              setState(() => _paymentMethod = 'bank_transfer');
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isBankTransfer ? const Color(0xFFF59E0B).withValues(alpha: 0.08) : AppTheme.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isBankTransfer ? const Color(0xFFF59E0B) : Colors.black.withValues(alpha: 0.08),
+                  width: isBankTransfer ? 1.5 : 1.0,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isBankTransfer ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: isBankTransfer ? const Color(0xFFF59E0B) : Colors.grey,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Direct Bank Transfer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.secondary)),
+                        SizedBox(height: 2),
+                        Text('Upload transfer slip & enter reference', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('Slip Required', style: TextStyle(fontSize: 10, color: Color(0xFFB45309), fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Bank Details & Slip Upload (Shown when bank_transfer is active)
+          if (isBankTransfer) ...[
+            const SizedBox(height: 16),
+
+            // Beneficiary Account Card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.account_balance, color: Color(0xFFF59E0B), size: 16),
+                      SizedBox(width: 6),
+                      Text('RESTAURANT BANK DETAILS', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Commercial Bank of Ceylon', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Text('Account: TableFlow Gourmet Lounge (Pvt) Ltd', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'A/C: 1000 8492 4810',
+                        style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 1.0),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          Clipboard.setData(const ClipboardData(text: '100084924810'));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Account number copied!'), duration: Duration(seconds: 1)),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.copy, size: 12, color: Colors.white),
+                              SizedBox(width: 4),
+                              Text('Copy', style: TextStyle(color: Colors.white, fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Text('Branch: Colombo Corporate Branch', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Slip Upload Box
+            InkWell(
+              onTap: () async {
+                final slip = await pickSlipFile();
+                if (slip != null) {
+                  setState(() => _pickedSlip = slip);
+                }
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+                decoration: BoxDecoration(
+                  color: _pickedSlip != null ? Colors.green.withValues(alpha: 0.06) : AppTheme.background,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _pickedSlip != null ? Colors.green : AppTheme.primary.withValues(alpha: 0.4),
+                    style: BorderStyle.solid,
+                    width: 1.5,
+                  ),
+                ),
+                child: _pickedSlip == null
+                    ? Column(
+                        children: [
+                          Icon(Icons.cloud_upload_outlined, size: 32, color: AppTheme.primary),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Upload Payment Slip / Receipt *',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.secondary),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text('PNG, JPG, WEBP, or PDF (Max 10MB)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _pickedSlip!.fileName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${(_pickedSlip!.bytes.lengthInBytes / 1024).toStringAsFixed(1)} KB • Tap to change',
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              final slip = await pickSlipFile();
+                              if (slip != null) {
+                                setState(() => _pickedSlip = slip);
+                              }
+                            },
+                            child: const Text('Change', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Transaction Reference Input Field
+            TextField(
+              controller: _transactionRefController,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'Transaction / Bank Reference Number *',
+                labelStyle: const TextStyle(fontSize: 12),
+                hintText: 'e.g. TXN-83921049',
+                hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.3), fontSize: 12),
+                isDense: true,
+                filled: true,
+                fillColor: AppTheme.background,
+                prefixIcon: const Icon(Icons.tag, size: 18, color: AppTheme.secondary),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Bank Name Input Field
+            TextField(
+              controller: _bankNameController,
+              decoration: InputDecoration(
+                labelText: 'Your Bank Name (Optional)',
+                labelStyle: const TextStyle(fontSize: 12),
+                hintText: 'e.g. BOC, Commercial Bank, HNB',
+                hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.3), fontSize: 12),
+                isDense: true,
+                filled: true,
+                fillColor: AppTheme.background,
+                prefixIcon: const Icon(Icons.account_balance_outlined, size: 18, color: Colors.grey),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildCheckoutPanel(CartProvider cart) {
     final hasTable = cart.hasTableSelected;
+    final isBankTransfer = _paymentMethod == 'bank_transfer';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -563,7 +941,7 @@ class _CartScreenState extends State<CartScreen> {
                 ),
               ),
 
-            // Payment Method (Fixed to Pay at Counter per master plan)
+            // Payment Method Summary Tag
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -574,24 +952,44 @@ class _CartScreenState extends State<CartScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.point_of_sale_rounded, color: AppTheme.secondary, size: 20),
+                  Icon(
+                    isBankTransfer ? Icons.account_balance_rounded : Icons.point_of_sale_rounded,
+                    color: isBankTransfer ? const Color(0xFFF59E0B) : AppTheme.secondary,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Payment Method', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
-                        Text('Pay at Counter (Cash / Card with Waiter)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.secondary)),
+                        const Text('Payment Mode', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                        Text(
+                          isBankTransfer
+                              ? 'Direct Bank Transfer (${_pickedSlip != null ? 'Slip Attached' : 'Slip Required'})'
+                              : 'Pay at Counter (Cash / Card)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: isBankTransfer ? const Color(0xFFB45309) : AppTheme.secondary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.12),
+                      color: isBankTransfer ? const Color(0xFFF59E0B).withValues(alpha: 0.12) : Colors.green.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text('Dine-In', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      isBankTransfer ? 'Hold' : 'Dine-In',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isBankTransfer ? const Color(0xFFB45309) : Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),

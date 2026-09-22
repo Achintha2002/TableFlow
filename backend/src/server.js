@@ -2650,6 +2650,16 @@ app.get('/api/admin/reports/orders/export', async (req, res) => {
   }
 });
 
+// ==========================================
+// Payment Verification & Bank Transfer Audit
+// ==========================================
+const paymentAuditRouter = require('./routes/paymentAudit')(supabaseAdmin);
+app.use('/api', paymentAuditRouter);
+
+// Start 24h Bank Transfer Order Auto-Expiry Scheduler (runs every 15 minutes)
+const { startOrderExpiryScheduler } = require('./jobs/orderExpiryJob');
+startOrderExpiryScheduler(supabaseAdmin);
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

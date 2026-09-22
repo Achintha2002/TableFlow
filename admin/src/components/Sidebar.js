@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [profile, setProfile] = useState({ name: 'Loading...', role: '' });
+  const [pendingAuditCount, setPendingAuditCount] = useState(0);
 
   useEffect(() => {
     async function loadProfile() {
@@ -40,6 +41,30 @@ export default function Sidebar() {
       }
     }
     loadProfile();
+
+    async function fetchAuditCount() {
+      try {
+        const { count, error } = await supabase
+          .from('orders')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'payment_pending');
+        if (!error && count !== null) {
+          setPendingAuditCount(count);
+        }
+      } catch (_) {}
+    }
+    fetchAuditCount();
+
+    const channel = supabase
+      .channel('sidebar_pending_audit')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchAuditCount();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const isActive = (path) => pathname === path ? 'active' : '';
@@ -103,6 +128,25 @@ export default function Sidebar() {
             <Link href="/orders" className={`nav-item ${isActive('/orders')}`}>
               <Receipt size={20} />
               Orders
+            </Link>
+            <Link href="/payment-audit" className={`nav-item ${isActive('/payment-audit')}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileCheck size={20} color={pendingAuditCount > 0 ? '#f59e0b' : 'currentColor'} />
+                Payment Audit
+              </span>
+              {pendingAuditCount > 0 && (
+                <span style={{
+                  background: '#f59e0b',
+                  color: '#000',
+                  borderRadius: '10px',
+                  padding: '1px 7px',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  boxShadow: '0 2px 5px rgba(245, 158, 11, 0.4)'
+                }}>
+                  {pendingAuditCount}
+                </span>
+              )}
             </Link>
           </>
         )}

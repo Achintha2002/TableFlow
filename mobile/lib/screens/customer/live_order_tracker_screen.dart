@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../services/api_service.dart';
+import '../../utils/slip_picker.dart';
 import '../../widgets/call_waiter_sheet.dart';
 
 class LiveOrderTrackerScreen extends StatefulWidget {
@@ -26,8 +30,11 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
   bool _isRealtimeConnected = true;
   String _previousStatus = 'none';
   bool _hasReviewed = false;
+  Map<String, dynamic>? _paymentTxn;
+  bool _isReuploading = false;
 
   StreamSubscription? _orderStreamSub;
+  Timer? _fallbackPollTimer;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
@@ -50,6 +57,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
   @override
   void dispose() {
     _orderStreamSub?.cancel();
+    _fallbackPollTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -68,7 +76,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             .from('orders')
             .select('id')
             .eq('user_id', user.id)
-            .inFilter('status', ['pending', 'preparing', 'ready'])
+            .inFilter('status', ['pending', 'preparing', 'ready', 'payment_pending', 'payment_rejected'])
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle();
@@ -93,6 +101,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
       if (_activeOrderId != null) {
         await _fetchInitialOrderDetails(_activeOrderId!);
         _subscribeToRealtimeOrder(_activeOrderId!);
+        _startFallbackPolling(_activeOrderId!);
       } else {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -125,12 +134,25 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
         hasReview = rev != null;
       } catch (_) {}
 
+      Map<String, dynamic>? pt;
+      try {
+        final ptRes = await Supabase.instance.client
+            .from('payment_transactions')
+            .select('*')
+            .eq('order_id', orderId)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        pt = ptRes;
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
           _orderData = orderRes;
           _orderItems = List<Map<String, dynamic>>.from(itemsRes);
           _previousStatus = orderRes?['status'] ?? 'pending';
           _hasReviewed = hasReview;
+          _paymentTxn = pt;
           _isLoading = false;
         });
       }
@@ -138,6 +160,45 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
       debugPrint('Error fetching initial order data: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _startFallbackPolling(String orderId) {
+    _fallbackPollTimer?.cancel();
+    _fallbackPollTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final currentStatus = _orderData?['status']?.toString();
+      if (currentStatus == 'served' || currentStatus == 'cancelled') {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        final orderRes = await Supabase.instance.client
+            .from('orders')
+            .select('*, restaurant_tables(table_number)')
+            .eq('id', orderId)
+            .maybeSingle();
+
+        if (orderRes != null && mounted) {
+          final newStatus = orderRes['status']?.toString() ?? 'pending';
+          if (newStatus != _previousStatus) {
+            _triggerFeedbackOnStatusChange(newStatus);
+            setState(() {
+              _orderData = {
+                ...?_orderData,
+                ...orderRes,
+              };
+              _previousStatus = newStatus;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Fallback poller error: $e');
+      }
+    });
   }
 
   void _subscribeToRealtimeOrder(String orderId) {
@@ -185,6 +246,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
       SystemSound.play(SystemSoundType.click);
     } else if (status == 'served') {
       HapticFeedback.heavyImpact();
+      SystemSound.play(SystemSoundType.click);
     }
   }
 
@@ -402,6 +464,8 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
     final createdAt = _formatTime(_orderData?['created_at']);
     final totalAmount = (_orderData?['total_amount'] as num?) ?? 0;
     final isServed = currentStatus == 'served';
+    final isPaymentPending = currentStatus == 'payment_pending';
+    final isPaymentRejected = currentStatus == 'payment_rejected';
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -526,15 +590,18 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                       children: [
                         Row(
                           children: [
-                            Text(
-                              tableNumber != null ? 'Table #$tableNumber' : 'Dine-In Guest',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.secondary,
+                            Expanded(
+                              child: Text(
+                                tableNumber != null ? 'Table #$tableNumber' : 'Dine-In Guest',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.secondary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
@@ -569,13 +636,18 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
 
             const SizedBox(height: 20),
 
-            // ── Hero Animated Preparation Stepper ─────────────────────────
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(26),
-                boxShadow: [
+            // ── Hero Preparation Stepper or Payment Verification Banner ──
+            if (isPaymentPending)
+              _buildPaymentPendingHero()
+            else if (isPaymentRejected)
+              _buildPaymentRejectedHero()
+            else
+              Container(
+                padding: const EdgeInsets.all(22),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(26),
+                  boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 20,
@@ -614,6 +686,28 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF9A7B1C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.check_circle_rounded, size: 14, color: Colors.green),
+                              SizedBox(width: 4),
+                              Text(
+                                'Served • Enjoy!',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
                                 ),
                               ),
                             ],
@@ -662,9 +756,9 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             const SizedBox(height: 20),
 
             // ── Order Items Breakdown Accordion ───────────────────────────
+            // ── Order Items Breakdown Accordion ───────────────────────────
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
@@ -674,125 +768,132 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                   ),
                 ],
               ),
-              child: Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  initiallyExpanded: true,
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                  title: Text(
-                    'Ordered Items (${_orderItems.length})',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.secondary,
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
+                child: Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    initiallyExpanded: true,
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    title: Text(
+                      'Ordered Items (${_orderItems.length})',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.secondary,
+                      ),
                     ),
-                  ),
-                  trailing: Text(
-                    _formatCurrency(totalAmount),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primary,
+                    trailing: Text(
+                      _formatCurrency(totalAmount),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primary,
+                      ),
                     ),
-                  ),
-                  children: [
-                    const Divider(height: 1),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                      child: Column(
-                        children: [
-                          ..._orderItems.map((item) {
-                            final itemName = item['menu_items']?['name'] ?? 'Menu Item';
-                            final qty = item['quantity'] ?? 1;
-                            final price = (item['unit_price'] as num?) ?? 0;
-                            final customizations = item['selected_customizations'];
-                            final notes = item['special_instructions'] ?? item['item_notes'];
+                    children: [
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                        child: Column(
+                          children: [
+                            ..._orderItems.map((item) {
+                              final itemName = item['menu_items']?['name'] ?? 'Menu Item';
+                              final qty = item['quantity'] ?? 1;
+                              final price = (item['unit_price'] as num?) ?? 0;
+                              final customizations = item['selected_customizations'];
+                              final notes = item['special_instructions'] ?? item['item_notes'];
 
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.background,
-                                      borderRadius: BorderRadius.circular(6),
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.background,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${qty}x',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
                                     ),
-                                    child: Text(
-                                      '${qty}x',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          itemName,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        if (customizations != null && customizations is Map) ...[
-                                          const SizedBox(height: 2),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
                                           Text(
-                                            customizations.values.map((v) => v.toString()).join(' • '),
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.black.withValues(alpha: 0.55),
-                                            ),
-                                          ),
-                                        ],
-                                        if (notes != null && notes.toString().isNotEmpty) ...[
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'Note: $notes',
+                                            itemName,
                                             style: const TextStyle(
-                                              fontSize: 11,
-                                              fontStyle: FontStyle.italic,
-                                              color: Colors.grey,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
                                             ),
                                           ),
+                                          if (customizations != null && customizations is Map) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              customizations.values.map((v) => v.toString()).join(' • '),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.black.withValues(alpha: 0.55),
+                                              ),
+                                            ),
+                                          ],
+                                          if (notes != null && notes.toString().isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Note: $notes',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontStyle: FontStyle.italic,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    _formatCurrency(price * qty),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
+                                    Text(
+                                      _formatCurrency(price * qty),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.background,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.point_of_sale, size: 16, color: Colors.grey),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Settlement: Pay at Counter (Cash or Card with Waiter)',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
                                     ),
                                   ),
                                 ],
                               ),
-                            );
-                          }),
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.background,
-                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.point_of_sale, size: 16, color: Colors.grey),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Settlement: Pay at Counter (Cash or Card with Waiter)',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -904,15 +1005,15 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
     bool isFirst = false,
     bool isLast = false,
   }) {
-    final isPassed = currentStep > stepNumber;
-    final isCurrent = currentStep == stepNumber;
+    final isPassed = currentStep > stepNumber || (currentStep == 3 && stepNumber == 3);
+    final isCurrent = currentStep == stepNumber && currentStep != 3;
     final isPending = currentStep < stepNumber;
 
     Color stepColor;
-    if (isCurrent) {
-      stepColor = AppTheme.primary;
-    } else if (isPassed) {
+    if (isPassed) {
       stepColor = Colors.green;
+    } else if (isCurrent) {
+      stepColor = AppTheme.primary;
     } else {
       stepColor = Colors.grey.shade300;
     }
@@ -943,7 +1044,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                 ),
               ),
               child: Icon(
-                icon,
+                isPassed ? Icons.check_circle_rounded : icon,
                 color: stepColor,
                 size: 18,
               ),
@@ -992,6 +1093,23 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                           ),
                         ),
                       ),
+                    ] else if (currentStep == 3 && stepNumber == 3) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'DELIVERED',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -1009,6 +1127,439 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPaymentPendingHero() {
+    final ref = _paymentTxn?['transaction_reference'] ?? 'Submitted';
+    final bank = _paymentTxn?['bank_name'];
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Payment Verification',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.secondary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFB45309)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Audit in Progress',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.verified_user_outlined, color: Color(0xFFD97706), size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Slip Submitted for Review',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF92400E)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Your bank transfer receipt is in the audit queue. Staff will verify the transfer reference with our bank account shortly.',
+                  style: TextStyle(fontSize: 12, color: Colors.black87, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Text('Bank Reference: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      ref,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFB45309), letterSpacing: 0.5),
+                    ),
+                  ],
+                ),
+                if (bank != null && bank.toString().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text('Bank: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text(bank.toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.lock_clock_rounded, size: 16, color: Colors.grey),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Your order items are temporarily reserved. As soon as payment is confirmed, cooking starts automatically!',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentRejectedHero() {
+    final reason = _paymentTxn?['rejection_reason'] ?? 'The submitted bank slip details could not be verified.';
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Verification Required',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.secondary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.error_outline_rounded, size: 14, color: Colors.red),
+                    SizedBox(width: 4),
+                    Text(
+                      'Payment Rejected',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.red, size: 18),
+                    SizedBox(width: 8),
+                    Text('Reason for Rejection:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  reason,
+                  style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.35),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _showReuploadSlipSheet,
+              icon: const Icon(Icons.cloud_upload_rounded, size: 18),
+              label: const Text('Re-upload Payment Slip', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReuploadSlipSheet() {
+    PickedSlip? newSlip;
+    final refController = TextEditingController(
+      text: _paymentTxn?['transaction_reference'] ?? '',
+    );
+    final bankController = TextEditingController(
+      text: _paymentTxn?['bank_name'] ?? '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: EdgeInsets.fromLTRB(
+            24, 20, 24,
+            MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Re-submit Payment Proof',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.secondary,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close, size: 20),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Please upload a clear, valid bank transfer receipt and verify your transaction reference.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+
+              // Upload box
+              InkWell(
+                onTap: () async {
+                  final picked = await pickSlipFile();
+                  if (picked != null) {
+                    setSheetState(() => newSlip = picked);
+                  }
+                },
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: newSlip != null ? Colors.green.withValues(alpha: 0.08) : AppTheme.background,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: newSlip != null ? Colors.green : AppTheme.primary.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: newSlip == null
+                      ? const Column(
+                          children: [
+                            Icon(Icons.cloud_upload_outlined, size: 30, color: AppTheme.primary),
+                            SizedBox(height: 6),
+                            Text('Choose Payment Slip Image / PDF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            Text('Max 10MB', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                newSlip!.fileName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Text('Change', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Reference Input
+              TextField(
+                controller: refController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: 'Transaction Reference Number *',
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintText: 'e.g. TXN-83921049',
+                  hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.3), fontSize: 12),
+                  filled: true,
+                  fillColor: AppTheme.background,
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Bank Name Input
+              TextField(
+                controller: bankController,
+                decoration: InputDecoration(
+                  labelText: 'Bank Name (Optional)',
+                  labelStyle: const TextStyle(fontSize: 12),
+                  hintText: 'e.g. Commercial Bank, BOC',
+                  hintStyle: TextStyle(color: Colors.black.withValues(alpha: 0.3), fontSize: 12),
+                  filled: true,
+                  fillColor: AppTheme.background,
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Submit Re-upload Button
+              ElevatedButton(
+                onPressed: _isReuploading ? null : () async {
+                  if (newSlip == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select a payment slip')),
+                    );
+                    return;
+                  }
+                  if (refController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter transaction reference number')),
+                    );
+                    return;
+                  }
+
+                  final messenger = ScaffoldMessenger.of(context);
+                  final navigator = Navigator.of(ctx);
+
+                  setSheetState(() => _isReuploading = true);
+                  try {
+                    final token = Supabase.instance.client.auth.currentSession?.accessToken;
+                    final uri = Uri.parse('${ApiService.baseUrl}/orders/$_activeOrderId/payment-proof');
+                    final request = http.MultipartRequest('POST', uri);
+                    if (token != null) {
+                      request.headers['Authorization'] = 'Bearer $token';
+                    }
+                    request.fields['transaction_reference'] = refController.text.trim().toUpperCase();
+                    if (bankController.text.trim().isNotEmpty) {
+                      request.fields['bank_name'] = bankController.text.trim();
+                    }
+                    request.files.add(
+                      http.MultipartFile.fromBytes(
+                        'slip',
+                        newSlip!.bytes,
+                        filename: newSlip!.fileName,
+                      ),
+                    );
+
+                    final sResp = await request.send();
+                    final resp = await http.Response.fromStream(sResp);
+                    final rData = jsonDecode(resp.body);
+
+                    if (resp.statusCode == 200) {
+                      navigator.pop();
+                      messenger.showSnackBar(
+                        const SnackBar(
+                          content: Text('Payment slip re-submitted! Staff will review shortly.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      if (mounted) {
+                        _fetchInitialOrderDetails(_activeOrderId!);
+                      }
+                    } else {
+                      throw Exception(rData['error'] ?? 'Failed to re-submit proof');
+                    }
+                  } catch (err) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${err.toString().replaceAll('Exception: ', '')}'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  } finally {
+                    setSheetState(() => _isReuploading = false);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF59E0B),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 4,
+                ),
+                child: _isReuploading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Re-submit for Verification', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
