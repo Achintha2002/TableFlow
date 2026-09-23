@@ -2874,6 +2874,15 @@ async function seedRichMenuItems() {
   }
 }
 
+// Global JSON error handler - guarantees Express never sends HTML error pages
+app.use((err, req, res, next) => {
+  console.error('[Global API Error]:', err.message || err);
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: err.message || 'Internal Server Error'
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

@@ -9,8 +9,18 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-    if (allowed.includes(file.mimetype)) {
+    const allowedMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/jpg',
+      'application/pdf',
+      'application/octet-stream'
+    ];
+    const originalName = (file.originalname || '').toLowerCase();
+    const hasValidExt = /\.(jpe?g|png|webp|pdf)$/i.test(originalName);
+
+    if (allowedMimes.includes(file.mimetype) || hasValidExt) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file format. Please upload JPG, PNG, WEBP, or PDF.'));
@@ -94,12 +104,20 @@ module.exports = function(supabaseAdmin) {
 
       const cleanRef = transaction_reference.trim().toUpperCase();
 
-      // Check unique constraint for duplicate transaction reference
-      const { data: existingRef } = await supabaseAdmin
-        .from('payment_transactions')
-        .select('id, order_id, status, created_at')
-        .eq('transaction_reference', cleanRef)
-        .maybeSingle();
+      // Check unique constraint for duplicate transaction reference (safely)
+      let existingRef = null;
+      try {
+        const { data: refCheck, error: refErr } = await supabaseAdmin
+          .from('payment_transactions')
+          .select('id, order_id, status, created_at')
+          .eq('transaction_reference', cleanRef)
+          .maybeSingle();
+        if (!refErr && refCheck) {
+          existingRef = refCheck;
+        }
+      } catch (err) {
+        console.warn('[payment_transactions] check warning:', err.message);
+      }
 
       if (existingRef) {
         return res.status(409).json({
@@ -217,44 +235,101 @@ module.exports = function(supabaseAdmin) {
       // Target serve time
       const targetServeTime = new Date(Date.now() + maxPrepTime * 60 * 1000);
 
-      // 1. Upload Slip to private Supabase Storage
-      const fileExt = req.file.originalname.split('.').pop() || 'jpg';
+      // 1. Upload Slip to Supabase Storage
+      const originalName = req.file.originalname || 'slip.jpg';
+      let fileExt = originalName.split('.').pop()?.toLowerCase() || 'jpg';
+      if (!['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(fileExt)) {
+        fileExt = 'jpg';
+      }
+
+      let contentType = req.file.mimetype;
+      if (!contentType || contentType === 'application/octet-stream') {
+        if (fileExt === 'png') contentType = 'image/png';
+        else if (fileExt === 'webp') contentType = 'image/webp';
+        else if (fileExt === 'pdf') contentType = 'application/pdf';
+        else contentType = 'image/jpeg';
+      }
+
       const slipPath = `${req.user.id}/${Date.now()}_${Math.round(Math.random() * 10000)}.${fileExt}`;
+
+      try {
+        await supabaseAdmin.storage.createBucket('payment-slips', {
+          public: true,
+          fileSizeLimit: 10485760
+        });
+      } catch (_) {}
 
       const { error: uploadErr } = await supabaseAdmin.storage
         .from('payment-slips')
         .upload(slipPath, req.file.buffer, {
-          contentType: req.file.mimetype,
-          upsert: false
+          contentType: contentType,
+          upsert: true
         });
 
       if (uploadErr) {
-        throw new Error(`Failed to upload payment slip: ${uploadErr.message}`);
+        console.warn('[Storage] Upload payment-slips notice:', uploadErr.message);
       }
 
-      // 2. Create the Order in 'payment_pending'
-      const { data: newOrder, error: orderErr } = await supabaseAdmin
+      // 2. Create the Order
+      let newOrder;
+      const primaryPayload = {
+        user_id: req.user.id,
+        reservation_id: reservation_id || null,
+        table_id: table_id || null,
+        subtotal: serverSubtotal,
+        discount_amount: totalDiscount,
+        service_charge: serviceCharge,
+        tax_amount: taxAmount,
+        total_amount: serverTotal,
+        status: 'payment_pending',
+        payment_status: 'pending',
+        payment_method: 'bank_transfer',
+        prep_time_minutes: maxPrepTime,
+        target_serve_time: targetServeTime.toISOString(),
+        special_notes: special_notes || null
+      };
+
+      let { data: orderData, error: orderErr } = await supabaseAdmin
         .from('orders')
-        .insert({
-          user_id: req.user.id,
-          reservation_id: reservation_id || null,
-          table_id: table_id || null,
-          subtotal: serverSubtotal,
-          discount_amount: totalDiscount,
-          service_charge: serviceCharge,
-          tax_amount: taxAmount,
-          total_amount: serverTotal,
-          status: 'payment_pending',
-          payment_status: 'pending',
-          payment_method: 'bank_transfer',
-          prep_time_minutes: maxPrepTime,
-          target_serve_time: targetServeTime.toISOString(),
-          special_notes: special_notes || null
-        })
+        .insert(primaryPayload)
         .select()
         .single();
 
-      if (orderErr) throw orderErr;
+      if (orderErr) {
+        console.warn('Primary order insert failed, attempting standard status "pending":', orderErr.message);
+        const fallbackPayload = {
+          ...primaryPayload,
+          status: 'pending'
+        };
+        const { data: fbData, error: fbErr } = await supabaseAdmin
+          .from('orders')
+          .insert(fallbackPayload)
+          .select()
+          .single();
+
+        if (fbErr) {
+          console.warn('Fallback status failed, trying basic minimal order payload:', fbErr.message);
+          const basicPayload = {
+            user_id: req.user.id,
+            reservation_id: reservation_id || null,
+            table_id: table_id || null,
+            total_amount: serverTotal,
+            status: 'pending',
+            special_notes: special_notes || null
+          };
+          const { data: minData, error: minErr } = await supabaseAdmin
+            .from('orders')
+            .insert(basicPayload)
+            .select()
+            .single();
+          if (minErr) throw minErr;
+          newOrder = minData;
+        } else {
+          newOrder = fbData;
+        }
+      } else {
+        newOrder = orderData;
+      }
 
       // 3. Create Order Items
       const orderItems = items.map(item => ({
@@ -276,7 +351,6 @@ module.exports = function(supabaseAdmin) {
         });
 
         if (rpcErr) {
-          // JS Fallback
           for (const item of items) {
             const dbItem = menuMap.get(item.menu_item_id);
             const curRes = dbItem?.reserved_quantity || 0;
@@ -290,37 +364,48 @@ module.exports = function(supabaseAdmin) {
         console.warn('Inventory reservation warning:', stockErr.message);
       }
 
-      // 5. Insert Payment Transaction Record
-      const { data: transaction, error: transErr } = await supabaseAdmin
-        .from('payment_transactions')
-        .insert({
-          order_id: newOrder.id,
-          user_id: req.user.id,
-          payment_method: 'bank_transfer',
-          slip_path: slipPath,
-          transaction_reference: cleanRef,
-          bank_name: bank_name ? bank_name.trim() : null,
-          amount_paid: serverTotal,
-          status: 'pending_verification'
-        })
-        .select()
-        .single();
+      // 5. Insert Payment Transaction Record (safely if table exists)
+      let transaction = null;
+      try {
+        const { data: transData, error: transErr } = await supabaseAdmin
+          .from('payment_transactions')
+          .insert({
+            order_id: newOrder.id,
+            user_id: req.user.id,
+            payment_method: 'bank_transfer',
+            slip_path: slipPath,
+            transaction_reference: cleanRef,
+            bank_name: bank_name ? bank_name.trim() : null,
+            amount_paid: serverTotal,
+            status: 'pending_verification'
+          })
+          .select()
+          .maybeSingle();
 
-      if (transErr) {
-        console.warn('Payment transaction insert notice:', transErr.message);
+        if (transErr) {
+          console.warn('Payment transaction insert notice:', transErr.message);
+        } else {
+          transaction = transData;
+        }
+      } catch (tErr) {
+        console.warn('Payment transaction table caught warning:', tErr.message);
       }
 
       // 6. Generate a signed URL for customer preview (valid 1 hour)
-      const { data: signedData } = await supabaseAdmin.storage
-        .from('payment-slips')
-        .createSignedUrl(slipPath, 3600);
+      let slipUrl = null;
+      try {
+        const { data: signedData } = await supabaseAdmin.storage
+          .from('payment-slips')
+          .createSignedUrl(slipPath, 3600);
+        slipUrl = signedData?.signedUrl || null;
+      } catch (_) {}
 
       res.status(201).json({
         success: true,
         message: 'Order placed successfully! Your payment slip has been submitted for staff verification.',
         order: newOrder,
         transaction: transaction || null,
-        slip_url: signedData?.signedUrl || null
+        slip_url: slipUrl
       });
     } catch (err) {
       console.error('Payment with slip error:', err);

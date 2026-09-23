@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
@@ -322,11 +323,23 @@ class _CartScreenState extends State<CartScreen> {
         request.fields['redeem_points'] = cart.redeemedPoints.toString();
         request.fields['items'] = jsonEncode(orderItems);
 
+        final fileName = _pickedSlip!.fileName;
+        final ext = fileName.split('.').last.toLowerCase();
+        final mimeType = (ext == 'png')
+            ? 'image/png'
+            : (ext == 'webp')
+                ? 'image/webp'
+                : (ext == 'pdf')
+                    ? 'application/pdf'
+                    : 'image/jpeg';
+        final parts = mimeType.split('/');
+
         request.files.add(
           http.MultipartFile.fromBytes(
             'slip',
             _pickedSlip!.bytes,
-            filename: _pickedSlip!.fileName,
+            filename: fileName,
+            contentType: http_parser.MediaType(parts[0], parts[1]),
           ),
         );
 
@@ -353,17 +366,24 @@ class _CartScreenState extends State<CartScreen> {
         );
       }
 
-      final respData = jsonDecode(response.body);
+      Map<String, dynamic> respData = {};
+      try {
+        if (response.body.isNotEmpty) {
+          respData = jsonDecode(response.body);
+        }
+      } catch (_) {}
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        final orderId = respData['order']['id'];
+        final orderId = respData['order']?['id'] ?? respData['id'];
 
         if (mounted) {
           cart.clear();
           context.push('/order-tracker', extra: {'orderId': orderId.toString()});
         }
       } else {
-        throw Exception(respData['error'] ?? 'Server error placing order');
+        final errMsg = respData['error'] ??
+            (response.body.isNotEmpty ? response.body : 'Server error placing order (${response.statusCode})');
+        throw Exception(errMsg);
       }
     } catch (e) {
       debugPrint('Error submitting order: $e');
