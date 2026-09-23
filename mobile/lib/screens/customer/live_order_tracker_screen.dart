@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
@@ -1527,17 +1528,34 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                     if (bankController.text.trim().isNotEmpty) {
                       request.fields['bank_name'] = bankController.text.trim();
                     }
+                    final fileName = newSlip!.fileName;
+                    final ext = fileName.split('.').last.toLowerCase();
+                    final mimeType = (ext == 'png')
+                        ? 'image/png'
+                        : (ext == 'webp')
+                            ? 'image/webp'
+                            : (ext == 'pdf')
+                                ? 'application/pdf'
+                                : 'image/jpeg';
+                    final parts = mimeType.split('/');
+
                     request.files.add(
                       http.MultipartFile.fromBytes(
                         'slip',
                         newSlip!.bytes,
-                        filename: newSlip!.fileName,
+                        filename: fileName,
+                        contentType: http_parser.MediaType(parts[0], parts[1]),
                       ),
                     );
 
                     final sResp = await request.send();
                     final resp = await http.Response.fromStream(sResp);
-                    final rData = jsonDecode(resp.body);
+                    Map<String, dynamic> rData = {};
+                    try {
+                      if (resp.body.isNotEmpty) {
+                        rData = jsonDecode(resp.body);
+                      }
+                    } catch (_) {}
 
                     if (resp.statusCode == 200) {
                       navigator.pop();
@@ -1551,7 +1569,9 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                         _fetchInitialOrderDetails(_activeOrderId!);
                       }
                     } else {
-                      throw Exception(rData['error'] ?? 'Failed to re-submit proof');
+                      final errMsg = rData['error'] ??
+                          (resp.body.isNotEmpty ? resp.body : 'Failed to re-submit proof (${resp.statusCode})');
+                      throw Exception(errMsg);
                     }
                   } catch (err) {
                     messenger.showSnackBar(
