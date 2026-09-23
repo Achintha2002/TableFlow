@@ -138,19 +138,35 @@ export default function PaymentAuditPage() {
 
       // Generate signed URLs if slips exist
       const enriched = await Promise.all(bankOrders.map(async (order) => {
-        const trans = transMap.get(order.id) || null;
+        let trans = transMap.get(order.id) || null;
         let slipUrl = null;
-        if (trans?.slip_path) {
+        const refMatch = order.special_notes?.match(/Ref:\s*([A-Za-z0-9_-]+)/i);
+        const slipMatch = order.special_notes?.match(/Slip:\s*([^\s\]]+)/i);
+        const slipPath = trans?.slip_path || (slipMatch ? slipMatch[1] : null);
+
+        if (slipPath) {
           try {
             const { data } = await supabase.storage
               .from('payment-slips')
-              .createSignedUrl(trans.slip_path, 600);
+              .createSignedUrl(slipPath, 3600);
             slipUrl = data?.signedUrl || null;
           } catch (_) {}
         }
+
+        if (!trans && (refMatch || slipUrl)) {
+          trans = {
+            order_id: order.id,
+            transaction_reference: refMatch ? refMatch[1] : `BT-${order.id}`,
+            slip_url: slipUrl,
+            status: order.payment_status === 'failed' ? 'rejected' : 'pending_verification'
+          };
+        } else if (trans) {
+          trans = { ...trans, slip_url: slipUrl };
+        }
+
         return {
           ...order,
-          payment_transaction: trans ? { ...trans, slip_url: slipUrl } : null
+          payment_transaction: trans
         };
       }));
 
@@ -323,19 +339,23 @@ export default function PaymentAuditPage() {
     setTimeout(() => setCopiedRef(null), 2000);
   }
 
-  function isOrderPending(order) {
-    if (order.status === 'payment_pending') return true;
-    if (order.payment_transaction?.status === 'pending_verification' || order.payment_transaction?.status === 'pending') return true;
-    // Bank transfer orders that haven't been paid/approved yet and not final
-    if (order.payment_method === 'bank_transfer' && order.payment_status === 'pending' && !['served', 'completed', 'cancelled', 'preparing', 'ready'].includes(order.status)) return true;
-    return false;
-  }
-
   function isOrderRejected(order) {
     if (order.status === 'payment_rejected') return true;
     if (order.payment_transaction?.status === 'rejected') return true;
     if (order.payment_status === 'failed') return true;
     return false;
+  }
+
+  function isOrderApproved(order) {
+    if (order.payment_status === 'paid') return true;
+    if (order.payment_transaction?.status === 'approved') return true;
+    return false;
+  }
+
+  function isOrderPending(order) {
+    if (isOrderRejected(order)) return false;
+    if (isOrderApproved(order)) return false;
+    return true;
   }
 
   // Filters

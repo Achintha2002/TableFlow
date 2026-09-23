@@ -352,6 +352,10 @@ module.exports = function(supabaseAdmin) {
 
       // 2. Create the Order
       let newOrder;
+      const notesWithRef = special_notes 
+        ? `[Bank Transfer Ref: ${cleanRef}] ${special_notes}`
+        : `[Bank Transfer Ref: ${cleanRef}]`;
+
       const primaryPayload = {
         user_id: req.user.id,
         reservation_id: effectiveReservationId,
@@ -361,12 +365,12 @@ module.exports = function(supabaseAdmin) {
         service_charge: serviceCharge,
         tax_amount: taxAmount,
         total_amount: serverTotal,
-        status: 'payment_pending',
+        status: 'pending',
         payment_status: 'pending',
         payment_method: 'bank_transfer',
         prep_time_minutes: maxPrepTime,
         target_serve_time: targetServeTime.toISOString(),
-        special_notes: special_notes || null
+        special_notes: notesWithRef
       };
 
       let { data: orderData, error: orderErr } = await supabaseAdmin
@@ -403,7 +407,9 @@ module.exports = function(supabaseAdmin) {
             table_id: table_id || null,
             total_amount: serverTotal,
             status: 'pending',
-            special_notes: special_notes || null
+            payment_status: 'pending',
+            payment_method: 'bank_transfer',
+            special_notes: notesWithRef
           };
           const { data: minData, error: minErr } = await supabaseAdmin
             .from('orders')
