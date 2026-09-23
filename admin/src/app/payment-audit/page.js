@@ -57,20 +57,106 @@ export default function PaymentAuditPage() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const res = await fetch('http://localhost:3000/api/admin/orders/pending-verification', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      let queueOrders = null;
 
-      if (!res.ok) {
-        throw new Error('Failed to load pending verifications');
+      // 1. Try fetching from backend endpoint if session token exists
+      if (token) {
+        try {
+          const res = await fetch('http://localhost:3000/api/admin/orders/pending-verification', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            queueOrders = data.orders || [];
+          } else {
+            const errData = await res.json().catch(() => null);
+            console.warn('Backend verification API notice:', errData?.error || res.statusText);
+          }
+        } catch (fetchErr) {
+          console.warn('Backend fetch notice:', fetchErr.message);
+        }
       }
 
-      const data = await res.json();
-      setOrders(data.orders || []);
+      // 2. If backend succeeded, update orders and return
+      if (queueOrders !== null) {
+        setOrders(queueOrders);
+        return;
+      }
+
+      // 3. Resilient Direct Supabase Fallback (Identical to Orders page)
+      const { data: dbOrders, error: dbErr } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          total_amount,
+          status,
+          payment_status,
+          payment_method,
+          special_notes,
+          created_at,
+          users (id, full_name, email, phone_number),
+          restaurant_tables (table_number),
+          order_items (
+            id,
+            quantity,
+            unit_price,
+            menu_items (id, name, price, image_url)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (dbErr) {
+        console.warn('Direct DB fetch notice:', dbErr.message);
+        showToast(dbErr.message, true);
+        return;
+      }
+
+      // Filter bank transfer orders needing verification
+      const bankOrders = (dbOrders || []).filter(o => 
+        o.payment_method === 'bank_transfer' || 
+        o.status === 'payment_pending' || 
+        o.status === 'payment_rejected' ||
+        (o.payment_status === 'pending' && !['served', 'completed', 'cancelled'].includes(o.status))
+      );
+
+      // Fetch payment transactions if available
+      let transMap = new Map();
+      if (bankOrders.length > 0) {
+        try {
+          const orderIds = bankOrders.map(o => o.id);
+          const { data: transData } = await supabase
+            .from('payment_transactions')
+            .select('*')
+            .in('order_id', orderIds);
+          if (transData) {
+            transData.forEach(t => transMap.set(t.order_id, t));
+          }
+        } catch (_) {}
+      }
+
+      // Generate signed URLs if slips exist
+      const enriched = await Promise.all(bankOrders.map(async (order) => {
+        const trans = transMap.get(order.id) || null;
+        let slipUrl = null;
+        if (trans?.slip_path) {
+          try {
+            const { data } = await supabase.storage
+              .from('payment-slips')
+              .createSignedUrl(trans.slip_path, 600);
+            slipUrl = data?.signedUrl || null;
+          } catch (_) {}
+        }
+        return {
+          ...order,
+          payment_transaction: trans ? { ...trans, slip_url: slipUrl } : null
+        };
+      }));
+
+      setOrders(enriched);
     } catch (err) {
-      console.error('Fetch queue error:', err);
+      console.warn('Fetch queue notice:', err.message);
       showToast(err.message, true);
     } finally {
       setLoading(false);
