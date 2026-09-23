@@ -321,6 +321,8 @@ export default function PaymentAuditPage() {
     navigator.clipboard.writeText(text);
     setCopiedRef(text);
     setTimeout(() => setCopiedRef(null), 2000);
+  }
+
   function isOrderPending(order) {
     if (order.status === 'payment_pending') return true;
     if (order.payment_transaction?.status === 'pending_verification' || order.payment_transaction?.status === 'pending') return true;
