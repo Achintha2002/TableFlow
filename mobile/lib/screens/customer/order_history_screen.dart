@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../widgets/guest_placeholder.dart';
 import 'package:intl/intl.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
@@ -24,7 +25,10 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   Future<void> _fetchOrders() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final data = await Supabase.instance.client
           .from('orders')
@@ -158,11 +162,18 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _orders.isEmpty
-              ? const Center(child: Text('No past orders found.'))
-              : ListView.builder(
+      body: Supabase.instance.client.auth.currentUser == null
+          ? GuestPlaceholder(
+              title: 'Order History',
+              description: 'Sign in to TableFlow to view your past dining receipts, track status, and submit meal reviews.',
+              icon: Icons.receipt_long,
+              onSignedIn: _fetchOrders,
+            )
+          : _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _orders.isEmpty
+                  ? const Center(child: Text('No past orders found.'))
+                  : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _orders.length,
                   itemBuilder: (context, index) {

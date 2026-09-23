@@ -2,7 +2,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/supabase_service.dart';
+import '../../utils/auth_guard.dart';
 
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
@@ -31,6 +33,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _fetchProfileData() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _fullName = 'Guest Customer';
+          _email = 'Browsing as Guest';
+          _phone = '';
+          _loyaltyTier = 'Guest';
+          _role = 'customer';
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
     try {
       final profile = await SupabaseService.getUserProfile();
 
@@ -137,6 +154,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return const Scaffold(backgroundColor: AppTheme.background, body: Center(child: CircularProgressIndicator(color: AppTheme.primary)));
     }
     
+    final isGuest = Supabase.instance.client.auth.currentUser == null;
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SingleChildScrollView(
@@ -189,14 +208,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: CircleAvatar(
                               radius: 50,
                               backgroundColor: AppTheme.white.withValues(alpha: 0.9),
-                              child: Text(
-                                _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  fontSize: 40,
-                                  fontFamily: 'Playfair Display',
-                                  color: AppTheme.primary,
-                                ),
-                              ),
+                              child: isGuest
+                                  ? const Icon(Icons.person_outline_rounded, size: 48, color: AppTheme.primary)
+                                  : Text(
+                                      _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
+                                      style: const TextStyle(
+                                        fontSize: 40,
+                                        fontFamily: 'Playfair Display',
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
                             ),
                           ),
                           Container(
@@ -207,7 +228,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             child: IconButton(
                               icon: const Icon(Icons.edit, color: AppTheme.white, size: 18),
-                              onPressed: _showEditProfileDialog,
+                              onPressed: () {
+                                if (isGuest) {
+                                  AuthGuard.requireAuth(
+                                    context,
+                                    actionTitle: 'Edit Profile',
+                                    actionSubtitle: 'Sign in to customize your TableFlow member profile.',
+                                    onAuthenticated: _fetchProfileData,
+                                  );
+                                } else {
+                                  _showEditProfileDialog();
+                                }
+                              },
                             ),
                           ),
                         ],
@@ -247,7 +279,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const Icon(Icons.star, color: AppTheme.tertiary, size: 18),
                                 const SizedBox(width: 8),
                                 Text(
-                                  '$_loyaltyTier Member',
+                                  isGuest ? 'Guest Explorer' : '$_loyaltyTier Member',
                                   style: const TextStyle(
                                     color: AppTheme.white,
                                     fontWeight: FontWeight.bold,
@@ -258,7 +290,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      if (isGuest) ...[
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            await context.push('/login');
+                            if (mounted) _fetchProfileData();
+                          },
+                          icon: const Icon(Icons.login_rounded, size: 18),
+                          label: const Text(
+                            'Sign In or Create Account',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 6,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
@@ -321,21 +374,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.receipt_long,
                         title: 'Order History',
                         subtitle: 'View your past orders & write reviews.',
-                        onTap: () => context.push('/order-history'),
+                        onTap: () async {
+                          if (isGuest) {
+                            final loggedIn = await AuthGuard.requireAuth(
+                              context,
+                              actionTitle: 'View Order History',
+                              actionSubtitle: 'Sign in to TableFlow to view past orders, track live status, and review dishes.',
+                            );
+                            if (loggedIn && context.mounted) {
+                              _fetchProfileData();
+                              context.push('/order-history');
+                            }
+                          } else {
+                            context.push('/order-history');
+                          }
+                        },
                       ),
                       const Divider(height: 1),
                       _buildActionTile(
                         icon: Icons.event_seat,
                         title: 'My Reservations',
                         subtitle: 'Manage your upcoming table bookings.',
-                        onTap: () => context.push('/reservations'),
+                        onTap: () async {
+                          if (isGuest) {
+                            final loggedIn = await AuthGuard.requireAuth(
+                              context,
+                              actionTitle: 'View Reservations',
+                              actionSubtitle: 'Sign in to TableFlow to check your upcoming table bookings and replies.',
+                            );
+                            if (loggedIn && context.mounted) {
+                              _fetchProfileData();
+                              context.push('/reservations');
+                            }
+                          } else {
+                            context.push('/reservations');
+                          }
+                        },
                       ),
                       const Divider(height: 1),
                       _buildActionTile(
                         icon: Icons.star_border,
                         title: 'Loyalty Program',
                         subtitle: 'Check your points and tier status.',
-                        onTap: () => context.push('/loyalty'),
+                        onTap: () async {
+                          if (isGuest) {
+                            final loggedIn = await AuthGuard.requireAuth(
+                              context,
+                              actionTitle: 'Loyalty Rewards',
+                              actionSubtitle: 'Sign in to earn and redeem boutique dining points.',
+                            );
+                            if (loggedIn && context.mounted) {
+                              _fetchProfileData();
+                              context.push('/loyalty');
+                            }
+                          } else {
+                            context.push('/loyalty');
+                          }
+                        },
                       ),
                     ],
                   ),
@@ -405,24 +500,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   
                   const SizedBox(height: 48),
                   
-                  // Logout Button
+                  // Auth Action Button
                   Center(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        await SupabaseService.signOut();
-                        if (context.mounted) context.go('/login');
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                        side: const BorderSide(color: Colors.redAccent),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      icon: const Icon(Icons.logout, color: Colors.redAccent),
-                      label: const Text(
-                        'Sign Out',
-                        style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
+                    child: isGuest
+                        ? ElevatedButton.icon(
+                            onPressed: () async {
+                              await context.push('/login');
+                              if (mounted) _fetchProfileData();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              elevation: 4,
+                            ),
+                            icon: const Icon(Icons.login_rounded),
+                            label: const Text(
+                              'Sign In / Register',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: () async {
+                              await SupabaseService.signOut();
+                              if (context.mounted) {
+                                setState(() {
+                                  _fetchProfileData();
+                                });
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              side: const BorderSide(color: Colors.redAccent),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            icon: const Icon(Icons.logout, color: Colors.redAccent),
+                            label: const Text(
+                              'Sign Out',
+                              style: TextStyle(color: Colors.redAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 100), // padding for bottom nav
                 ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../utils/auth_guard.dart';
 
 class ReservationDetailsScreen extends StatefulWidget {
   final String tableId;
@@ -28,10 +29,16 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
   bool _isLoading = false;
 
   void _confirmReservation() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    var user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in')));
-      return;
+      final loggedIn = await AuthGuard.requireAuth(
+        context,
+        actionTitle: 'Confirm Reservation',
+        actionSubtitle: 'Sign in to TableFlow to confirm your booking and receive immediate reservation notifications.',
+      );
+      if (!loggedIn || !mounted) return;
+      user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
     }
     
     setState(() => _isLoading = true);

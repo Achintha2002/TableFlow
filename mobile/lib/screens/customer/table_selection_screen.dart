@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import '../../utils/auth_guard.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class TableSelectionScreen extends StatefulWidget {
@@ -243,8 +244,18 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              if (Supabase.instance.client.auth.currentUser == null) {
+                final loggedIn = await AuthGuard.requireAuth(
+                  context,
+                  actionTitle: 'Reserve Table',
+                  actionSubtitle: 'Sign in to TableFlow to confirm your booking and receive immediate reservation updates.',
+                );
+                if (!loggedIn || !mounted) return;
+              }
+
               final table = _tables.firstWhere((t) => t['id'] == _selectedTableId);
+              if (!mounted) return;
               context.push('/reservation-details', extra: {
                 'tableId': _selectedTableId,
                 'dbId': table['dbId'],

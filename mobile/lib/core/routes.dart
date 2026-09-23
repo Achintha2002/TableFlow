@@ -68,14 +68,37 @@ class AppRoutes {
       final isLoginOrRegister = state.matchedLocation == login ||
           state.matchedLocation == register;
 
-      // If not logged in and trying to access a protected route (or onboarding without login),
-      // redirect to login.
-      if (!isAuth && !isSplash && !isLoginOrRegister) {
+      // Whitelist of routes accessible without an active auth session (Guest Mode)
+      final publicRoutes = [
+        splash,
+        onboarding,
+        login,
+        register,
+        home,
+        menu,
+        cart,
+        queue,
+        tableSelection,
+        profile,
+        qrCheckin,
+        orderHistory,
+        reservations,
+        loyalty,
+        reservationDetails,
+        orderTracker,
+      ];
+
+      // If route requires staff/strict auth and user is unauthenticated, redirect to login
+      if (!isAuth && !publicRoutes.contains(state.matchedLocation)) {
         return login;
       }
 
-      // If logged in and on login/register screens, route according to onboarding status.
+      // If logged in and on login/register screens, route to redirect param or onboarding/home
       if (isAuth && isLoginOrRegister) {
+        final redirectParam = state.uri.queryParameters['redirect'];
+        if (redirectParam != null && redirectParam.isNotEmpty) {
+          return redirectParam;
+        }
         final hasSeen = await SupabaseService.hasUserSeenOnboarding();
         return hasSeen ? home : onboarding;
       }

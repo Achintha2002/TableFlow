@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../widgets/guest_placeholder.dart';
 
 class LoyaltyScreen extends StatefulWidget {
   const LoyaltyScreen({super.key});
@@ -58,7 +59,10 @@ class _LoyaltyScreenState extends State<LoyaltyScreen> {
   Future<void> _fetchLoyaltyData() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final data = await Supabase.instance.client
           .from('users')
@@ -127,9 +131,16 @@ class _LoyaltyScreenState extends State<LoyaltyScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+      body: Supabase.instance.client.auth.currentUser == null
+          ? GuestPlaceholder(
+              title: 'Loyalty Rewards',
+              description: 'Sign in to TableFlow to check your accumulated dining points, unlock tier benefits, and redeem discounts.',
+              icon: Icons.star_border,
+              onSignedIn: _fetchLoyaltyData,
+            )
+          : _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
               onRefresh: _fetchLoyaltyData,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),

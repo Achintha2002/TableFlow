@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/supabase_service.dart';
+import '../../utils/auth_guard.dart';
 import '../../utils/slip_picker.dart';
 import '../../widgets/item_customization_sheet.dart';
 
@@ -215,11 +216,18 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _submitOrder() async {
     final cart = context.read<CartProvider>();
-    final user = Supabase.instance.client.auth.currentUser;
+    var user = Supabase.instance.client.auth.currentUser;
 
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in first')));
-      return;
+      final loggedIn = await AuthGuard.requireAuth(
+        context,
+        actionTitle: 'Place Order',
+        actionSubtitle: 'Sign in to TableFlow to securely place your dining order, track live kitchen progress, and earn loyalty points.',
+      );
+      if (!loggedIn || !mounted) return;
+      user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      _fetchLoyaltyPoints();
     }
 
     final effectiveTableId = cart.selectedTableId ?? _selectedTableId;

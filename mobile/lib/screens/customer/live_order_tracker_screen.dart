@@ -11,6 +11,7 @@ import '../../core/theme.dart';
 import '../../services/api_service.dart';
 import '../../utils/slip_picker.dart';
 import '../../widgets/call_waiter_sheet.dart';
+import '../../widgets/guest_placeholder.dart';
 
 class LiveOrderTrackerScreen extends StatefulWidget {
   final String? orderId;
@@ -405,6 +406,23 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (Supabase.instance.client.auth.currentUser == null) {
+      return Scaffold(
+        backgroundColor: AppTheme.background,
+        appBar: AppBar(
+          title: const Text('Live Order Tracker'),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: GuestPlaceholder(
+          title: 'Live Order Tracker',
+          description: 'Sign in to TableFlow to track your kitchen order progress, status updates, and waiter calls in real time.',
+          icon: Icons.room_service_outlined,
+          onSignedIn: _initTracker,
+        ),
+      );
+    }
+
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: AppTheme.background,

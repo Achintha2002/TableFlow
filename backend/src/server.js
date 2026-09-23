@@ -1119,6 +1119,22 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
 // Waitlist (Queue) Endpoints
 // ==========================================
 
+// Public queue aggregate status (privacy-safe: only returns count of waiting people)
+app.get('/api/queue/public-status', async (req, res) => {
+  try {
+    const { count, error } = await supabase
+      .from('queue_entries')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'waiting');
+
+    if (error) throw error;
+    res.json({ peopleWaiting: count ?? 0 });
+  } catch (error) {
+    console.error('Error fetching public queue status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/queue/:id/position', async (req, res) => {
   try {
     // using the anon client or user client for queue is fine

@@ -117,12 +117,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.dispose();
   }
 
-  Future<void> _markSeenAndNavigate(BuildContext ctx) async {
+  Future<void> _markSeenAndNavigate(BuildContext ctx, {String target = '/home'}) async {
     await SupabaseService.markOnboardingSeen();
     if (!ctx.mounted) return;
-
-    final isAuth = Supabase.instance.client.auth.currentSession != null;
-    ctx.go(isAuth ? '/home' : '/login');
+    ctx.go(target);
   }
 
   void _nextPage() {
@@ -132,8 +130,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         curve: Curves.easeInOutCubic,
       );
     } else {
-      _markSeenAndNavigate(context);
+      _markSeenAndNavigate(context, target: '/home');
     }
+  }
+
+  void _onSignInTapped() {
+    _markSeenAndNavigate(context, target: '/login');
   }
 
   @override
@@ -306,6 +308,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     currentPage: _currentPage,
                     pageCount: _slides.length,
                     onNext: _nextPage,
+                    onSignIn: _onSignInTapped,
                   ),
                 ],
               ),
@@ -325,19 +328,23 @@ class _BottomWaveCard extends StatelessWidget {
   final int currentPage;
   final int pageCount;
   final VoidCallback onNext;
+  final VoidCallback onSignIn;
 
   const _BottomWaveCard({
     required this.slide,
     required this.currentPage,
     required this.pageCount,
     required this.onNext,
+    required this.onSignIn,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isLastPage = currentPage == pageCount - 1;
+
     return SizedBox(
       width: double.infinity,
-      height: 310,
+      height: isLastPage ? 335 : 310,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -351,7 +358,7 @@ class _BottomWaveCard extends StatelessWidget {
 
           // ── Layer 2: Foreground Typography & Controls ──────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(28, 42, 28, 20),
+            padding: const EdgeInsets.fromLTRB(28, 40, 28, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -405,13 +412,41 @@ class _BottomWaveCard extends StatelessWidget {
 
                     // Primary Glow CTA Button
                     _GlowingCTAButton(
-                      label: currentPage == pageCount - 1
-                          ? 'Get Started'
-                          : 'Continue',
+                      label: isLastPage ? 'Explore as Guest' : 'Continue',
                       gradient: slide.buttonGradient,
-                      isLast: currentPage == pageCount - 1,
+                      isLast: isLastPage,
                       onTap: onNext,
                     ),
+
+                    // Sign In prompt on the last slide
+                    if (isLastPage)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: GestureDetector(
+                          onTap: onSignIn,
+                          behavior: HitTestBehavior.opaque,
+                          child: Text.rich(
+                            TextSpan(
+                              text: 'Already a member? ',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'Sign In',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ],

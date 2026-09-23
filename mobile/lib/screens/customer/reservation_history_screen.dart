@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../widgets/guest_placeholder.dart';
 import 'package:intl/intl.dart';
 
 class ReservationHistoryScreen extends StatefulWidget {
@@ -53,7 +54,10 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
   Future<void> _fetchReservations() async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final data = await Supabase.instance.client
           .from('reservations')
@@ -100,11 +104,18 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _reservations.isEmpty
-              ? const Center(child: Text('No reservations found.'))
-              : ListView.builder(
+      body: Supabase.instance.client.auth.currentUser == null
+          ? GuestPlaceholder(
+              title: 'My Reservations',
+              description: 'Sign in to TableFlow to view your upcoming table reservations, manager replies, and booking details.',
+              icon: Icons.event_seat,
+              onSignedIn: _fetchReservations,
+            )
+          : _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _reservations.isEmpty
+                  ? const Center(child: Text('No reservations found.'))
+                  : ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: _reservations.length,
                   itemBuilder: (context, index) {

@@ -7,6 +7,8 @@ import 'dart:async';
 import 'dart:convert';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
+import '../../services/api_service.dart';
+import '../../utils/auth_guard.dart';
 
 class QueueScreen extends StatefulWidget {
   const QueueScreen({super.key});
@@ -53,6 +55,8 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     setState(() => _isLoading = true);
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
+      // Guest user - still calculate aggregate waiting count for privacy-safe live display
+      await _calculateTotalWaiting();
       if(mounted) setState(() => _isLoading = false);
       return;
     }
@@ -86,6 +90,23 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   }
 
   Future<void> _calculateTotalWaiting() async {
+    // 1. First attempt privacy-safe aggregate endpoint
+    try {
+      final res = await http.get(Uri.parse('${ApiService.baseUrl}/queue/public-status'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        if (mounted) {
+          setState(() {
+            _totalWaiting = data['peopleWaiting'] ?? 0;
+          });
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('Public queue status fetch error: $e');
+    }
+
+    // 2. Direct fallback
     try {
       final res = await Supabase.instance.client
           .from('queue_entries')
@@ -97,7 +118,7 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
         });
       }
     } catch(e) {
-      debugPrint('Total waiting error: $e');
+      debugPrint('Total waiting fallback error: $e');
     }
   }
 
@@ -258,10 +279,16 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   }
 
   Future<void> _joinQueue() async {
-    final user = Supabase.instance.client.auth.currentUser;
+    var user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in')));
-      return;
+      final loggedIn = await AuthGuard.requireAuth(
+        context,
+        actionTitle: 'Join the Queue',
+        actionSubtitle: 'Sign in to TableFlow to join the waitlist and receive real-time table alerts.',
+      );
+      if (!loggedIn || !mounted) return;
+      user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
     }
     
     // ── Step 1: Pick party size ──────────────────────────

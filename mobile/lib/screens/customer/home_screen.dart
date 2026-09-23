@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import '../../utils/auth_guard.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/call_waiter_sheet.dart';
@@ -164,6 +165,48 @@ class _HomeScreenState extends State<HomeScreen> {
                               height: 1.3,
                             ),
                       ),
+                      if (Supabase.instance.client.auth.currentUser == null) ...[
+                        const SizedBox(height: 14),
+                        GestureDetector(
+                          onTap: () => AuthGuard.requireAuth(
+                            context,
+                            actionTitle: 'Unlock Member Perks',
+                            actionSubtitle: 'Sign in to TableFlow to save favorites, track orders in real time, and earn dining rewards.',
+                            onAuthenticated: () {
+                              _fetchUserData();
+                            },
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppTheme.white.withValues(alpha: 0.35),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star, color: AppTheme.tertiary, size: 16),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Sign in for Member Perks',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(Icons.chevron_right, color: Colors.white70, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -351,7 +394,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: 'My Reservations',
                   subtitle: 'View bookings & admin replies',
                   icon: Icons.history,
-                  onTap: () => context.go('/reservations'),
+                  onTap: () async {
+                    if (Supabase.instance.client.auth.currentUser == null) {
+                      final loggedIn = await AuthGuard.requireAuth(
+                        context,
+                        actionTitle: 'View Reservations',
+                        actionSubtitle: 'Sign in to TableFlow to check your upcoming table reservations and manager confirmations.',
+                      );
+                      if (loggedIn && context.mounted) {
+                        context.go('/reservations');
+                      }
+                    } else {
+                      context.go('/reservations');
+                    }
+                  },
                 ),
               ),
               const SizedBox(width: 16),
@@ -360,7 +416,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: 'Order History',
                   subtitle: 'Past orders & reviews',
                   icon: Icons.receipt_long,
-                  onTap: () => context.go('/order-history'),
+                  onTap: () async {
+                    if (Supabase.instance.client.auth.currentUser == null) {
+                      final loggedIn = await AuthGuard.requireAuth(
+                        context,
+                        actionTitle: 'View Order History',
+                        actionSubtitle: 'Sign in to TableFlow to view your past dining receipts and review dishes.',
+                      );
+                      if (loggedIn && context.mounted) {
+                        context.go('/order-history');
+                      }
+                    } else {
+                      context.go('/order-history');
+                    }
+                  },
                 ),
               ),
             ],

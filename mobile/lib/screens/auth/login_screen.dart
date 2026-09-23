@@ -17,6 +17,23 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  void _postAuthSuccess(String? userId) async {
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
+    if (redirect != null && redirect.isNotEmpty) {
+      context.go(redirect);
+      return;
+    }
+    final hasSeen = await SupabaseService.hasUserSeenOnboarding(userId);
+    if (mounted) {
+      context.go(hasSeen ? '/home' : '/onboarding');
+    }
+  }
+
   void _handleLogin() async {
     setState(() { _isLoading = true; _errorMessage = null; });
     try {
@@ -25,11 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
       if (mounted) {
-        final userId = res.user?.id;
-        final hasSeen = await SupabaseService.hasUserSeenOnboarding(userId);
-        if (mounted) {
-          context.go(hasSeen ? '/home' : '/onboarding');
-        }
+        _postAuthSuccess(res.user?.id);
       }
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
@@ -45,11 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final response = await SupabaseService.signInWithGoogle();
       if (response != null && mounted) {
-        final userId = response.user?.id;
-        final hasSeen = await SupabaseService.hasUserSeenOnboarding(userId);
-        if (mounted) {
-          context.go(hasSeen ? '/home' : '/onboarding');
-        }
+        _postAuthSuccess(response.user?.id);
       }
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
@@ -67,11 +76,46 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32.0),
+          padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 60),
+              // Top Back / Dismiss Bar for Guest Browsing
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                    color: AppTheme.secondary,
+                    tooltip: 'Back',
+                    onPressed: () {
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop(false);
+                      } else {
+                        context.go('/home');
+                      }
+                    },
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop(false);
+                      } else {
+                        context.go('/home');
+                      }
+                    },
+                    child: const Text(
+                      'Explore as Guest',
+                      style: TextStyle(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
               // Elegant Logo/Title
               Text(
                 'TableFlow',
