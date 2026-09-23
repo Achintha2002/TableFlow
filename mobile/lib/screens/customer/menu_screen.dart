@@ -387,11 +387,11 @@ class _MenuScreenState extends State<MenuScreen> {
             ),
           ),
           child: Text(
-            label,
-            style: TextStyle(
+            displayLabel,
+            style: GoogleFonts.inter(
               color: isSelected ? AppTheme.white : AppTheme.secondary,
               fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+              letterSpacing: 0.3,
               fontSize: 13,
             ),
           ),
@@ -618,6 +618,6 @@ class _StickyCategoryDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_StickyCategoryDelegate oldDelegate) {
-    return false;
+    return true;
   }
 }
