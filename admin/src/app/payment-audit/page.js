@@ -381,7 +381,7 @@ export default function PaymentAuditPage() {
     .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
 
   return (
-    <div className="main-content" style={{ padding: '24px 32px' }}>
+    <div style={{ width: '100%', maxWidth: '100%', minWidth: 0, paddingBottom: '32px' }}>
       {/* Toast */}
       {toast && (
         <div style={{
@@ -512,18 +512,18 @@ export default function PaymentAuditPage() {
             <p style={{ margin: '6px 0 0 0', fontSize: '0.9rem' }}>No pending bank transfer payments waiting for verification.</p>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '980px' }}>
               <thead>
                 <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border-color)' }}>
-                  <th style={{ padding: '14px 16px' }}>Order</th>
-                  <th style={{ padding: '14px 16px' }}>Customer & Contact</th>
-                  <th style={{ padding: '14px 16px' }}>Bank Ref Number</th>
-                  <th style={{ padding: '14px 16px' }}>Items & Notes</th>
-                  <th style={{ padding: '14px 16px' }}>Amount (LKR)</th>
-                  <th style={{ padding: '14px 16px' }}>Payment Slip</th>
-                  <th style={{ padding: '14px 16px' }}>Status</th>
-                  <th style={{ padding: '14px 16px', textAlign: 'right' }}>Actions</th>
+                  <th style={{ padding: '14px 16px', minWidth: '130px' }}>Order</th>
+                  <th style={{ padding: '14px 16px', minWidth: '150px' }}>Customer & Contact</th>
+                  <th style={{ padding: '14px 16px', minWidth: '150px' }}>Bank Ref Number</th>
+                  <th style={{ padding: '14px 16px', minWidth: '170px' }}>Items & Notes</th>
+                  <th style={{ padding: '14px 16px', minWidth: '120px' }}>Amount (LKR)</th>
+                  <th style={{ padding: '14px 16px', minWidth: '110px' }}>Payment Slip</th>
+                  <th style={{ padding: '14px 16px', minWidth: '120px' }}>Status</th>
+                  <th style={{ padding: '14px 16px', textAlign: 'right', minWidth: '160px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -531,15 +531,18 @@ export default function PaymentAuditPage() {
                   const trans = order.payment_transaction;
                   const isPending = isOrderPending(order);
                   const isRejected = isOrderRejected(order);
-                  const isApproved = !isPending && !isRejected;
+                  const isApproved = isOrderApproved(order);
                   const elapsedMin = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
 
                   return (
                     <tr key={order.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }}>
                       {/* Order Info */}
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
-                          #{order.id}
+                        <div 
+                          style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem', letterSpacing: '0.5px' }}
+                          title={`Full Order ID: #${order.id}`}
+                        >
+                          #{String(order.id).length > 12 ? `${String(order.id).slice(0, 8)}...` : order.id}
                         </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           <Clock size={12} /> {elapsedMin < 60 ? `${elapsedMin}m ago` : `${Math.floor(elapsedMin / 60)}h ago`}
