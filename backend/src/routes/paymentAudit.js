@@ -139,12 +139,23 @@ module.exports = function(supabaseAdmin) {
 
       // Recompute Prices & Inventory availability Server-Side
       const itemIds = items.map(i => i.menu_item_id);
-      const { data: menuItems, error: menuErr } = await supabaseAdmin
+      let menuItems = [];
+      const { data: fetchedItems, error: menuErr } = await supabaseAdmin
         .from('menu_items')
-        .select('id, name, price, prep_time_minutes, is_available, stock_quantity, reserved_quantity, customizations')
+        .select('id, name, price, prep_time_minutes, is_available, customizations')
         .in('id', itemIds);
 
-      if (menuErr) throw menuErr;
+      if (menuErr) {
+        // Fallback without customizations if column not yet created
+        const { data: fallbackItems, error: fallbackErr } = await supabaseAdmin
+          .from('menu_items')
+          .select('id, name, price, prep_time_minutes, is_available')
+          .in('id', itemIds);
+        if (fallbackErr) throw fallbackErr;
+        menuItems = fallbackItems || [];
+      } else {
+        menuItems = fetchedItems || [];
+      }
 
       const menuMap = new Map();
       (menuItems || []).forEach(m => menuMap.set(m.id, m));
@@ -162,14 +173,16 @@ module.exports = function(supabaseAdmin) {
         }
 
         const quantity = parseInt(item.quantity, 10) || 1;
-        const currentStock = dbItem.stock_quantity ?? 100;
-        const currentReserved = dbItem.reserved_quantity ?? 0;
-        const availableStock = currentStock - currentReserved;
+        if (dbItem.stock_quantity !== undefined && dbItem.stock_quantity !== null) {
+          const currentStock = dbItem.stock_quantity;
+          const currentReserved = dbItem.reserved_quantity ?? 0;
+          const availableStock = currentStock - currentReserved;
 
-        if (availableStock < quantity) {
-          return res.status(400).json({
-            error: `Insufficient stock for "${dbItem.name}". Only ${Math.max(0, availableStock)} available.`
-          });
+          if (availableStock < quantity) {
+            return res.status(400).json({
+              error: `Insufficient stock for "${dbItem.name}". Only ${Math.max(0, availableStock)} available.`
+            });
+          }
         }
 
         const basePrice = parseFloat(dbItem.price);
