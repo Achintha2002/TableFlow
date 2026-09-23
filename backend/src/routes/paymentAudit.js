@@ -366,11 +366,13 @@ module.exports = function(supabaseAdmin) {
         if (rpcErr) {
           for (const item of items) {
             const dbItem = menuMap.get(item.menu_item_id);
-            const curRes = dbItem?.reserved_quantity || 0;
-            await supabaseAdmin
-              .from('menu_items')
-              .update({ reserved_quantity: curRes + (parseInt(item.quantity, 10) || 1) })
-              .eq('id', item.menu_item_id);
+            if (dbItem && dbItem.reserved_quantity !== undefined) {
+              const curRes = dbItem.reserved_quantity || 0;
+              await supabaseAdmin
+                .from('menu_items')
+                .update({ reserved_quantity: curRes + (parseInt(item.quantity, 10) || 1) })
+                .eq('id', item.menu_item_id);
+            }
           }
         }
       } catch (stockErr) {
@@ -488,13 +490,17 @@ module.exports = function(supabaseAdmin) {
 
       // Re-reserve stock if order was rejected
       if (order.status === 'payment_rejected' && order.order_items) {
-        for (const oi of order.order_items) {
-          const { data: mItem } = await supabaseAdmin.from('menu_items').select('reserved_quantity').eq('id', oi.menu_item_id).single();
-          if (mItem) {
-            await supabaseAdmin.from('menu_items').update({
-              reserved_quantity: (mItem.reserved_quantity || 0) + (oi.quantity || 1)
-            }).eq('id', oi.menu_item_id);
+        try {
+          for (const oi of order.order_items) {
+            const { data: mItem, error: mErr } = await supabaseAdmin.from('menu_items').select('reserved_quantity').eq('id', oi.menu_item_id).single();
+            if (!mErr && mItem && mItem.reserved_quantity !== undefined) {
+              await supabaseAdmin.from('menu_items').update({
+                reserved_quantity: (mItem.reserved_quantity || 0) + (oi.quantity || 1)
+              }).eq('id', oi.menu_item_id);
+            }
           }
+        } catch (e) {
+          console.warn('Re-reserve stock warning:', e.message);
         }
       }
 
@@ -649,8 +655,8 @@ module.exports = function(supabaseAdmin) {
           const { error: rpcErr } = await supabaseAdmin.rpc('commit_reserved_stock', { p_order_id: order.id });
           if (rpcErr && order.order_items) {
             for (const oi of order.order_items) {
-              const { data: m } = await supabaseAdmin.from('menu_items').select('stock_quantity, reserved_quantity').eq('id', oi.menu_item_id).single();
-              if (m) {
+              const { data: m, error: mErr } = await supabaseAdmin.from('menu_items').select('stock_quantity, reserved_quantity').eq('id', oi.menu_item_id).single();
+              if (!mErr && m && m.stock_quantity !== undefined) {
                 await supabaseAdmin.from('menu_items').update({
                   stock_quantity: Math.max(0, (m.stock_quantity ?? 100) - (oi.quantity || 1)),
                   reserved_quantity: Math.max(0, (m.reserved_quantity ?? 0) - (oi.quantity || 1))
@@ -722,8 +728,8 @@ module.exports = function(supabaseAdmin) {
           const { error: rpcErr } = await supabaseAdmin.rpc('release_reserved_stock', { p_order_id: order.id });
           if (rpcErr && order.order_items) {
             for (const oi of order.order_items) {
-              const { data: m } = await supabaseAdmin.from('menu_items').select('reserved_quantity').eq('id', oi.menu_item_id).single();
-              if (m) {
+              const { data: m, error: mErr } = await supabaseAdmin.from('menu_items').select('reserved_quantity').eq('id', oi.menu_item_id).single();
+              if (!mErr && m && m.reserved_quantity !== undefined) {
                 await supabaseAdmin.from('menu_items').update({
                   reserved_quantity: Math.max(0, (m.reserved_quantity ?? 0) - (oi.quantity || 1))
                 }).eq('id', oi.menu_item_id);
