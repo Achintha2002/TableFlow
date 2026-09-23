@@ -1376,6 +1376,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
 
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(

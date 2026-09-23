@@ -30,6 +30,7 @@ class AuthGuard {
 
     final loggedIn = await showModalBottomSheet<bool>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (bottomSheetContext) {
@@ -62,6 +63,9 @@ class _AuthPromptSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitle = actionSubtitle ??
         'Sign in to TableFlow to securely complete your request, receive live updates, and earn dining rewards.';
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom +
+        MediaQuery.of(context).padding.bottom +
+        20;
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -79,12 +83,7 @@ class _AuthPromptSheet extends StatelessWidget {
               ),
             ],
           ),
-          padding: EdgeInsets.fromLTRB(
-            24,
-            12,
-            24,
-            MediaQuery.of(context).viewInsets.bottom + 28,
-          ),
+          padding: EdgeInsets.fromLTRB(24, 12, 24, bottomPadding),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -105,14 +104,7 @@ class _AuthPromptSheet extends StatelessWidget {
                 height: 64,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.primary,
-                      AppTheme.primary.withValues(alpha: 0.8),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: themeBadgeGradient(),
                   boxShadow: [
                     BoxShadow(
                       color: AppTheme.primary.withValues(alpha: 0.35),
@@ -167,7 +159,7 @@ class _AuthPromptSheet extends StatelessWidget {
                     await context.push('/login');
                     if (context.mounted) {
                       final hasAuth = AuthGuard.isAuthenticated;
-                      Navigator.of(context).pop(hasAuth);
+                      Navigator.of(context, rootNavigator: true).pop(hasAuth);
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -193,7 +185,8 @@ class _AuthPromptSheet extends StatelessWidget {
 
               // Continue Browsing / Cancel button
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
+                onPressed: () =>
+                    Navigator.of(context, rootNavigator: true).pop(false),
                 child: Text(
                   'Continue Browsing as Guest',
                   style: GoogleFonts.inter(
@@ -207,6 +200,17 @@ class _AuthPromptSheet extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  LinearGradient themeBadgeGradient() {
+    return LinearGradient(
+      colors: [
+        AppTheme.primary,
+        AppTheme.primary.withValues(alpha: 0.8),
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
     );
   }
 }
