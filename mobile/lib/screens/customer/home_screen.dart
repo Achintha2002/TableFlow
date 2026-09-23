@@ -401,7 +401,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         actionTitle: 'View Reservations',
                         actionSubtitle: 'Sign in to TableFlow to check your upcoming table reservations and manager confirmations.',
                       );
-                      if (loggedIn && context.mounted) {
+                      if (!mounted) return;
+                      if (loggedIn) {
                         context.go('/reservations');
                       }
                     } else {
@@ -423,7 +424,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         actionTitle: 'View Order History',
                         actionSubtitle: 'Sign in to TableFlow to view your past dining receipts and review dishes.',
                       );
-                      if (loggedIn && context.mounted) {
+                      if (!mounted) return;
+                      if (loggedIn) {
                         context.go('/order-history');
                       }
                     } else {

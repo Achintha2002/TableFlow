@@ -63,7 +63,6 @@ class AppRoutes {
     refreshListenable: GoRouterRefreshStream(Supabase.instance.client.auth.onAuthStateChange),
     redirect: (context, state) async {
       final isAuth = Supabase.instance.client.auth.currentSession != null;
-      final isSplash = state.matchedLocation == splash;
       final isOnboarding = state.matchedLocation == onboarding;
       final isLoginOrRegister = state.matchedLocation == login ||
           state.matchedLocation == register;

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -84,16 +83,17 @@ class GuestPlaceholder extends StatelessWidget {
             const SizedBox(height: 32),
 
             // Sign In Button
-            SizedBox(
-              width: double.infinity,
+            ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  await context.push('/login');
-                  if (AuthGuard.isAuthenticated) {
-                    onSignedIn?.call();
-                  }
-                },
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await context.push('/login');
+                    if (AuthGuard.isAuthenticated) {
+                      onSignedIn?.call();
+                    }
+                  },
                 icon: const Icon(Icons.login_rounded, size: 20),
                 label: const Text(
                   'Sign In / Register',
@@ -114,7 +114,8 @@ class GuestPlaceholder extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+          ),
+        ],
         ),
       ),
     );

@@ -127,6 +127,28 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     }
   }
 
+  Future<void> _proceedToReservation() async {
+    if (Supabase.instance.client.auth.currentUser == null) {
+      final loggedIn = await AuthGuard.requireAuth(
+        context,
+        actionTitle: 'Reserve Table',
+        actionSubtitle: 'Sign in to TableFlow to confirm your booking and receive immediate reservation updates.',
+      );
+      if (!mounted) return;
+      if (!loggedIn) return;
+    }
+
+    if (!mounted) return;
+    final table = _tables.firstWhere((t) => t['id'] == _selectedTableId);
+    context.push('/reservation-details', extra: {
+      'tableId': _selectedTableId,
+      'dbId': table['dbId'],
+      'date': _selectedDate.toIso8601String(),
+      'time': '${_selectedTime.hour}:${_selectedTime.minute.toString().padLeft(2, '0')}',
+      'seats': table['seats'],
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -244,26 +266,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () async {
-              if (Supabase.instance.client.auth.currentUser == null) {
-                final loggedIn = await AuthGuard.requireAuth(
-                  context,
-                  actionTitle: 'Reserve Table',
-                  actionSubtitle: 'Sign in to TableFlow to confirm your booking and receive immediate reservation updates.',
-                );
-                if (!loggedIn || !mounted) return;
-              }
-
-              final table = _tables.firstWhere((t) => t['id'] == _selectedTableId);
-              if (!mounted) return;
-              context.push('/reservation-details', extra: {
-                'tableId': _selectedTableId,
-                'dbId': table['dbId'],
-                'date': _selectedDate.toIso8601String(),
-                'time': '${_selectedTime.hour}:${_selectedTime.minute.toString().padLeft(2, '0')}',
-                'seats': table['seats'],
-              });
-            },
+            onPressed: _proceedToReservation,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: AppTheme.white,
