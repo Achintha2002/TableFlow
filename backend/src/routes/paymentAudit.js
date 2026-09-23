@@ -786,8 +786,7 @@ module.exports = function(supabaseAdmin) {
           .from('orders')
           .update({
             status: 'pending',
-            payment_status: 'paid',
-            updated_at: now
+            payment_status: 'paid'
           })
           .eq('id', order.id)
           .select()
@@ -863,8 +862,7 @@ module.exports = function(supabaseAdmin) {
             .from('orders')
             .update({
               status: 'payment_rejected',
-              payment_status: 'failed',
-              updated_at: now
+              payment_status: 'failed'
             })
             .eq('id', order.id)
             .select()
@@ -878,8 +876,7 @@ module.exports = function(supabaseAdmin) {
           const { data: fbOrder, error: fbErr } = await supabaseAdmin
             .from('orders')
             .update({
-              payment_status: 'failed',
-              updated_at: now
+              payment_status: 'failed'
             })
             .eq('id', order.id)
             .select()
