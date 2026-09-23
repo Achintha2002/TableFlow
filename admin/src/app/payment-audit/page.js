@@ -232,8 +232,7 @@ export default function PaymentAuditPage() {
           .from('orders')
           .update({
             status: 'pending',
-            payment_status: 'paid',
-            updated_at: new Date().toISOString()
+            payment_status: 'paid'
           })
           .eq('id', orderId);
 
@@ -293,8 +292,7 @@ export default function PaymentAuditPage() {
           .from('orders')
           .update({
             status: 'payment_rejected',
-            payment_status: 'failed',
-            updated_at: new Date().toISOString()
+            payment_status: 'failed'
           })
           .eq('id', rejectingOrder.id);
 
@@ -302,8 +300,7 @@ export default function PaymentAuditPage() {
           await supabase
             .from('orders')
             .update({
-              payment_status: 'failed',
-              updated_at: new Date().toISOString()
+              payment_status: 'failed'
             })
             .eq('id', rejectingOrder.id);
         }

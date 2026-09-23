@@ -610,8 +610,7 @@ module.exports = function(supabaseAdmin) {
         .from('orders')
         .update({
           status: 'payment_pending',
-          payment_status: 'pending',
-          updated_at: new Date().toISOString()
+          payment_status: 'pending'
         })
         .eq('id', order.id);
 
