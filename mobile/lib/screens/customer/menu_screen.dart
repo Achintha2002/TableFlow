@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +19,8 @@ class _MenuScreenState extends State<MenuScreen> {
   List<Map<String, dynamic>> _menuItems = [];
   bool _isLoading = true;
   String _selectedCategory = 'All';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -28,6 +31,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -51,8 +55,22 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   List<Map<String, dynamic>> get _filteredItems {
-    if (_selectedCategory == 'All') return _menuItems;
-    return _menuItems.where((item) => item['category'] == _selectedCategory).toList();
+    return _menuItems.where((item) {
+      // 1. Category match
+      if (_selectedCategory != 'All') {
+        final cat = (item['category'] as String? ?? '').toLowerCase();
+        if (cat != _selectedCategory.toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 2. Search query match
+      if (_searchQuery.trim().isEmpty) return true;
+      final q = _searchQuery.trim().toLowerCase();
+      final name = (item['name'] as String? ?? '').toLowerCase();
+      final desc = (item['description'] as String? ?? '').toLowerCase();
+      return name.contains(q) || desc.contains(q);
+    }).toList();
   }
 
   @override
@@ -62,120 +80,120 @@ class _MenuScreenState extends State<MenuScreen> {
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // ── Animated SliverAppBar ──────────────────────────────
-          SliverAppBar(
-            expandedHeight: 160.0,
-            floating: false,
-            pinned: true,
-            snap: false,
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            // Frosted glass collapsed bar
-            flexibleSpace: LayoutBuilder(
-              builder: (context, constraints) {
-                // How far we've scrolled (0.0 → 1.0)
-                final expandedHeight = 160.0;
-                final collapsedHeight = kToolbarHeight;
-                final scrolled = ((expandedHeight - constraints.maxHeight) /
-                        (expandedHeight - collapsedHeight))
-                    .clamp(0.0, 1.0);
+          // ── Compact Header & Luxury Search Bar ─────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20.0, 14.0, 20.0, 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Explore our seasonal offerings, crafted with intention and presented with care.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontSize: 14,
+                          height: 1.45,
+                          color: AppTheme.secondary.withValues(alpha: 0.65),
+                        ),
+                  ),
+                  const SizedBox(height: 14),
 
-                return ClipRect(
-                  child: BackdropFilter(
-                    // Only blur when collapsed
-                    filter: ImageFilter.blur(
-                      sigmaX: scrolled * 18,
-                      sigmaY: scrolled * 18,
+                  // Luxury Search Bar
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: _searchQuery.isNotEmpty
+                            ? AppTheme.primary
+                            : AppTheme.secondary.withValues(alpha: 0.12),
+                        width: _searchQuery.isNotEmpty ? 1.5 : 1.0,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _searchQuery.isNotEmpty
+                              ? AppTheme.primary.withValues(alpha: 0.1)
+                              : AppTheme.secondary.withValues(alpha: 0.04),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.background.withValues(
-                            alpha: 0.4 + scrolled * 0.55),
-                        border: scrolled > 0.5
-                            ? Border(
-                                bottom: BorderSide(
-                                  color: AppTheme.secondary
-                                      .withValues(alpha: 0.08 * scrolled),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (val) {
+                        setState(() {
+                          _searchQuery = val;
+                        });
+                      },
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: AppTheme.secondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      cursorColor: AppTheme.primary,
+                      decoration: InputDecoration(
+                        hintText: 'Search dishes, ingredients, drinks...',
+                        hintStyle: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: AppTheme.secondary.withValues(alpha: 0.45),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: _searchQuery.isNotEmpty
+                              ? AppTheme.primary
+                              : AppTheme.secondary.withValues(alpha: 0.4),
+                          size: 22,
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.cancel_rounded,
+                                  color: AppTheme.secondary,
+                                  size: 20,
                                 ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                  });
+                                },
                               )
                             : null,
-                      ),
-                      child: SafeArea(
-                        child: Stack(
-                          children: [
-                            // ── Big expanded title (fades out) ──────
-                            Positioned(
-                              left: 24,
-                              bottom: 20,
-                              right: 24,
-                              child: Opacity(
-                                opacity: (1.0 - scrolled * 2.5).clamp(0.0, 1.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Menu',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .displayLarge
-                                          ?.copyWith(
-                                            fontFamily: 'Playfair Display',
-                                            color: AppTheme.secondary,
-                                            fontSize: 38,
-                                            fontWeight: FontWeight.bold,
-                                            height: 1.1,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            // ── Compact collapsed title (fades in) ──
-                            Positioned.fill(
-                              child: Opacity(
-                                opacity: ((scrolled - 0.6) * 2.5)
-                                    .clamp(0.0, 1.0),
-                                child: Center(
-                                  child: Text(
-                                    'Menu',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(
-                                          fontFamily: 'Playfair Display',
-                                          color: AppTheme.secondary,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 20,
-                                          letterSpacing: 0.5,
-                                        ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
                         ),
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
 
-          // ── Subtitle ──────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-              child: Text(
-                'Explore our seasonal offerings, crafted with intention and presented with care.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontSize: 15,
-                      height: 1.5,
-                      color: AppTheme.secondary.withValues(alpha: 0.65),
+                  // Search match summary if active
+                  if (_searchQuery.trim().isNotEmpty && !_isLoading) ...[
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.filter_list_rounded,
+                            size: 14,
+                            color: AppTheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Found ${_filteredItems.length} ${_filteredItems.length == 1 ? "item" : "items"} for "$_searchQuery"',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -189,27 +207,27 @@ class _MenuScreenState extends State<MenuScreen> {
                   filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: AppTheme.background.withValues(alpha: 0.88),
+                      color: AppTheme.background.withValues(alpha: 0.92),
                       border: Border(
                         bottom: BorderSide(
-                          color: AppTheme.secondary.withValues(alpha: 0.07),
+                          color: AppTheme.secondary.withValues(alpha: 0.08),
                         ),
                       ),
                     ),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24.0, vertical: 14.0),
+                          horizontal: 20.0, vertical: 12.0),
                       child: Row(
                         children: [
                           _buildCategoryChip('All'),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           _buildCategoryChip('Starters'),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           _buildCategoryChip('Mains'),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           _buildCategoryChip('Desserts'),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           _buildCategoryChip('Drinks'),
                         ],
                       ),
@@ -229,16 +247,79 @@ class _MenuScreenState extends State<MenuScreen> {
               ),
             )
           else if (_filteredItems.isEmpty)
-            const SliverFillRemaining(
+            SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
-                child: Text("No items available in this category."),
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.search_off_rounded,
+                          size: 44,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'No dishes matching "$_searchQuery"'
+                            : 'No items in this category',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _searchQuery.isNotEmpty
+                            ? 'Try searching with different keywords or ingredients.'
+                            : 'Explore our other categories or check back soon.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: AppTheme.secondary.withValues(alpha: 0.65),
+                        ),
+                      ),
+                      if (_searchQuery.isNotEmpty || _selectedCategory != 'All') ...[
+                        const SizedBox(height: 20),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                              _selectedCategory = 'All';
+                            });
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Reset Filters'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.primary,
+                            side: const BorderSide(color: AppTheme.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             )
           else ...[
             SliverPadding(
               padding: const EdgeInsets.symmetric(
-                  horizontal: 24.0, vertical: 16.0),
+                  horizontal: 20.0, vertical: 16.0),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
@@ -252,7 +333,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 ),
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         ],
       ),
@@ -261,6 +342,15 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Widget _buildCategoryChip(String label) {
     final isSelected = _selectedCategory == label;
+    final count = label == 'All'
+        ? _menuItems.length
+        : _menuItems
+            .where((i) =>
+                (i['category'] as String? ?? '').toLowerCase() ==
+                label.toLowerCase())
+            .length;
+    final displayLabel = count > 0 ? '$label ($count)' : label;
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
