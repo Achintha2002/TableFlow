@@ -420,42 +420,33 @@ class _CartScreenState extends State<CartScreen> {
         ),
         centerTitle: true,
       ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              if (_orderStatus != 'none') _buildStatusBanner(),
-              Expanded(
-                child: cartItems.isEmpty
-                    ? _buildEmptyState()
-                    : ListView(
-                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 280),
-                        children: [
-                          ...cartItems.map((item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: _buildCartItem(
-                              cart: cart,
-                              item: item,
-                            ),
-                          )),
-                          const SizedBox(height: 12),
-                          _buildDiscountAndLoyaltySection(cart),
-                          const SizedBox(height: 16),
-                          _buildPaymentMethodSection(),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-          if (cartItems.isNotEmpty)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _buildCheckoutPanel(cart),
+      body: cartItems.isEmpty
+          ? _buildEmptyState()
+          : Column(
+              children: [
+                if (_orderStatus != 'none') _buildStatusBanner(),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                    children: [
+                      ...cartItems.map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: _buildCartItem(
+                          cart: cart,
+                          item: item,
+                        ),
+                      )),
+                      const SizedBox(height: 12),
+                      _buildDiscountAndLoyaltySection(cart),
+                      const SizedBox(height: 16),
+                      _buildPaymentMethodSection(),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ],
             ),
-        ],
-      ),
+      bottomNavigationBar: cartItems.isNotEmpty ? _buildCheckoutPanel(cart) : null,
     );
   }
 
@@ -882,19 +873,20 @@ class _CartScreenState extends State<CartScreen> {
     final isBankTransfer = _paymentMethod == 'bank_transfer';
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
       decoration: BoxDecoration(
         color: AppTheme.white,
         borderRadius: const BorderRadius.only(topLeft: Radius.circular(28), topRight: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.secondary.withValues(alpha: 0.12),
-            blurRadius: 30,
-            offset: const Offset(0, -10),
+            color: AppTheme.secondary.withValues(alpha: 0.1),
+            blurRadius: 20,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
       child: SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
