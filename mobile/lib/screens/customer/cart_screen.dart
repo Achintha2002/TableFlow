@@ -427,7 +427,7 @@ class _CartScreenState extends State<CartScreen> {
         final orderId = respData['order']?['id'] ?? respData['id'];
 
         if (mounted) {
-          cart.clear();
+          // Do not auto-clear cart; allow user manual removal or retry
           context.push('/order-tracker', extra: {'orderId': orderId.toString()});
         }
       } else {
@@ -449,6 +449,88 @@ class _CartScreenState extends State<CartScreen> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _confirmClearCart(CartProvider cart) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Clear Cart?'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to remove all items from your cart? You can add them back anytime from the menu.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              cart.clear();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cart cleared successfully.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const Text('Clear All', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemoveCartItem(CartProvider cart, CartItem item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Remove Item?'),
+          ],
+        ),
+        content: Text('Are you sure you want to remove "${item.name}" from your cart?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              cart.removeItem(item.cartLineId);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Removed "${item.name}" from cart.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+            child: const Text('Remove', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -814,17 +896,28 @@ class _CartScreenState extends State<CartScreen> {
               'Selected Dishes (${cartItems.length})',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.secondary),
             ),
-            TextButton.icon(
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/menu');
-                }
-              },
-              icon: const Icon(Icons.add, size: 16, color: AppTheme.primary),
-              label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            Row(
+              children: [
+                if (cartItems.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () => _confirmClearCart(cart),
+                    icon: const Icon(Icons.delete_sweep_outlined, size: 16, color: Colors.redAccent),
+                    label: const Text('Clear Cart', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  ),
+                TextButton.icon(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/menu');
+                    }
+                  },
+                  icon: const Icon(Icons.add, size: 16, color: AppTheme.primary),
+                  label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+              ],
             ),
           ],
         ),
@@ -1748,40 +1841,80 @@ class _CartScreenState extends State<CartScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Edit In-Place Action Button
-              InkWell(
-                onTap: () => _handleEditCartItem(item),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+              // Action Buttons: Edit and Remove
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _handleEditCartItem(item),
                     borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.edit_outlined, size: 13, color: AppTheme.primary),
-                      SizedBox(width: 4),
-                      Text(
-                        'Edit',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit_outlined, size: 13, color: AppTheme.primary),
+                          SizedBox(width: 4),
+                          Text(
+                            'Edit',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _confirmRemoveCartItem(cart, item),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.delete_outline_rounded, size: 14, color: Colors.redAccent),
+                          SizedBox(width: 4),
+                          Text(
+                            'Remove',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
 
               // Stepper Quantity Controls
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, size: 22),
-                    onPressed: () => cart.updateQuantity(item.cartLineId, item.quantity - 1),
+                    icon: Icon(
+                      item.quantity == 1 ? Icons.delete_outline_rounded : Icons.remove_circle_outline,
+                      size: 22,
+                      color: item.quantity == 1 ? Colors.redAccent : Colors.grey.shade700,
+                    ),
+                    tooltip: item.quantity == 1 ? 'Remove from cart' : 'Decrease quantity',
+                    onPressed: () {
+                      if (item.quantity == 1) {
+                        _confirmRemoveCartItem(cart, item);
+                      } else {
+                        cart.updateQuantity(item.cartLineId, item.quantity - 1);
+                      }
+                    },
                   ),
                   Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline, size: 22, color: AppTheme.primary),
+                    tooltip: 'Increase quantity',
                     onPressed: () => cart.updateQuantity(item.cartLineId, item.quantity + 1),
                   ),
                 ],
