@@ -25,6 +25,7 @@ import '../screens/staff/staff_hub_screen.dart';
 import '../screens/staff/manage_queue_screen.dart';
 import '../screens/staff/table_status_monitor_screen.dart';
 import '../screens/staff/partner_sync_screen.dart';
+import '../screens/customer/table_landing_screen.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -65,6 +66,7 @@ class AppRoutes {
   static const manageQueue = '/manage-queue';
   static const tableStatusMonitor = '/table-status-monitor';
   static const partnerSync = '/partner-sync';
+  static const table = '/table';
 
   static final router = GoRouter(
     initialLocation: splash,
@@ -98,6 +100,7 @@ class AppRoutes {
         manageQueue,
         tableStatusMonitor,
         partnerSync,
+        table,
       ];
 
       // If route requires staff/strict auth and user is unauthenticated, redirect to login
@@ -137,6 +140,21 @@ class AppRoutes {
       GoRoute(path: reservations, builder: (context, state) => const ReservationHistoryScreen()),
       GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
       GoRoute(path: qrCheckin, builder: (context, state) => const QrCheckinScreen()),
+      GoRoute(
+        path: table,
+        builder: (context, state) {
+          final token = state.uri.queryParameters['token'];
+          final tNumStr = state.uri.queryParameters['tableNumber'] ?? state.uri.queryParameters['table'];
+          final tIdStr = state.uri.queryParameters['tableId'];
+          final extra = state.extra as Map<String, dynamic>?;
+
+          return TableLandingScreen(
+            token: token ?? extra?['token'] as String?,
+            tableNumber: tNumStr != null ? int.tryParse(tNumStr) : extra?['tableNumber'] as int?,
+            tableId: tIdStr != null ? int.tryParse(tIdStr) : extra?['tableId'] as int?,
+          );
+        },
+      ),
       GoRoute(
         path: orderTracker,
         builder: (context, state) {

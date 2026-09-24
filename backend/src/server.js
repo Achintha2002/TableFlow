@@ -1570,13 +1570,17 @@ app.get('/api/tables/qr-tokens/all', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:49178';
+
     const items = (tables || []).map(table => {
       const token = generateTableToken(table.id);
-      const qrData = `tableflow://table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
+      const qrData = `${clientUrl}/#/table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
+      const deepLink = `tableflow://table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
       return {
         table,
         token,
-        qrData
+        qrData,
+        deepLink
       };
     });
 
@@ -1599,9 +1603,11 @@ app.get('/api/tables/:id/qr-token', async (req, res) => {
       return res.status(404).json({ error: 'Table not found' });
     }
 
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:49178';
     const token = generateTableToken(table.id);
-    const qrData = `tableflow://table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
-    res.json({ table, token, qrData });
+    const qrData = `${clientUrl}/#/table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
+    const deepLink = `tableflow://table?token=${encodeURIComponent(token)}&tableId=${table.id}&tableNumber=${table.table_number}`;
+    res.json({ table, token, qrData, deepLink });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1609,7 +1615,7 @@ app.get('/api/tables/:id/qr-token', async (req, res) => {
 
 app.post('/api/tables/verify-qr', async (req, res) => {
   try {
-    const { token, rawCode } = req.body;
+    const { token, rawCode, tableNumber, tableId: reqTableId } = req.body;
     let tableId = null;
 
     if (token) {
@@ -1618,9 +1624,11 @@ app.post('/api/tables/verify-qr', async (req, res) => {
         return res.status(400).json({ error: verification.error });
       }
       tableId = verification.tableId;
-    } else if (rawCode) {
+    } else if (reqTableId) {
+      tableId = parseInt(reqTableId, 10);
+    } else if (tableNumber || rawCode) {
       // Manual code fallback (e.g. Table Number entered directly)
-      const parsed = parseInt(String(rawCode).replace(/[^0-9]/g, ''), 10);
+      const parsed = parseInt(String(tableNumber || rawCode).replace(/[^0-9]/g, ''), 10);
       if (!parsed) return res.status(400).json({ error: 'Invalid table number format' });
 
       const { data: tData } = await supabaseAdmin
@@ -1636,7 +1644,7 @@ app.post('/api/tables/verify-qr', async (req, res) => {
 
     const { data: table, error } = await supabaseAdmin
       .from('restaurant_tables')
-      .select('id, table_number, capacity, status')
+      .select('id, table_number, capacity, status, category_id, table_categories(id, name, description)')
       .eq('id', tableId)
       .single();
 

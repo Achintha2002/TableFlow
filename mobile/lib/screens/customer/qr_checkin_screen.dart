@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:provider/provider.dart';
 import '../../core/theme.dart';
-import '../../providers/cart_provider.dart';
-import '../../services/api_service.dart';
 
 class QrCheckinScreen extends StatefulWidget {
   const QrCheckinScreen({super.key});
@@ -73,79 +70,57 @@ class _QrCheckinScreenState extends State<QrCheckinScreen>
 
     try {
       String? token;
-      String? fallbackCode = rawCode;
+      int? parsedTableNum;
+      int? parsedTableId;
 
-      // Check if it's a TableFlow QR URI
+      // Check if it's a TableFlow QR URI or web link
       if (rawCode.contains('token=')) {
-        final uri = Uri.tryParse(rawCode);
-        token = uri?.queryParameters['token'];
+        final tokenMatch = RegExp(r'[?&]token=([^&#]+)').firstMatch(rawCode);
+        if (tokenMatch != null) {
+          token = Uri.decodeComponent(tokenMatch.group(1)!);
+        }
+        final numMatch = RegExp(r'[?&]tableNumber=([^&#]+)').firstMatch(rawCode);
+        if (numMatch != null) {
+          parsedTableNum = int.tryParse(numMatch.group(1)!);
+        }
+        final idMatch = RegExp(r'[?&]tableId=([^&#]+)').firstMatch(rawCode);
+        if (idMatch != null) {
+          parsedTableId = int.tryParse(idMatch.group(1)!);
+        }
       } else if (rawCode.contains(':') && rawCode.length > 20) {
-        // Raw token
+        // Raw HMAC token
         token = rawCode;
-      }
-
-      final result = await ApiService.verifyTableQr(
-        token: token,
-        rawCode: token == null ? fallbackCode : null,
-      );
-
-      if (!mounted) return;
-
-      final table = result['table'];
-      final isOccupied = result['isOccupied'] ?? false;
-      final tableNumber = table['table_number'];
-      final tableId = table['id'];
-
-      if (isOccupied) {
-        // Show occupancy dialog
-        final proceed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('Table $tableNumber is Active'),
-            content: const Text(
-              'This table currently has active guests. Are you joining their party or placing orders for this table?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Join Table & Order'),
-              ),
-            ],
-          ),
-        );
-
-        if (proceed != true) {
-          setState(() => _isProcessing = false);
-          return;
+      } else {
+        // Direct manual numeric input
+        final digits = rawCode.replaceAll(RegExp(r'[^0-9]'), '');
+        if (digits.isNotEmpty) {
+          parsedTableNum = int.tryParse(digits);
         }
       }
 
-      if (!mounted) return;
-
-      // Assign table to cart
-      context.read<CartProvider>().setTable(tableId, tableNumber);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Checked in to Table #$tableNumber! Browse the menu to order.'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // Navigate directly to menu — stop camera first
       _scannerController.stop();
-      context.go('/menu');
+
+      final queryParams = <String, String>{};
+      if (token != null) queryParams['token'] = token;
+      if (parsedTableNum != null) queryParams['tableNumber'] = parsedTableNum.toString();
+      if (parsedTableId != null) queryParams['tableId'] = parsedTableId.toString();
+
+      final uri = Uri(path: '/table', queryParameters: queryParams.isNotEmpty ? queryParams : null);
+
+      if (!mounted) return;
+      context.go(
+        uri.toString(),
+        extra: {
+          'token': token,
+          'tableNumber': parsedTableNum,
+          'tableId': parsedTableId,
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Check-in failed: ${e.toString().replaceAll('Exception: ', '')}'),
+            content: Text('Could not parse table QR: ${e.toString().replaceAll('Exception: ', '')}'),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),

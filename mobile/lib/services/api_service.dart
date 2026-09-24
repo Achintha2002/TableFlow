@@ -31,17 +31,25 @@ class ApiService {
     return headers;
   }
 
-  /// Verify scanned QR code or raw table number
-  static Future<Map<String, dynamic>> verifyTableQr({String? token, String? rawCode}) async {
+  /// Verify scanned QR code, token, or table number
+  static Future<Map<String, dynamic>> verifyTableQr({
+    String? token,
+    String? rawCode,
+    int? tableNumber,
+    int? tableId,
+  }) async {
     try {
       final headers = await _getHeaders();
+      final body = <String, dynamic>{};
+      if (token != null && token.isNotEmpty) body['token'] = token;
+      if (rawCode != null && rawCode.isNotEmpty) body['rawCode'] = rawCode;
+      if (tableNumber != null) body['tableNumber'] = tableNumber;
+      if (tableId != null) body['tableId'] = tableId;
+
       final response = await http.post(
         Uri.parse('$baseUrl/tables/verify-qr'),
         headers: headers,
-        body: jsonEncode({
-          ...?token != null ? {'token': token} : null,
-          ...?rawCode != null ? {'rawCode': rawCode} : null,
-        }),
+        body: jsonEncode(body),
       );
 
       final data = jsonDecode(response.body);

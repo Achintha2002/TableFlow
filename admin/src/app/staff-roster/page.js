@@ -1,21 +1,21 @@
 "use client";
 
 import { useEffect, useState, useCallback } from 'react';
-import { 
-  Users, 
-  Clock, 
-  Radio, 
-  Sparkles, 
-  Send, 
-  Plus, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Calendar, 
-  CheckSquare, 
-  Phone, 
-  MapPin, 
-  Trash2, 
-  Search, 
+import {
+  Users,
+  Clock,
+  Radio,
+  Sparkles,
+  Send,
+  Plus,
+  CheckCircle2,
+  AlertTriangle,
+  Calendar,
+  CheckSquare,
+  Phone,
+  MapPin,
+  Trash2,
+  Search,
   RotateCcw,
   Sun,
   Sunset,
@@ -28,7 +28,7 @@ const API_BASE = 'http://localhost:3000';
 
 export default function StaffRosterAndBroadcastPage() {
   const [activeTab, setActiveTab] = useState('roster'); // 'roster' | 'broadcast' | 'cleaning'
-  
+
   // Date & Shifts state
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [shifts, setShifts] = useState([]);
@@ -298,8 +298,8 @@ export default function StaffRosterAndBroadcastPage() {
       if (res.ok) {
         setTables(prev => prev.map(t => t.id === tableId ? { ...t, status: newStatus } : t));
         showToast(
-          newStatus === 'available' 
-            ? `Table #${tableNumber} is now sanitized, bussed and Available!` 
+          newStatus === 'available'
+            ? `Table #${tableNumber} is now sanitized, bussed and Available!`
             : `Table #${tableNumber} flagged for cleaning.`
         );
       } else {
@@ -320,7 +320,7 @@ export default function StaffRosterAndBroadcastPage() {
 
   const filteredShifts = shifts.filter(s => {
     const matchesType = shiftFilter === 'all' || s.shift_type === shiftFilter;
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       s.staff_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.staff_role.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (s.assigned_section || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -332,8 +332,8 @@ export default function StaffRosterAndBroadcastPage() {
   const tablesOccupied = tables.filter(t => t.status === 'occupied');
   const tablesAvailable = tables.filter(t => t.status === 'available');
 
-  const displayedTables = cleaningFilter === 'cleaning_only' 
-    ? tablesNeedingCleaning 
+  const displayedTables = cleaningFilter === 'cleaning_only'
+    ? tablesNeedingCleaning
     : tables;
 
   return (
@@ -725,14 +725,14 @@ export default function StaffRosterAndBroadcastPage() {
                                 border: '1px solid #cbd5e1',
                                 outline: 'none',
                                 cursor: 'pointer',
-                                background: 
+                                background:
                                   shift.status === 'on_duty' ? '#ecfdf5' :
-                                  shift.status === 'scheduled' ? '#eff6ff' :
-                                  shift.status === 'completed' ? '#f8fafc' : '#fef2f2',
+                                    shift.status === 'scheduled' ? '#eff6ff' :
+                                      shift.status === 'completed' ? '#f8fafc' : '#fef2f2',
                                 color:
                                   shift.status === 'on_duty' ? '#065f46' :
-                                  shift.status === 'scheduled' ? '#1e40af' :
-                                  shift.status === 'completed' ? '#475569' : '#991b1b'
+                                    shift.status === 'scheduled' ? '#1e40af' :
+                                      shift.status === 'completed' ? '#475569' : '#991b1b'
                               }}
                             >
                               <option value="on_duty">🟢 On Duty</option>
@@ -1373,7 +1373,7 @@ export default function StaffRosterAndBroadcastPage() {
             }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
-                  + Assign Staff Shift
+                  Assign Staff Shift
                 </h3>
                 <p style={{ margin: '2px 0 0 0', fontSize: '13px', color: '#64748b' }}>
                   Schedule duty roster for {selectedDate}
