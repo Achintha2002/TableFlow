@@ -21,6 +21,10 @@ import '../screens/customer/loyalty_screen.dart';
 import '../screens/customer/qr_checkin_screen.dart';
 import '../screens/customer/live_order_tracker_screen.dart';
 import '../screens/staff/waiter_floor_screen.dart';
+import '../screens/staff/staff_hub_screen.dart';
+import '../screens/staff/manage_queue_screen.dart';
+import '../screens/staff/table_status_monitor_screen.dart';
+import '../screens/staff/partner_sync_screen.dart';
 
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
@@ -57,6 +61,10 @@ class AppRoutes {
   static const qrCheckin = '/qr-checkin';
   static const orderTracker = '/order-tracker';
   static const waiterFloor = '/waiter-floor';
+  static const staffHub = '/staff-hub';
+  static const manageQueue = '/manage-queue';
+  static const tableStatusMonitor = '/table-status-monitor';
+  static const partnerSync = '/partner-sync';
 
   static final router = GoRouter(
     initialLocation: splash,
@@ -67,7 +75,7 @@ class AppRoutes {
       final isLoginOrRegister = state.matchedLocation == login ||
           state.matchedLocation == register;
 
-      // Whitelist of routes accessible without an active auth session (Guest Mode)
+      // Whitelist of routes accessible without an active auth session (Guest Mode & Testing)
       final publicRoutes = [
         splash,
         onboarding,
@@ -85,6 +93,11 @@ class AppRoutes {
         loyalty,
         reservationDetails,
         orderTracker,
+        waiterFloor,
+        staffHub,
+        manageQueue,
+        tableStatusMonitor,
+        partnerSync,
       ];
 
       // If route requires staff/strict auth and user is unauthenticated, redirect to login
@@ -132,6 +145,10 @@ class AppRoutes {
         },
       ),
       GoRoute(path: waiterFloor, builder: (context, state) => const WaiterFloorScreen()),
+      GoRoute(path: staffHub, builder: (context, state) => const StaffHubScreen()),
+      GoRoute(path: manageQueue, builder: (context, state) => const ManageQueueScreen()),
+      GoRoute(path: tableStatusMonitor, builder: (context, state) => const TableStatusMonitorScreen()),
+      GoRoute(path: partnerSync, builder: (context, state) => const PartnerSyncScreen()),
       GoRoute(
         path: reservationDetails,
         builder: (context, state) {

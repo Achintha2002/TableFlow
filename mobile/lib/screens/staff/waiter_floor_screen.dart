@@ -444,6 +444,24 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
                   ),
                   child: const Text('Return to Guest Home'),
                 ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.visibility_rounded, color: AppTheme.primary),
+                  label: const Text('Preview Floor Mode (Staff Demo)', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.primary, width: 1.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _isStaff = true;
+                      _staffName = 'Staff Demo';
+                      _staffRole = 'waiter';
+                    });
+                    _loadFloorData();
+                  },
+                ),
               ],
             ),
           ),
