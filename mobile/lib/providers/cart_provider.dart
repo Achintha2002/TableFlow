@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CartItem {
   final String id; // Menu Item ID
@@ -55,6 +57,47 @@ class CartItem {
     };
   }
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'basePrice': basePrice,
+      'price': price,
+      'imageUrl': imageUrl,
+      'quantity': quantity,
+      'cartLineId': cartLineId,
+      'selectedSize': selectedSize,
+      'selectedAddons': selectedAddons,
+      'cookingPreference': cookingPreference,
+      'itemNotes': itemNotes,
+    };
+  }
+
+  factory CartItem.fromJson(Map<String, dynamic> json) {
+    return CartItem(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      basePrice: (json['basePrice'] as num?)?.toDouble() ?? 0.0,
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      imageUrl: json['imageUrl']?.toString(),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      cartLineId: json['cartLineId']?.toString() ??
+          CartItem.generateCartLineId(
+            json['id']?.toString() ?? '',
+            json['selectedSize'] != null ? Map<String, dynamic>.from(json['selectedSize']) : null,
+            json['selectedAddons'] != null ? List<Map<String, dynamic>>.from(json['selectedAddons']) : [],
+            json['cookingPreference']?.toString(),
+          ),
+      selectedSize: json['selectedSize'] != null ? Map<String, dynamic>.from(json['selectedSize']) : null,
+      selectedAddons: json['selectedAddons'] != null
+          ? List<Map<String, dynamic>>.from(
+              (json['selectedAddons'] as List).map((e) => Map<String, dynamic>.from(e)))
+          : const [],
+      cookingPreference: json['cookingPreference']?.toString(),
+      itemNotes: json['itemNotes']?.toString(),
+    );
+  }
+
   /// Human-readable summary for display under cart items
   String get customizationSummary {
     final parts = <String>[];
@@ -92,6 +135,53 @@ class CartProvider extends ChangeNotifier {
   int _redeemedPoints = 0;
   double _pointsDiscount = 0.0;
 
+  static const String _storageKey = 'tableflow_cart_items_v1';
+  static const String _tableIdKey = 'tableflow_cart_table_id';
+  static const String _tableNumKey = 'tableflow_cart_table_num';
+
+  CartProvider() {
+    _loadFromPrefs();
+  }
+
+  Future<void> _loadFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_storageKey);
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final decoded = jsonDecode(jsonStr) as List<dynamic>;
+        for (final itemJson in decoded) {
+          final item = CartItem.fromJson(Map<String, dynamic>.from(itemJson));
+          _items[item.cartLineId] = item;
+        }
+      }
+      _selectedTableId = prefs.getInt(_tableIdKey);
+      _selectedTableNumber = prefs.getInt(_tableNumKey);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[CartProvider] Error loading persisted cart: $e');
+    }
+  }
+
+  Future<void> _saveToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = _items.values.map((i) => i.toJson()).toList();
+      await prefs.setString(_storageKey, jsonEncode(list));
+      if (_selectedTableId != null) {
+        await prefs.setInt(_tableIdKey, _selectedTableId!);
+      } else {
+        await prefs.remove(_tableIdKey);
+      }
+      if (_selectedTableNumber != null) {
+        await prefs.setInt(_tableNumKey, _selectedTableNumber!);
+      } else {
+        await prefs.remove(_tableNumKey);
+      }
+    } catch (e) {
+      debugPrint('[CartProvider] Error saving cart: $e');
+    }
+  }
+
   Map<String, CartItem> get items => {..._items};
 
   List<CartItem> get itemsList => _items.values.toList();
@@ -122,12 +212,14 @@ class CartProvider extends ChangeNotifier {
     _selectedTableId = id;
     _selectedTableNumber = number;
     notifyListeners();
+    _saveToPrefs();
   }
 
   void clearTable() {
     _selectedTableId = null;
     _selectedTableNumber = null;
     notifyListeners();
+    _saveToPrefs();
   }
 
   // Coupon Getters & Methods
@@ -225,6 +317,7 @@ class CartProvider extends ChangeNotifier {
       );
     }
     notifyListeners();
+    _saveToPrefs();
   }
 
   /// In-place cart line edit (replaces old cart line, merging if new selections match an existing line)
@@ -240,6 +333,7 @@ class CartProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+    _saveToPrefs();
   }
 
   void removeItem(String lineIdOrProductId) {
@@ -250,6 +344,7 @@ class CartProvider extends ChangeNotifier {
       _items.removeWhere((k, v) => v.id == lineIdOrProductId || v.cartLineId == lineIdOrProductId);
     }
     notifyListeners();
+    _saveToPrefs();
   }
 
   void updateQuantity(String lineIdOrProductId, int quantity) {
@@ -282,6 +377,7 @@ class CartProvider extends ChangeNotifier {
         _items.remove(targetKey);
       }
       notifyListeners();
+      _saveToPrefs();
     }
   }
 
@@ -311,6 +407,7 @@ class CartProvider extends ChangeNotifier {
         ),
       );
       notifyListeners();
+      _saveToPrefs();
     }
   }
 
@@ -321,5 +418,6 @@ class CartProvider extends ChangeNotifier {
     _redeemedPoints = 0;
     _pointsDiscount = 0.0;
     notifyListeners();
+    _saveToPrefs();
   }
 }
