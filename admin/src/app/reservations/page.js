@@ -96,6 +96,34 @@ export default function ReservationsPage() {
     setCancelModalOpen(true);
   }
 
+  async function callReservationStatusApi(id, payload) {
+    // 1. Try local Next.js API route
+    try {
+      const res = await fetch(`/api/admin/reservations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Next.js API route failed, attempting backend fallback:', e);
+    }
+
+    // 2. Fallback to Express backend API
+    const backendRes = await fetch(`http://localhost:3000/api/admin/reservations/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!backendRes.ok) {
+      const errData = await backendRes.json().catch(() => ({}));
+      throw new Error(errData.error || `Server responded with ${backendRes.status}`);
+    }
+    return await backendRes.json();
+  }
+
   async function updateStatus(id, newStatus) {
     if (newStatus === 'cancelled') {
       const res = reservations.find(r => r.id === id);
@@ -104,32 +132,47 @@ export default function ReservationsPage() {
         return;
       }
     }
-    await supabase.from('reservations').update({
-      status: newStatus,
-      updated_at: new Date().toISOString()
-    }).eq('id', id);
-    fetchReservations();
+
+    try {
+      // Optimistic update
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
+      await callReservationStatusApi(id, { status: newStatus });
+      fetchReservations();
+    } catch (err) {
+      alert('Failed to update reservation status: ' + err.message);
+      fetchReservations();
+    }
   }
 
   async function handleConfirmCancel() {
     if (!selectedResForCancel) return;
     setIsSubmittingCancel(true);
+    const targetId = selectedResForCancel.id;
     try {
       const noteToSave = staffNote.trim()
         ? `[Cancelled: ${cancelReason}] ${staffNote.trim()}`
         : `[Cancelled via Hotline: ${cancelReason}]`;
 
-      await supabase.from('reservations').update({
+      // Optimistic update so UI reflects cancellation immediately
+      setReservations(prev => prev.map(r => r.id === targetId ? {
+        ...r,
+        status: 'cancelled',
+        admin_reply: noteToSave
+      } : r));
+
+      await callReservationStatusApi(targetId, {
         status: 'cancelled',
         admin_reply: noteToSave,
-        updated_at: new Date().toISOString()
-      }).eq('id', selectedResForCancel.id);
+        cancel_reason: cancelReason,
+        staff_note: staffNote.trim()
+      });
 
       setCancelModalOpen(false);
       setSelectedResForCancel(null);
       fetchReservations();
     } catch (err) {
       alert('Error cancelling reservation: ' + err.message);
+      fetchReservations();
     } finally {
       setIsSubmittingCancel(false);
     }
@@ -144,17 +187,25 @@ export default function ReservationsPage() {
   async function handleSaveReply() {
     if (!selectedResForReply) return;
     setIsSubmittingReply(true);
+    const targetId = selectedResForReply.id;
     try {
-      await supabase.from('reservations').update({
-        admin_reply: replyText.trim() || null,
-        updated_at: new Date().toISOString()
-      }).eq('id', selectedResForReply.id);
+      const trimmed = replyText.trim();
+      setReservations(prev => prev.map(r => r.id === targetId ? {
+        ...r,
+        admin_reply: trimmed || null
+      } : r));
+
+      await callReservationStatusApi(targetId, {
+        status: selectedResForReply.status,
+        admin_reply: trimmed || null
+      });
 
       setReplyModalOpen(false);
       setSelectedResForReply(null);
       fetchReservations();
     } catch (err) {
       alert('Error saving reply: ' + err.message);
+      fetchReservations();
     } finally {
       setIsSubmittingReply(false);
     }

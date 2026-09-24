@@ -1960,7 +1960,6 @@ app.patch('/api/reservations/:id', authMiddleware, async (req, res) => {
     if (reservation_time) updates.reservation_time = reservation_time;
     if (pax) updates.pax = parseInt(pax);
     if (special_requests !== undefined) updates.special_requests = special_requests;
-    updates.updated_at = new Date().toISOString();
 
     const { data: updated, error: updateErr } = await supabaseAdmin
       .from('reservations')
@@ -2031,13 +2030,23 @@ app.post('/api/reservations/:id/cancel', authMiddleware, async (req, res) => {
 
     const { data: updated, error: updateErr } = await supabaseAdmin
       .from('reservations')
-      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .update({ status: 'cancelled' })
       .eq('id', id)
       .select('*, restaurant_tables(table_number)')
       .single();
 
     if (updateErr) {
       return res.status(500).json({ error: updateErr.message });
+    }
+
+    // Release table if it was reserved
+    if (existing.table_id) {
+      await supabaseAdmin
+        .from('restaurant_tables')
+        .update({ status: 'available' })
+        .eq('id', existing.table_id)
+        .eq('status', 'reserved')
+        .catch(() => {});
     }
 
     res.json({ message: 'Reservation cancelled successfully', reservation: updated });
@@ -2057,8 +2066,7 @@ app.patch('/api/reservations/:id/cancel-with-reason', authMiddleware, async (req
       .from('reservations')
       .update({
         status: 'cancelled',
-        special_requests: notes ? `[Cancelled: ${reason}] ${notes}` : `[Cancelled: ${reason}]`,
-        updated_at: new Date().toISOString()
+        special_requests: notes ? `[Cancelled: ${reason}] ${notes}` : `[Cancelled: ${reason}]`
       })
       .eq('id', id)
       .select()
@@ -2072,6 +2080,80 @@ app.patch('/api/reservations/:id/cancel-with-reason', authMiddleware, async (req
   } catch (err) {
     console.error('Error cancelling reservation with reason:', err);
     res.status(500).json({ error: 'Server error cancelling reservation' });
+  }
+});
+
+// Admin status update & hotline cancel endpoint (bypasses RLS via supabaseAdmin)
+app.patch('/api/admin/reservations/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, admin_reply, staff_note, cancel_reason } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    const { data: existing, error: findErr } = await supabaseAdmin
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findErr || !existing) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    const noteToSave = admin_reply || (staff_note ? (cancel_reason ? `[Cancelled: ${cancel_reason}] ${staff_note}` : staff_note) : (cancel_reason ? `[Cancelled via Hotline: ${cancel_reason}]` : null));
+
+    // Try primary update with admin_reply
+    let updatePayload = { status };
+    if (noteToSave) {
+      updatePayload.admin_reply = noteToSave;
+    }
+
+    let { data: updated, error: updateErr } = await supabaseAdmin
+      .from('reservations')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('*, restaurant_tables(table_number), users(full_name, phone_number, email)')
+      .single();
+
+    // If admin_reply column is not found in schema, fallback gracefully
+    if (updateErr && (updateErr.message?.includes('admin_reply') || updateErr.code === 'PGRST204')) {
+      const fallbackPayload = { status };
+      if (noteToSave) {
+        fallbackPayload.special_requests = existing.special_requests
+          ? `${existing.special_requests} | ${noteToSave}`
+          : noteToSave;
+      }
+      const retry = await supabaseAdmin
+        .from('reservations')
+        .update(fallbackPayload)
+        .eq('id', id)
+        .select('*, restaurant_tables(table_number), users(full_name, phone_number, email)')
+        .single();
+      updated = retry.data;
+      updateErr = retry.error;
+    }
+
+    if (updateErr) {
+      return res.status(500).json({ error: updateErr.message });
+    }
+
+    // Release table if cancelled and currently reserved
+    if (status === 'cancelled' && existing.table_id) {
+      await supabaseAdmin
+        .from('restaurant_tables')
+        .update({ status: 'available' })
+        .eq('id', existing.table_id)
+        .eq('status', 'reserved')
+        .catch(() => {});
+    }
+
+    res.json({ message: 'Reservation updated successfully', reservation: updated });
+  } catch (err) {
+    console.error('Error in admin reservation status update:', err);
+    res.status(500).json({ error: 'Server error updating reservation' });
   }
 });
 
