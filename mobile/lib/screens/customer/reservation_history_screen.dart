@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../services/api_service.dart';
 import '../../widgets/guest_placeholder.dart';
@@ -54,7 +56,29 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
     super.dispose();
   }
 
-  void _confirmCancelReservation(Map<String, dynamic> res) {
+  static const String restaurantHotline = '+94 11 234 5678';
+
+  int _getMinutesElapsed(Map<String, dynamic> res) {
+    final createdAtStr = res['created_at'];
+    if (createdAtStr == null) return 999;
+    final createdAt = DateTime.tryParse(createdAtStr);
+    if (createdAt == null) return 999;
+    final diffSeconds = DateTime.now().toUtc().difference(createdAt.toUtc()).inSeconds;
+    if (diffSeconds < 0) return 0;
+    return diffSeconds ~/ 60;
+  }
+
+  bool _isWithin10Minutes(Map<String, dynamic> res) {
+    return _getMinutesElapsed(res) < 10;
+  }
+
+  int _getMinutesRemaining(Map<String, dynamic> res) {
+    final elapsed = _getMinutesElapsed(res);
+    final remaining = 10 - elapsed;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  void _confirmCancelReservation(Map<String, dynamic> res, int remainingMins) {
     final tableNumber = res['restaurant_tables']?['table_number'] ?? 'N/A';
     final date = DateTime.tryParse(res['reservation_date'] ?? '') ?? DateTime.now();
     final time = res['reservation_time']?.toString().substring(0, 5) ?? '';
@@ -70,9 +94,36 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
             Text('Cancel Reservation?'),
           ],
         ),
-        content: Text(
-          'Are you sure you want to cancel your booking for Table $tableNumber on ${DateFormat('MMM dd, yyyy').format(date)} at $time?\n\nThis table will be released for other guests.',
-          style: const TextStyle(fontSize: 14, height: 1.4),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to cancel your booking for Table $tableNumber on ${DateFormat('MMM dd, yyyy').format(date)} at $time?',
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.timer_outlined, color: Colors.green, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You are within the 10-minute cancellation window ($remainingMins min left). Instant cancellation will immediately release this table.',
+                      style: TextStyle(fontSize: 12, color: Colors.green.shade800, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -87,54 +138,324 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
             ),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              try {
-                await Supabase.instance.client
-                    .from('reservations')
-                    .update({'status': 'cancelled'})
-                    .eq('id', res['id']);
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Reservation cancelled successfully.'),
-                      backgroundColor: Colors.redAccent,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                  _fetchReservations();
-                }
-              } catch (e) {
-                try {
-                  final token = Supabase.instance.client.auth.currentSession?.accessToken;
-                  await http.post(
-                    Uri.parse('${ApiService.baseUrl}/api/reservations/${res['id']}/cancel'),
-                    headers: {
-                      'Authorization': 'Bearer $token',
-                      'Content-Type': 'application/json',
-                    },
-                  );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Reservation cancelled successfully.'),
-                        backgroundColor: Colors.redAccent,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    _fetchReservations();
-                  }
-                } catch (err) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to cancel: $err')),
-                    );
-                  }
-                }
-              }
+              await _executeCancellation(res);
             },
             child: const Text('Yes, Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _executeCancellation(Map<String, dynamic> res) async {
+    try {
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/api/reservations/${res['id']}/cancel'),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reservation cancelled successfully. Table has been released.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _fetchReservations();
+      } else {
+        final body = jsonDecode(response.body);
+        if (body['code'] == 'HOTLINE_REQUIRED') {
+          _showHotlineCancellationDialog(res, body['minutesElapsed'] ?? 10);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(body['error'] ?? 'Failed to cancel reservation'),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to cancel: $e')),
+        );
+      }
+    }
+  }
+
+  void _showHotlineCancellationDialog(Map<String, dynamic> res, int minutesElapsed) {
+    const hotline = restaurantHotline;
+    final tableNumber = res['restaurant_tables']?['table_number'] ?? 'N/A';
+    final date = DateTime.tryParse(res['reservation_date'] ?? '') ?? DateTime.now();
+    final time = res['reservation_time']?.toString().substring(0, 5) ?? '';
+
+    String elapsedText;
+    if (minutesElapsed >= 1440) {
+      final days = minutesElapsed ~/ 1440;
+      elapsedText = '$days day${days > 1 ? 's' : ''} ago';
+    } else if (minutesElapsed >= 60) {
+      final hours = minutesElapsed ~/ 60;
+      final mins = minutesElapsed % 60;
+      elapsedText = '$hours h $mins m ago';
+    } else {
+      elapsedText = '$minutesElapsed minutes ago';
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.support_agent_rounded, color: Colors.orange.shade800, size: 28),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Cancellation Policy',
+                        style: TextStyle(
+                          fontFamily: 'Playfair Display',
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        '10-Minute Policy Reached',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+
+            // Booking summary card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Table $tableNumber',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Booked $elapsedText',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${DateFormat('MMM dd, yyyy').format(date)} at $time • ${res['pax']} Guests',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                  const Divider(height: 20),
+                  Text(
+                    'Direct in-app cancellations are only allowed within 10 minutes of booking to avoid conflicts with kitchen prep and floor seating.',
+                    style: TextStyle(fontSize: 13, height: 1.45, color: Colors.grey.shade800),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'To cancel or reschedule your reservation now, please call our hotline. Our reservations desk will be pleased to assist you.',
+                    style: TextStyle(fontSize: 13, height: 1.45, color: Colors.grey.shade800),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Hotline Contact Box
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.primary.withValues(alpha: 0.08),
+                    AppTheme.secondary.withValues(alpha: 0.04),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Restaurant Reservations Hotline',
+                          style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(height: 3),
+                        Text(
+                          hotline,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Available Daily: 8:00 AM - 11:00 PM',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    onPressed: () async {
+                      final uri = Uri.parse('tel:${hotline.replaceAll(' ', '')}');
+                      try {
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        } else {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      } catch (_) {
+                        await Clipboard.setData(const ClipboardData(text: hotline));
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Hotline number copied to clipboard: $hotline'),
+                              backgroundColor: Colors.green,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.call, size: 18),
+                    label: const Text('Call Hotline Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: Colors.grey.shade400),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      await Clipboard.setData(const ClipboardData(text: hotline));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Hotline number copied: $hotline'),
+                            backgroundColor: Colors.black87,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('Copy', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -411,6 +732,9 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                     final date = DateTime.tryParse(res['reservation_date'] ?? '') ?? DateTime.now();
                     final time = res['reservation_time']?.toString().substring(0, 5) ?? '';
                     final tableNumber = res['restaurant_tables']?['table_number'] ?? 'N/A';
+                    final isWithin10Min = _isWithin10Minutes(res);
+                    final remainingMins = _getMinutesRemaining(res);
+                    final minutesElapsed = _getMinutesElapsed(res);
                     
                     return Card(
                       margin: const EdgeInsets.only(bottom: 16),
@@ -503,9 +827,50 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                               ),
                             ],
 
+                            // ── Cancellation Policy Banner for Active Bookings ──
+                            if (res['status'] != 'cancelled' && res['status'] != 'completed') ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: isWithin10Min
+                                      ? Colors.green.withValues(alpha: 0.08)
+                                      : Colors.orange.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isWithin10Min
+                                        ? Colors.green.withValues(alpha: 0.25)
+                                        : Colors.orange.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isWithin10Min ? Icons.timer_outlined : Icons.headset_mic_outlined,
+                                      size: 15,
+                                      color: isWithin10Min ? Colors.green.shade700 : Colors.orange.shade900,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        isWithin10Min
+                                            ? 'Instant cancel available ($remainingMins min left)'
+                                            : 'Grace period ended • Cancel via Hotline',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isWithin10Min ? Colors.green.shade800 : Colors.orange.shade900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
                             // ── Modify & Cancel Action Buttons right on the booking card ──
                             if (res['status'] != 'cancelled' && res['status'] != 'completed') ...[
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
                               Row(
                                 children: [
                                   Expanded(
@@ -523,17 +888,35 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: ElevatedButton.icon(
-                                      onPressed: () => _confirmCancelReservation(res),
-                                      icon: const Icon(Icons.cancel_outlined, size: 16, color: Colors.redAccent),
-                                      label: const Text('Cancel', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                      onPressed: isWithin10Min
+                                          ? () => _confirmCancelReservation(res, remainingMins)
+                                          : () => _showHotlineCancellationDialog(res, minutesElapsed),
+                                      icon: Icon(
+                                        isWithin10Min ? Icons.cancel_outlined : Icons.phone_in_talk_rounded,
+                                        size: 16,
+                                        color: isWithin10Min ? Colors.redAccent : Colors.orange.shade900,
+                                      ),
+                                      label: Text(
+                                        isWithin10Min ? 'Cancel (${remainingMins}m left)' : 'Cancel (Hotline)',
+                                        style: TextStyle(
+                                          color: isWithin10Min ? Colors.redAccent : Colors.orange.shade900,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red.withValues(alpha: 0.08),
-                                        foregroundColor: Colors.redAccent,
+                                        backgroundColor: isWithin10Min
+                                            ? Colors.red.withValues(alpha: 0.08)
+                                            : Colors.orange.withValues(alpha: 0.1),
+                                        foregroundColor: isWithin10Min ? Colors.redAccent : Colors.orange.shade900,
                                         elevation: 0,
                                         padding: const EdgeInsets.symmetric(vertical: 11),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(10),
-                                          side: BorderSide(color: Colors.red.withValues(alpha: 0.35)),
+                                          side: BorderSide(
+                                            color: isWithin10Min
+                                                ? Colors.red.withValues(alpha: 0.35)
+                                                : Colors.orange.withValues(alpha: 0.4),
+                                          ),
                                         ),
                                       ),
                                     ),

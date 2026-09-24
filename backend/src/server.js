@@ -1888,13 +1888,73 @@ app.post('/api/reservations/:id/cancel', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Reservation not found' });
     }
 
-    if (existing.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+    // Determine caller's authoritative role
+    const { data: userProfile } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
+    const role = userProfile?.role || req.user.user_metadata?.role || req.user.role;
+    const isStaffOrAdmin = ['admin', 'manager', 'staff', 'waiter'].includes(role);
+
+    if (existing.user_id !== req.user.id && !isStaffOrAdmin) {
       return res.status(403).json({ error: 'Not authorized to cancel this reservation' });
+    }
+
+    if (existing.status === 'cancelled') {
+      return res.status(400).json({ error: 'Reservation is already cancelled' });
+    }
+
+    // 10-Minute Cancellation Policy Enforcement:
+    // Direct online cancellation is only allowed within 10 minutes of booking.
+    // If >10 minutes have passed, customers must contact the restaurant hotline.
+    if (!isStaffOrAdmin && existing.created_at) {
+      const createdAt = new Date(existing.created_at).getTime();
+      const now = Date.now();
+      const diffMinutes = (now - createdAt) / (1000 * 60);
+
+      if (diffMinutes > 10) {
+        return res.status(400).json({
+          error: 'Online cancellation is only available within 10 minutes of booking. Please contact our restaurant hotline at +94 11 234 5678.',
+          code: 'HOTLINE_REQUIRED',
+          hotline: '+94 11 234 5678',
+          minutesElapsed: Math.round(diffMinutes)
+        });
+      }
     }
 
     const { data: updated, error: updateErr } = await supabaseAdmin
       .from('reservations')
       .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('*, restaurant_tables(table_number)')
+      .single();
+
+    if (updateErr) {
+      return res.status(500).json({ error: updateErr.message });
+    }
+
+    res.json({ message: 'Reservation cancelled successfully', reservation: updated });
+  } catch (err) {
+    console.error('Error cancelling reservation:', err);
+    res.status(500).json({ error: 'Server error cancelling reservation' });
+  }
+});
+
+// Staff cancel-with-reason route
+app.patch('/api/reservations/:id/cancel-with-reason', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason, notes } = req.body;
+
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('reservations')
+      .update({
+        status: 'cancelled',
+        special_requests: notes ? `[Cancelled: ${reason}] ${notes}` : `[Cancelled: ${reason}]`,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
       .select()
       .single();
@@ -1905,7 +1965,7 @@ app.post('/api/reservations/:id/cancel', authMiddleware, async (req, res) => {
 
     res.json({ message: 'Reservation cancelled successfully', reservation: updated });
   } catch (err) {
-    console.error('Error cancelling reservation:', err);
+    console.error('Error cancelling reservation with reason:', err);
     res.status(500).json({ error: 'Server error cancelling reservation' });
   }
 });

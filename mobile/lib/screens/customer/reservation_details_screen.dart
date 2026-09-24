@@ -78,6 +78,29 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                   textAlign: TextAlign.center,
                   style: const TextStyle(height: 1.5),
                 ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.timer_outlined, size: 16, color: Colors.green),
+                      SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Free online cancellation available for 10 minutes.',
+                          style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             actions: [
