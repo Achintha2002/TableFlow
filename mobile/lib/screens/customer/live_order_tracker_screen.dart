@@ -79,7 +79,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             .from('orders')
             .select('id')
             .eq('user_id', user.id)
-            .inFilter('status', ['pending', 'preparing', 'ready', 'payment_pending', 'payment_rejected'])
+            .inFilter('status', ['pending', 'preparing', 'ready', 'payment_pending', 'payment_rejected', 'cancelled'])
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle();
@@ -521,8 +521,13 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
         _paymentTxn?['status'] == 'approved';
     final isPaymentRejected = currentStatus == 'payment_rejected' ||
         _paymentTxn?['status'] == 'rejected' ||
-        _orderData?['payment_status'] == 'failed';
-    final isPaymentPending = !isPaymentPaid && !isPaymentRejected &&
+        _orderData?['payment_status'] == 'failed' ||
+        (currentStatus == 'cancelled' && (
+          (_orderData?['special_notes']?.toString().toLowerCase().contains('reject') ?? false) ||
+          _paymentTxn?['status'] == 'rejected' ||
+          isBankTransfer
+        ));
+    final isPaymentPending = !isPaymentPaid && !isPaymentRejected && currentStatus != 'cancelled' &&
         (currentStatus == 'payment_pending' || (isBankTransfer && _orderData?['payment_status'] != 'paid'));
 
     return Scaffold(
@@ -699,6 +704,8 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
               _buildPaymentPendingHero()
             else if (isPaymentRejected)
               _buildPaymentRejectedHero()
+            else if (currentStatus == 'cancelled')
+              _buildOrderCancelledHero()
             else
               Container(
                 padding: const EdgeInsets.all(22),
@@ -1358,19 +1365,20 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
     String reason = _paymentTxn?['rejection_reason']?.toString() ?? '';
     if (reason.isEmpty && _orderData?['special_notes'] != null) {
       final notes = _orderData!['special_notes'].toString();
-      final match = RegExp(r'\[Rejected:\s*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
+      final match = RegExp(r'\[Rejected:\s*([^\]]+)\]', caseSensitive: false).firstMatch(notes) ??
+                    RegExp(r'\[Payment Rejected:\s*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
       if (match != null && match.group(1) != null) {
         reason = match.group(1)!.trim();
       }
     }
-    if (reason.isEmpty) reason = 'The submitted bank slip details could not be verified.';
+    if (reason.isEmpty) reason = 'The submitted bank transfer details could not be verified by restaurant staff.';
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.3), width: 1.5),
+        border: Border.all(color: Colors.red.shade200, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.red.withValues(alpha: 0.08),
@@ -1384,33 +1392,203 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
         children: [
           Row(
             children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.cancel_rounded, size: 24, color: Colors.red.shade600),
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Verification Required',
-                  style: GoogleFonts.playfairDisplay(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.secondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Payment Unsuccessful',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Order Cancelled • Slip Not Approved',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.12),
+                  color: Colors.red.shade50,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.shade200),
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Text(
+                  'CANCELLED',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.red.shade800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Reason Box
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Icon(Icons.error_outline_rounded, size: 12, color: Colors.red),
-                    SizedBox(width: 3),
+                    Icon(Icons.info_outline_rounded, color: Colors.red.shade700, size: 18),
+                    const SizedBox(width: 8),
                     Text(
-                      'Slip Rejected',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red),
+                      'Staff Feedback / Reason:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12.5,
+                        color: Colors.red.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  reason,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF991B1B),
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Your order has been cancelled and not sent to the kitchen. You can re-upload a valid bank transfer slip with the correct reference number to retry verification, or place a new order.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Colors.red.shade900.withValues(alpha: 0.75),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Action 1: Re-upload Payment Proof (Retry)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _showReuploadSlipSheet,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: const Text(
+                'Retry Payment (Re-upload Slip)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF59E0B),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 3,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // Action 2: Browse Menu & Order Again
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                context.go('/menu');
+              },
+              icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
+              label: const Text(
+                'Browse Menu & Order Again',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.secondary,
+                side: BorderSide(color: Colors.grey.shade300, width: 1.2),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderCancelledHero() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.cancel_outlined, size: 24, color: Colors.grey.shade700),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order Cancelled',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'This order has been cancelled',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                     ),
                   ],
                 ),
@@ -1418,47 +1596,17 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             ],
           ),
           const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.red, size: 18),
-                    SizedBox(width: 8),
-                    Text('Reason for Rejection:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  reason,
-                  style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.35),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _showReuploadSlipSheet,
-              icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-              label: const Text('Re-upload Payment Slip', style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () => context.go('/menu'),
+              icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
+              label: const Text('Browse Menu & Order Again', style: TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFF59E0B),
+                backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 4,
               ),
             ),
           ),
@@ -1675,6 +1823,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                       );
                       if (mounted) {
                         _fetchInitialOrderDetails(_activeOrderId!);
+                        _startFallbackPolling(_activeOrderId!);
                       }
                     } else {
                       final errMsg = rData['error'] ??

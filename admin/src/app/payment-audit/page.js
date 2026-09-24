@@ -51,6 +51,91 @@ export default function PaymentAuditPage() {
     setTimeout(() => setToast(null), 3500);
   }
 
+  async function enrichOrdersWithSlips(ordersList) {
+    const userFilesCache = new Map();
+
+    return Promise.all((ordersList || []).map(async (order) => {
+      let trans = order.payment_transaction || null;
+      let slipUrl = trans?.slip_url || null;
+      let slipPath = trans?.slip_path || null;
+
+      const refMatch = order.special_notes?.match(/\[Bank Transfer Ref:\s*([^\]|]+)/i) ||
+                       order.special_notes?.match(/Ref(?:erence)?[:\s#]+([A-Za-z0-9_-]+)/i);
+      const slipMatch = order.special_notes?.match(/Slip:\s*([^\s\]]+)/i);
+
+      if (!slipPath && slipMatch) {
+        slipPath = slipMatch[1].trim();
+      }
+
+      const userId = order.users?.id || order.user_id;
+
+      // If still no slipPath or slipUrl, query Supabase storage for the user's uploaded slips
+      if (!slipUrl && !slipPath && userId) {
+        try {
+          if (!userFilesCache.has(userId)) {
+            const { data: userFiles, error: listErr } = await supabase.storage
+              .from('payment-slips')
+              .list(userId, { limit: 20, sortBy: { column: 'created_at', order: 'desc' } });
+            userFilesCache.set(userId, (!listErr && userFiles) ? userFiles : []);
+          }
+
+          const files = userFilesCache.get(userId) || [];
+          if (files.length > 0) {
+            const orderTime = new Date(order.created_at).getTime();
+            const sorted = [...files].sort((a, b) => {
+              const tsA = parseInt(a.name.split('_')[0], 10) || 0;
+              const tsB = parseInt(b.name.split('_')[0], 10) || 0;
+              return Math.abs(tsA - orderTime) - Math.abs(tsB - orderTime);
+            });
+            slipPath = `${userId}/${sorted[0].name}`;
+          }
+        } catch (_) {}
+      }
+
+      if (slipPath && !slipUrl) {
+        try {
+          const { data } = await supabase.storage
+            .from('payment-slips')
+            .createSignedUrl(slipPath, 86400);
+          slipUrl = data?.signedUrl || null;
+        } catch (_) {}
+
+        if (!slipUrl) {
+          try {
+            const { data: pData } = supabase.storage
+              .from('payment-slips')
+              .getPublicUrl(slipPath);
+            slipUrl = pData?.publicUrl || null;
+          } catch (_) {}
+        }
+      }
+
+      const transactionRef = trans?.transaction_reference || 
+                             (refMatch ? refMatch[1].trim() : `BT-${order.id.slice(0, 8).toUpperCase()}`);
+
+      const enrichedTrans = {
+        id: trans?.id || `pt_${order.id}`,
+        order_id: order.id,
+        user_id: userId,
+        payment_method: 'bank_transfer',
+        transaction_reference: transactionRef,
+        bank_name: trans?.bank_name || (order.special_notes?.match(/Bank:\s*([^\s\]|]+)/i)?.[1]?.trim() || null),
+        amount_paid: order.total_amount,
+        status: order.payment_status === 'failed' ? 'rejected' : (order.payment_status === 'paid' ? 'approved' : 'pending_verification'),
+        slip_path: slipPath,
+        slip_url: slipUrl,
+        rejection_reason: trans?.rejection_reason || (order.special_notes?.match(/\[Rejected:\s*([^\]]+)\]/i)?.[1]?.trim() || null),
+        created_at: trans?.created_at || order.created_at,
+        updated_at: trans?.updated_at || order.created_at
+      };
+
+      return {
+        ...order,
+        payment_transaction: enrichedTrans
+      };
+    }));
+  }
+
   async function fetchVerificationQueue() {
     try {
       setRefreshing(true);
@@ -79,9 +164,10 @@ export default function PaymentAuditPage() {
         }
       }
 
-      // 2. If backend succeeded, update orders and return
+      // 2. If backend succeeded, enrich and update orders
       if (queueOrders !== null) {
-        setOrders(queueOrders);
+        const fullyEnriched = await enrichOrdersWithSlips(queueOrders);
+        setOrders(fullyEnriched);
         return;
       }
 
@@ -112,64 +198,24 @@ export default function PaymentAuditPage() {
         return;
       }
 
-      // Filter bank transfer orders needing verification
-      const bankOrders = (dbOrders || []).filter(o => 
-        (o.payment_method === 'bank_transfer') || 
-        o.status === 'payment_pending' || 
-        o.status === 'payment_rejected' ||
-        (o.special_notes && o.special_notes.toLowerCase().includes('bank transfer')) ||
-        (o.payment_status === 'pending' && !['served', 'completed', 'cancelled'].includes(o.status))
-      );
-
-      // Fetch payment transactions if available
-      let transMap = new Map();
-      if (bankOrders.length > 0) {
-        try {
-          const orderIds = bankOrders.map(o => o.id);
-          const { data: transData } = await supabase
-            .from('payment_transactions')
-            .select('*')
-            .in('order_id', orderIds);
-          if (transData) {
-            transData.forEach(t => transMap.set(t.order_id, t));
-          }
-        } catch (_) {}
-      }
-
-      // Generate signed URLs if slips exist
-      const enriched = await Promise.all(bankOrders.map(async (order) => {
-        let trans = transMap.get(order.id) || null;
-        let slipUrl = null;
-        const refMatch = order.special_notes?.match(/Ref:\s*([A-Za-z0-9_-]+)/i);
-        const slipMatch = order.special_notes?.match(/Slip:\s*([^\s\]]+)/i);
-        const slipPath = trans?.slip_path || (slipMatch ? slipMatch[1] : null);
-
-        if (slipPath) {
-          try {
-            const { data } = await supabase.storage
-              .from('payment-slips')
-              .createSignedUrl(slipPath, 3600);
-            slipUrl = data?.signedUrl || null;
-          } catch (_) {}
+      // Filter bank transfer orders needing verification or rejected
+      const bankOrders = (dbOrders || []).filter(o => {
+        const notes = (o.special_notes || '').toLowerCase();
+        const isBankTransfer = (o.payment_method === 'bank_transfer') || 
+          o.status === 'payment_pending' || 
+          o.status === 'payment_rejected' ||
+          notes.includes('bank transfer') ||
+          notes.includes('[bank transfer ref:') ||
+          notes.includes('[rejected:');
+        if (!isBankTransfer) return false;
+        if (['served', 'completed'].includes(o.status)) return false;
+        if (o.status === 'cancelled') {
+          return notes.includes('[rejected:') || notes.includes('reject');
         }
+        return o.payment_status !== 'paid';
+      });
 
-        if (!trans && (refMatch || slipUrl)) {
-          trans = {
-            order_id: order.id,
-            transaction_reference: refMatch ? refMatch[1] : `BT-${order.id}`,
-            slip_url: slipUrl,
-            status: order.payment_status === 'failed' ? 'rejected' : 'pending_verification'
-          };
-        } else if (trans) {
-          trans = { ...trans, slip_url: slipUrl };
-        }
-
-        return {
-          ...order,
-          payment_transaction: trans
-        };
-      }));
-
+      const enriched = await enrichOrdersWithSlips(bankOrders);
       setOrders(enriched);
     } catch (err) {
       console.warn('Fetch queue notice:', err.message);
@@ -286,13 +332,20 @@ export default function PaymentAuditPage() {
         } catch (_) {}
       }
 
+      const cleanNotes = (rejectingOrder.special_notes || '')
+        .replace(/\[Rejected:[^\]]+\]/g, '')
+        .replace(/\[Payment Rejected:[^\]]+\]/g, '')
+        .trim();
+      const rejectedNotes = `[Rejected: ${reason}] ${cleanNotes}`.trim();
+
       if (!success) {
-        // Fallback directly to Supabase update
+        // Fallback directly to Supabase update with status: 'cancelled'
         let { error: rejErr } = await supabase
           .from('orders')
           .update({
-            status: 'payment_rejected',
-            payment_status: 'failed'
+            status: 'cancelled',
+            payment_status: 'failed',
+            special_notes: rejectedNotes
           })
           .eq('id', rejectingOrder.id);
 
@@ -300,7 +353,8 @@ export default function PaymentAuditPage() {
           await supabase
             .from('orders')
             .update({
-              payment_status: 'failed'
+              status: 'cancelled',
+              special_notes: rejectedNotes
             })
             .eq('id', rejectingOrder.id);
         }
@@ -308,16 +362,35 @@ export default function PaymentAuditPage() {
         try {
           await supabase
             .from('payment_transactions')
-            .update({
+            .upsert({
+              order_id: rejectingOrder.id,
+              user_id: rejectingOrder.user_id,
               status: 'rejected',
               rejection_reason: reason,
               updated_at: new Date().toISOString()
-            })
-            .eq('order_id', rejectingOrder.id);
+            }, { onConflict: 'order_id' });
         } catch (_) {}
       }
 
-      showToast(`Order #${rejectingOrder.id} payment rejected. Customer notified.`);
+      // Optimistically update local state immediately
+      setOrders(prev => prev.map(o => {
+        if (o.id === rejectingOrder.id) {
+          return {
+            ...o,
+            status: 'cancelled',
+            payment_status: 'failed',
+            special_notes: rejectedNotes,
+            payment_transaction: {
+              ...(o.payment_transaction || {}),
+              status: 'rejected',
+              rejection_reason: reason
+            }
+          };
+        }
+        return o;
+      }));
+
+      showToast(`Order #${String(rejectingOrder.id).slice(0, 8)} payment rejected. Customer notified.`);
       setRejectingOrder(null);
       setRejectionReason('');
       setActiveModalOrder(null);
@@ -340,6 +413,11 @@ export default function PaymentAuditPage() {
     if (order.status === 'payment_rejected') return true;
     if (order.payment_transaction?.status === 'rejected') return true;
     if (order.payment_status === 'failed') return true;
+    if (order.status === 'cancelled' && (
+      (order.special_notes && order.special_notes.toLowerCase().includes('reject')) ||
+      order.payment_transaction?.status === 'rejected'
+    )) return true;
+    if (order.special_notes && order.special_notes.toLowerCase().includes('[rejected:')) return true;
     return false;
   }
 
@@ -770,32 +848,28 @@ export default function PaymentAuditPage() {
 
                     {/* Slip Preview Thumbnail */}
                     <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                      {trans?.slip_url ? (
-                        <button
-                          onClick={() => {
-                            setActiveModalOrder(order);
-                            setZoomLevel(1);
-                            setRotation(0);
-                          }}
-                          style={{
-                            padding: '4px 9px',
-                            fontSize: '0.76rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: 'rgba(245, 158, 11, 0.1)',
-                            color: '#d97706',
-                            border: '1px solid rgba(245, 158, 11, 0.25)',
-                            borderRadius: '6px',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Eye size={12} /> View Slip
-                        </button>
-                      ) : (
-                        <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>No slip</span>
-                      )}
+                      <button
+                        onClick={() => {
+                          setActiveModalOrder(order);
+                          setZoomLevel(1);
+                          setRotation(0);
+                        }}
+                        style={{
+                          padding: '5px 11px',
+                          fontSize: '0.76rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          background: trans?.slip_url ? 'rgba(245, 158, 11, 0.12)' : 'rgba(100, 116, 139, 0.1)',
+                          color: trans?.slip_url ? '#d97706' : '#64748b',
+                          border: trans?.slip_url ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(100, 116, 139, 0.25)',
+                          borderRadius: '6px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <Eye size={12} /> {trans?.slip_url ? 'View Slip' : 'Inspect'}
+                      </button>
                     </td>
 
                     {/* Status */}
@@ -897,8 +971,8 @@ export default function PaymentAuditPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.85)',
-          backdropFilter: 'blur(4px)',
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(6px)',
           zIndex: 9999,
           display: 'flex',
           justifyContent: 'center',
@@ -906,37 +980,59 @@ export default function PaymentAuditPage() {
           padding: '24px'
         }}>
           <div style={{
-            background: 'var(--card-bg, #1a1a1a)',
-            border: '1px solid var(--border-color, #333)',
-            borderRadius: '12px',
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '16px',
             width: '95vw',
             maxWidth: '1100px',
             height: '88vh',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)'
           }}>
             {/* Modal Topbar */}
             <div style={{
-              padding: '16px 20px',
-              borderBottom: '1px solid var(--border-color, #333)',
+              padding: '16px 22px',
+              borderBottom: '1px solid #e2e8f0',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              background: 'rgba(255, 255, 255, 0.02)'
+              background: '#f8fafc'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                  Slip Inspection — Order #{activeModalOrder.id}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a' }}>
+                  Slip Inspection — Order #{activeModalOrder.id.slice(0, 8)}...
                 </span>
-                <span style={{ background: '#f59e0b', color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
+                <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 800 }}>
                   BANK TRANSFER
                 </span>
+                {activeModalOrder.payment_transaction?.slip_url && (
+                  <a
+                    href={activeModalOrder.payment_transaction.slip_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      color: '#b45309',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      background: '#fef3c7',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #fde68a'
+                    }}
+                  >
+                    <ExternalLink size={13} /> Open in New Tab
+                  </a>
+                )}
               </div>
               <button
                 onClick={() => setActiveModalOrder(null)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '4px 8px' }}
+                style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b', cursor: 'pointer', fontSize: '1.1rem', padding: '4px 10px', borderRadius: '6px' }}
               >
                 ✕
               </button>
@@ -947,7 +1043,7 @@ export default function PaymentAuditPage() {
               {/* Left: Interactive Slip Image Viewer */}
               <div style={{
                 flex: 1.2,
-                background: '#0a0a0a',
+                background: '#0f172a',
                 position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
@@ -962,11 +1058,11 @@ export default function PaymentAuditPage() {
                   zIndex: 10,
                   display: 'flex',
                   gap: '8px',
-                  background: 'rgba(0,0,0,0.75)',
-                  padding: '6px 12px',
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  padding: '6px 14px',
                   borderRadius: '20px',
                   backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.1)'
+                  border: '1px solid rgba(255,255,255,0.15)'
                 }}>
                   <button
                     onClick={() => setZoomLevel(prev => Math.min(prev + 0.25, 3))}
@@ -992,7 +1088,7 @@ export default function PaymentAuditPage() {
                   <button
                     onClick={() => { setZoomLevel(1); setRotation(0); }}
                     title="Reset View"
-                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, padding: '0 4px' }}
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, padding: '0 4px' }}
                   >
                     Reset
                   </button>
@@ -1009,22 +1105,53 @@ export default function PaymentAuditPage() {
                     overflow: 'auto',
                     padding: '20px'
                   }}>
-                    <img
-                      src={activeModalOrder.payment_transaction.slip_url}
-                      alt="Bank Transfer Slip"
-                      style={{
-                        maxWidth: '90%',
-                        maxHeight: '90%',
-                        objectFit: 'contain',
-                        transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,
-                        transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                        borderRadius: '4px'
-                      }}
-                    />
+                    {activeModalOrder.payment_transaction.slip_url.toLowerCase().includes('.pdf') ? (
+                      <div style={{ textAlign: 'center', color: '#fff' }}>
+                        <p style={{ marginBottom: '14px', fontSize: '0.95rem' }}>📄 PDF Payment Slip Attached</p>
+                        <a
+                          href={activeModalOrder.payment_transaction.slip_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: '#d97706',
+                            color: '#fff',
+                            padding: '10px 20px',
+                            borderRadius: '8px',
+                            textDecoration: 'none',
+                            fontWeight: 700,
+                            boxShadow: '0 4px 12px rgba(217, 119, 6, 0.35)'
+                          }}
+                        >
+                          <ExternalLink size={16} /> Open PDF Slip in New Tab
+                        </a>
+                      </div>
+                    ) : (
+                      <img
+                        src={activeModalOrder.payment_transaction.slip_url}
+                        alt="Bank Transfer Slip"
+                        style={{
+                          maxWidth: '90%',
+                          maxHeight: '90%',
+                          objectFit: 'contain',
+                          transform: `scale(${zoomLevel}) rotate(${rotation}deg)`,
+                          transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                          borderRadius: '4px'
+                        }}
+                      />
+                    )}
                   </div>
                 ) : (
-                  <div style={{ color: 'var(--text-muted)' }}>No slip image available</div>
+                  <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📄</div>
+                    <div style={{ fontWeight: 600, fontSize: '0.95rem', color: '#94a3b8' }}>No slip image file detected in storage</div>
+                    <div style={{ fontSize: '0.75rem', marginTop: '6px', color: '#64748b' }}>
+                      Reference was submitted without an attached receipt
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -1035,75 +1162,75 @@ export default function PaymentAuditPage() {
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                borderLeft: '1px solid var(--border-color, #333)',
-                background: 'var(--card-bg, #1a1a1a)',
+                borderLeft: '1px solid #e2e8f0',
+                background: '#ffffff',
                 overflowY: 'auto'
               }}>
                 <div>
-                  <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                  <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', fontWeight: 700 }}>
                     Payment Verification Checklist
                   </h3>
 
                   {/* Reference Comparison */}
-                  <div style={{ marginBottom: '16px', background: 'rgba(255, 255, 255, 0.03)', padding: '12px', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ marginBottom: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
                       Bank / Transaction Reference
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                      <code style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fbbf24', letterSpacing: '0.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                      <code style={{ fontSize: '1.15rem', fontWeight: 800, color: '#9c6848', background: 'rgba(184, 127, 92, 0.12)', padding: '2px 8px', borderRadius: '6px', letterSpacing: '0.5px' }}>
                         {activeModalOrder.payment_transaction?.transaction_reference || 'N/A'}
                       </code>
                       <button
                         onClick={() => copyToClipboard(activeModalOrder.payment_transaction?.transaction_reference)}
-                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                        style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}
                         title="Copy"
                       >
-                        {copiedRef === activeModalOrder.payment_transaction?.transaction_reference ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        {copiedRef === activeModalOrder.payment_transaction?.transaction_reference ? <Check size={16} color="#10b981" /> : <Copy size={16} />}
                       </button>
                     </div>
                     {activeModalOrder.payment_transaction?.bank_name && (
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        Bank: <strong>{activeModalOrder.payment_transaction.bank_name}</strong>
+                      <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '6px' }}>
+                        Bank: <strong style={{ color: '#0f172a' }}>{activeModalOrder.payment_transaction.bank_name}</strong>
                       </div>
                     )}
                   </div>
 
                   {/* Required Amount */}
-                  <div style={{ marginBottom: '16px', background: 'rgba(16, 185, 129, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#10b981', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ marginBottom: '16px', background: '#f0fdf4', padding: '14px', borderRadius: '10px', border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#16a34a', textTransform: 'uppercase', fontWeight: 700 }}>
                       Total Amount Required
                     </div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', marginTop: '2px' }}>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>
                       LKR {Number(activeModalOrder.total_amount).toFixed(2)}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#4b5563', marginTop: '3px' }}>
                       Check if receipt shows exact or greater amount.
                     </div>
                   </div>
 
                   {/* Customer Info */}
                   <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' }}>
                       Customer Details
                     </div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#0f172a' }}>
                       {activeModalOrder.users?.full_name || 'Guest User'}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                       {activeModalOrder.users?.phone_number || activeModalOrder.users?.email || 'N/A'}
                     </div>
                   </div>
 
                   {/* Order Items */}
                   <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' }}>
                       Items Reserved ({activeModalOrder.order_items?.length || 0})
                     </div>
-                    <div style={{ maxHeight: '140px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
+                    <div style={{ maxHeight: '140px', overflowY: 'auto', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '8px' }}>
                       {(activeModalOrder.order_items || []).map((item, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <span>{item.quantity}x {item.menu_items?.name}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>LKR {(item.quantity * item.unit_price).toFixed(2)}</span>
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ color: '#1e293b', fontWeight: 500 }}>{item.quantity}x {item.menu_items?.name}</span>
+                          <span style={{ color: '#64748b', fontWeight: 600 }}>LKR {(item.quantity * item.unit_price).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
@@ -1111,7 +1238,7 @@ export default function PaymentAuditPage() {
                 </div>
 
                 {/* Bottom Approve / Reject Buttons */}
-                <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', gap: '12px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
                   <button
                     onClick={() => {
                       setRejectingOrder(activeModalOrder);
@@ -1121,9 +1248,9 @@ export default function PaymentAuditPage() {
                     style={{
                       flex: 1,
                       padding: '12px',
-                      background: 'rgba(239, 68, 68, 0.1)',
-                      color: '#ef4444',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      background: '#fef2f2',
+                      color: '#dc2626',
+                      border: '1px solid #fca5a5',
                       borderRadius: '8px',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -1142,7 +1269,7 @@ export default function PaymentAuditPage() {
                     style={{
                       flex: 1.5,
                       padding: '12px',
-                      background: '#10b981',
+                      background: '#16a34a',
                       color: '#fff',
                       border: 'none',
                       borderRadius: '8px',
@@ -1152,7 +1279,7 @@ export default function PaymentAuditPage() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
-                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                      boxShadow: '0 4px 12px rgba(22, 163, 74, 0.3)'
                     }}
                   >
                     <CheckCircle2 size={18} /> Verify & Release to Kitchen
@@ -1174,8 +1301,8 @@ export default function PaymentAuditPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(4px)',
+          background: 'rgba(15, 23, 42, 0.6)',
+          backdropFilter: 'blur(6px)',
           zIndex: 10000,
           display: 'flex',
           justifyContent: 'center',
@@ -1183,56 +1310,74 @@ export default function PaymentAuditPage() {
           padding: '24px'
         }}>
           <div style={{
-            background: 'var(--card-bg, #1e1e1e)',
-            border: '1px solid var(--border-color, #333)',
-            borderRadius: '12px',
+            background: '#ffffff',
+            colorScheme: 'light',
+            border: '1px solid #e2e8f0',
+            borderRadius: '16px',
             width: '100%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+            maxWidth: '540px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '10px', borderRadius: '8px', color: '#ef4444' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+              <div style={{ background: '#fee2e2', padding: '12px', borderRadius: '12px', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <AlertTriangle size={24} />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                  Reject Payment for Order #{rejectingOrder.id}
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#0f172a' }}>
+                  Reject Payment for Order #{String(rejectingOrder.id).slice(0, 8)}...
                 </h3>
-                <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <p style={{ margin: '3px 0 0 0', fontSize: '0.84rem', color: '#64748b' }}>
                   The customer will be notified via push alert and allowed to re-upload a valid slip.
                 </p>
               </div>
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ fontSize: '0.84rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '8px' }}>
                 Select a standard reason:
               </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {CANNED_REASONS.map((r, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setRejectionReason(r)}
-                    style={{
-                      textAlign: 'left',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      background: rejectionReason === r ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.03)',
-                      border: rejectionReason === r ? '1px solid #ef4444' : '1px solid var(--border-color)',
-                      color: rejectionReason === r ? '#ef4444' : 'var(--text-primary)',
-                      fontSize: '0.8rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    • {r}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {CANNED_REASONS.map((r, i) => {
+                  const isSelected = rejectionReason === r;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setRejectionReason(r)}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = '#f1f5f9';
+                          e.currentTarget.style.borderColor = '#cbd5e1';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = '#f8fafc';
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }
+                      }}
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        background: isSelected ? '#fef2f2' : '#f8fafc',
+                        border: isSelected ? '1.5px solid #dc2626' : '1px solid #e2e8f0',
+                        color: isSelected ? '#991b1b' : '#334155',
+                        fontSize: '0.85rem',
+                        fontWeight: isSelected ? 600 : 500,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      • {r}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+            <div style={{ marginBottom: '22px' }}>
+              <label style={{ fontSize: '0.84rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '6px' }}>
                 Or enter a custom message:
               </label>
               <textarea
@@ -1242,24 +1387,25 @@ export default function PaymentAuditPage() {
                 rows={3}
                 style={{ 
                   width: '100%', 
-                  fontSize: '0.85rem',
-                  padding: '10px 14px',
+                  fontSize: '0.88rem',
+                  padding: '12px 14px',
                   background: '#ffffff',
                   color: '#0f172a',
-                  border: '1px solid #e2e8f0',
+                  border: '1.5px solid #cbd5e1',
                   borderRadius: '8px',
                   outline: 'none',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                   fontFamily: 'inherit',
-                  resize: 'vertical'
+                  resize: 'vertical',
+                  lineHeight: '1.5'
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#ef4444';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.15)';
+                  e.target.style.borderColor = '#dc2626';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(220, 38, 38, 0.15)';
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
+                  e.target.style.borderColor = '#cbd5e1';
+                  e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
                 }}
               />
             </div>
@@ -1270,25 +1416,48 @@ export default function PaymentAuditPage() {
                   setRejectingOrder(null);
                   setRejectionReason('');
                 }}
-                className="btn btn-secondary"
                 disabled={isProcessing}
-                style={{ padding: '8px 16px' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                style={{
+                  padding: '10px 18px',
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s ease'
+                }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmReject}
                 disabled={isProcessing || !rejectionReason.trim()}
+                onMouseEnter={(e) => {
+                  if (!isProcessing && rejectionReason.trim()) {
+                    e.currentTarget.style.background = '#b91c1c';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isProcessing && rejectionReason.trim()) {
+                    e.currentTarget.style.background = '#dc2626';
+                  }
+                }}
                 style={{
-                  background: '#ef4444',
-                  color: '#fff',
+                  background: '#dc2626',
+                  color: '#ffffff',
                   border: 'none',
-                  borderRadius: '6px',
-                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  padding: '10px 22px',
                   fontWeight: 700,
                   fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  opacity: (!rejectionReason.trim() || isProcessing) ? 0.5 : 1
+                  cursor: (isProcessing || !rejectionReason.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (!rejectionReason.trim() || isProcessing) ? 0.5 : 1,
+                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.3)',
+                  transition: 'background 0.15s ease'
                 }}
               >
                 {isProcessing ? 'Processing...' : 'Confirm Rejection'}

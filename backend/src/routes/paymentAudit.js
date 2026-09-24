@@ -638,17 +638,18 @@ module.exports = function(supabaseAdmin) {
         console.warn('payment_transactions upsert notice:', tErr.message);
       }
 
-      // Set order status back to payment_pending and update special_notes
+      // Set order status back to pending and update special_notes
       const cleanOldNotes = (order.special_notes || '')
         .replace(/\[Bank Transfer Ref:[^\]]+\]/g, '')
         .replace(/\[Rejected:[^\]]+\]/g, '')
+        .replace(/\[Payment Rejected:[^\]]+\]/g, '')
         .trim();
       const updatedNotes = `[Bank Transfer Ref: ${cleanRef} | Slip: ${slipPath}] ${cleanOldNotes}`.trim();
 
       await supabaseAdmin
         .from('orders')
         .update({
-          status: 'payment_pending',
+          status: 'pending',
           payment_status: 'pending',
           special_notes: updatedNotes
         })
@@ -711,16 +712,27 @@ module.exports = function(supabaseAdmin) {
         orders = qOrders || [];
       }
 
-      // Filter only orders awaiting verification or rejected
+      // Filter orders awaiting verification or rejected
       const pendingOrders = orders.filter(o => {
         const notes = (o.special_notes || '').toLowerCase();
         const isBankTransfer = (o.payment_method === 'bank_transfer') || 
                                notes.includes('bank transfer') || 
+                               notes.includes('[bank transfer ref:') ||
+                               notes.includes('[rejected:') ||
                                o.status === 'payment_pending' ||
                                o.status === 'payment_rejected';
-        const isNotFinal = !['served', 'completed', 'cancelled'].includes(o.status);
-        const isPendingPayment = o.status === 'payment_pending' || o.status === 'payment_rejected' || (o.payment_status === 'pending' && isNotFinal);
-        return isBankTransfer && isPendingPayment;
+        if (!isBankTransfer) return false;
+
+        // Final fulfilled orders don't need audit
+        if (['served', 'completed'].includes(o.status)) return false;
+
+        // If cancelled: only include if it's a rejected payment audit order
+        if (o.status === 'cancelled') {
+          return notes.includes('[rejected:') || notes.includes('reject');
+        }
+
+        // If not paid yet, include
+        return o.payment_status !== 'paid';
       });
 
       if (pendingOrders.length === 0) {
@@ -748,23 +760,113 @@ module.exports = function(supabaseAdmin) {
         }
       });
 
-      // Generate short-lived signed URLs for slips
-      const enrichedOrders = await Promise.all(pendingOrders.map(async (order) => {
-        const trans = transMap.get(order.id) || null;
-        let signedUrl = null;
+      // Cache user storage file lists to prevent duplicate network calls
+      const userFilesCache = new Map();
 
-        if (trans && trans.slip_path) {
+      // Generate signed URLs for slips and extract reference codes
+      const enrichedOrders = await Promise.all(pendingOrders.map(async (order) => {
+        let trans = transMap.get(order.id) || null;
+
+        // If rejected in notes or status is cancelled and no trans or not rejected
+        const notes = order.special_notes || '';
+        const rejMatch = notes.match(/\[Rejected:\s*([^\]]+)\]/i) || notes.match(/\[Payment Rejected:\s*([^\]]+)\]/i);
+        if (rejMatch || order.status === 'cancelled') {
+          if (!trans) {
+            trans = {
+              order_id: order.id,
+              status: 'rejected',
+              rejection_reason: rejMatch ? rejMatch[1].trim() : 'Payment verification failed'
+            };
+          } else if (trans.status !== 'rejected' && rejMatch) {
+            trans.status = 'rejected';
+            trans.rejection_reason = rejMatch[1].trim();
+          }
+        }
+        let signedUrl = null;
+        let slipPath = trans?.slip_path || null;
+
+        // 1. Extract Ref from special_notes if not in trans
+        let ref = trans?.transaction_reference || null;
+        if (!ref && order.special_notes) {
+          const refMatch = order.special_notes.match(/\[Bank Transfer Ref:\s*([^\]|]+)/i) ||
+                           order.special_notes.match(/Ref(?:erence)?[:\s#]+([A-Za-z0-9_-]+)/i);
+          if (refMatch) ref = refMatch[1].trim();
+        }
+
+        // 2. Extract Slip Path from special_notes if not in trans
+        if (!slipPath && order.special_notes) {
+          const slipMatch = order.special_notes.match(/Slip:\s*([^\s\]]+)/i);
+          if (slipMatch) slipPath = slipMatch[1].trim();
+        }
+
+        // 3. Fallback: If no slipPath in special_notes or trans, search storage bucket for this user
+        const userId = order.user_id || order.users?.id;
+        if (!slipPath && userId) {
+          try {
+            if (!userFilesCache.has(userId)) {
+              const { data: userFiles, error: listErr } = await supabaseAdmin.storage
+                .from('payment-slips')
+                .list(userId, {
+                  limit: 20,
+                  sortBy: { column: 'created_at', order: 'desc' }
+                });
+              userFilesCache.set(userId, (!listErr && userFiles) ? userFiles : []);
+            }
+
+            const files = userFilesCache.get(userId) || [];
+            if (files.length > 0) {
+              const orderTime = new Date(order.created_at).getTime();
+              const sorted = [...files].sort((a, b) => {
+                const tsA = parseInt(a.name.split('_')[0], 10) || (a.created_at ? new Date(a.created_at).getTime() : 0);
+                const tsB = parseInt(b.name.split('_')[0], 10) || (b.created_at ? new Date(b.created_at).getTime() : 0);
+                return Math.abs(tsA - orderTime) - Math.abs(tsB - orderTime);
+              });
+              slipPath = `${userId}/${sorted[0].name}`;
+            }
+          } catch (storageListErr) {
+            console.warn('[pending-verification] Storage list error:', storageListErr.message);
+          }
+        }
+
+        // 4. Generate signed URL if slipPath was found
+        if (slipPath) {
           try {
             const { data: sData } = await supabaseAdmin.storage
               .from('payment-slips')
-              .createSignedUrl(trans.slip_path, 600);
+              .createSignedUrl(slipPath, 86400); // 24 hours
             signedUrl = sData?.signedUrl || null;
           } catch (_) {}
+
+          if (!signedUrl) {
+            try {
+              const { data: pData } = supabaseAdmin.storage
+                .from('payment-slips')
+                .getPublicUrl(slipPath);
+              signedUrl = pData?.publicUrl || null;
+            } catch (_) {}
+          }
         }
+
+        // 5. Build/Enrich payment_transaction object so admin panel has all audit data
+        const enrichedTrans = {
+          id: trans?.id || `pt_${order.id}`,
+          order_id: order.id,
+          user_id: userId,
+          payment_method: 'bank_transfer',
+          transaction_reference: ref || `BT-${order.id.slice(0, 8).toUpperCase()}`,
+          bank_name: trans?.bank_name || (order.special_notes?.match(/Bank:\s*([^\s\]|]+)/i)?.[1]?.trim() || null),
+          amount_paid: order.total_amount,
+          status: order.payment_status === 'failed' ? 'rejected' : (order.payment_status === 'paid' ? 'approved' : 'pending_verification'),
+          slip_path: slipPath,
+          slip_url: signedUrl,
+          rejection_reason: trans?.rejection_reason || (order.special_notes?.match(/\[Rejected:\s*([^\]]+)\]/i)?.[1]?.trim() || null),
+          created_at: trans?.created_at || order.created_at,
+          updated_at: trans?.updated_at || order.created_at
+        };
 
         return {
           ...order,
-          payment_transaction: trans ? { ...trans, slip_url: signedUrl } : null
+          payment_transaction: enrichedTrans
         };
       }));
 
@@ -897,16 +999,20 @@ module.exports = function(supabaseAdmin) {
           console.warn('Release reserved stock warning:', stockErr.message);
         }
 
-        // 2. Set order status = 'payment_rejected' and payment_status = 'failed'
+        // 2. Set order status = 'cancelled' and update notes
         let updatedOrder = null;
-        const cleanNotes = (order.special_notes || '').replace(/\[Rejected:[^\]]+\]/g, '').trim();
+        const cleanNotes = (order.special_notes || '')
+          .replace(/\[Rejected:[^\]]+\]/g, '')
+          .replace(/\[Payment Rejected:[^\]]+\]/g, '')
+          .trim();
         const rejectedNotes = `[Rejected: ${reason}] ${cleanNotes}`.trim();
 
+        // Attempt 1: Cancel order and set payment_status to 'failed'
         try {
           const { data: uOrder, error: updateErr } = await supabaseAdmin
             .from('orders')
             .update({
-              status: 'payment_rejected',
+              status: 'cancelled',
               payment_status: 'failed',
               special_notes: rejectedNotes
             })
@@ -914,36 +1020,47 @@ module.exports = function(supabaseAdmin) {
             .select()
             .single();
 
-          if (!updateErr) updatedOrder = uOrder;
+          if (!updateErr && uOrder) {
+            updatedOrder = uOrder;
+          }
         } catch (_) {}
 
+        // Attempt 2: If payment_status 'failed' violated check constraint, update status = 'cancelled' and notes
         if (!updatedOrder) {
-          // Fallback if status enum doesn't support 'payment_rejected'
-          const { data: fbOrder, error: fbErr } = await supabaseAdmin
-            .from('orders')
-            .update({
-              payment_status: 'failed',
-              special_notes: rejectedNotes
-            })
-            .eq('id', order.id)
-            .select()
-            .single();
-          if (fbErr) throw fbErr;
-          updatedOrder = fbOrder;
+          try {
+            const { data: fbOrder, error: fbErr } = await supabaseAdmin
+              .from('orders')
+              .update({
+                status: 'cancelled',
+                special_notes: rejectedNotes
+              })
+              .eq('id', order.id)
+              .select()
+              .single();
+
+            if (!fbErr && fbOrder) {
+              updatedOrder = fbOrder;
+            } else {
+              console.warn('[Reject] Fallback cancel warning:', fbErr?.message);
+            }
+          } catch (e) {
+            console.warn('[Reject] Fallback cancel error:', e.message);
+          }
         }
 
-        // 3. Update payment_transactions with rejection reason safely if table exists
+        // 3. Upsert payment_transactions with rejection reason safely
         try {
           await supabaseAdmin
             .from('payment_transactions')
-            .update({
+            .upsert({
+              order_id: order.id,
+              user_id: order.user_id,
               status: 'rejected',
               rejection_reason: reason,
               reviewed_by: req.user.id,
               reviewed_at: now,
               updated_at: now
-            })
-            .eq('order_id', order.id);
+            }, { onConflict: 'order_id' });
         } catch (txErr) {
           console.warn('Payment transaction rejection update warning:', txErr.message);
         }
@@ -953,11 +1070,11 @@ module.exports = function(supabaseAdmin) {
           try {
             await fcmService.sendToUser(order.user_id, {
               title: 'Payment Verification Failed ⚠️',
-              body: `Reason: ${reason}. Tap to upload a valid payment slip.`,
+              body: `Reason: ${reason}. Order #${String(order.id).slice(0, 8)} has been cancelled. Tap to review options or retry.`,
               data: {
                 type: 'order_status',
                 order_id: String(order.id),
-                status: 'payment_rejected',
+                status: 'cancelled',
                 rejection_reason: reason
               },
               type: 'order_status'
