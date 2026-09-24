@@ -1,7 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../widgets/safe_backdrop_filter.dart';
 
 class MainShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
@@ -57,8 +57,9 @@ class MainShell extends StatelessWidget {
         actions: _getActions(context, currentIndex),
         backgroundColor: AppTheme.background.withValues(alpha: 0.8),
         flexibleSpace: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: SafeBackdropFilter(
+            sigmaX: 10,
+            sigmaY: 10,
             child: Container(color: Colors.transparent),
           ),
         ),
@@ -78,8 +79,9 @@ class MainShell extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(32),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: SafeBackdropFilter(
+            sigmaX: 15,
+            sigmaY: 15,
             child: Container(
               color: AppTheme.white.withValues(alpha: 0.85),
               child: NavigationBar(

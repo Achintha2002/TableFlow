@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +6,7 @@ import '../../services/supabase_service.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/item_customization_sheet.dart';
+import '../../widgets/safe_backdrop_filter.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -237,8 +237,9 @@ class _MenuScreenState extends State<MenuScreen> {
             pinned: true,
             delegate: _StickyCategoryDelegate(
               child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: SafeBackdropFilter(
+                  sigmaX: 16,
+                  sigmaY: 16,
                   child: Container(
                     decoration: BoxDecoration(
                       color: AppTheme.background.withValues(alpha: 0.92),
@@ -546,8 +547,9 @@ class _MenuScreenState extends State<MenuScreen> {
                 const SizedBox(width: 14),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: SafeBackdropFilter(
+                    sigmaX: 10,
+                    sigmaY: 10,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),

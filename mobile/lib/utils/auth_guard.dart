@@ -1,9 +1,9 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
+import '../widgets/safe_backdrop_filter.dart';
 
 class AuthGuard {
   /// Checks whether a Supabase session is currently active
@@ -69,8 +69,9 @@ class _AuthPromptSheet extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+      child: SafeBackdropFilter(
+        sigmaX: 16,
+        sigmaY: 16,
         child: Container(
           decoration: BoxDecoration(
             color: AppTheme.white.withValues(alpha: 0.95),

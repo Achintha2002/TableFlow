@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/call_waiter_sheet.dart';
 import '../../widgets/active_order_card.dart';
+import '../../widgets/safe_backdrop_filter.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -127,8 +126,9 @@ class _HomeScreenState extends State<HomeScreen> {
             width: double.infinity,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: SafeBackdropFilter(
+                sigmaX: 12,
+                sigmaY: 12,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,

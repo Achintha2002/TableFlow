@@ -1,8 +1,8 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/supabase_service.dart';
+import '../../widgets/safe_backdrop_filter.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Data model for authentic onboarding slides
@@ -225,8 +225,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           alignment: Alignment.topRight,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(18),
-                            child: BackdropFilter(
-                              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                            child: SafeBackdropFilter(
+                              sigmaX: 8,
+                              sigmaY: 8,
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.45),
