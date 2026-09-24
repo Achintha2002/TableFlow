@@ -55,8 +55,11 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   List<Map<String, dynamic>> get _filteredItems {
-    return _menuItems.where((item) {
-      // 1. Category match
+    final rawQuery = _searchQuery.trim().toLowerCase();
+
+    // 1. Filter items: ONLY match the dish's main name
+    final filtered = _menuItems.where((item) {
+      // Category match
       if (_selectedCategory != 'All') {
         final cat = (item['category'] as String? ?? '').toLowerCase();
         if (cat != _selectedCategory.toLowerCase()) {
@@ -64,13 +67,44 @@ class _MenuScreenState extends State<MenuScreen> {
         }
       }
 
-      // 2. Search query match
-      if (_searchQuery.trim().isEmpty) return true;
-      final q = _searchQuery.trim().toLowerCase();
-      final name = (item['name'] as String? ?? '').toLowerCase();
-      final desc = (item['description'] as String? ?? '').toLowerCase();
-      return name.contains(q) || desc.contains(q);
+      // Search query: strictly match only the dish's main name
+      if (rawQuery.isEmpty) return true;
+      final name = (item['name'] as String? ?? '').toLowerCase().trim();
+      final queryWords = rawQuery.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+
+      return name.contains(rawQuery) || (queryWords.isNotEmpty && queryWords.every((w) => name.contains(w)));
     }).toList();
+
+    if (rawQuery.isEmpty) return filtered;
+
+    // 2. Priority Ranking: Sort results by relevance to the dish's main name
+    filtered.sort((a, b) {
+      final nameA = (a['name'] as String? ?? '').toLowerCase().trim();
+      final nameB = (b['name'] as String? ?? '').toLowerCase().trim();
+
+      int score(String name) {
+        if (name == rawQuery) return 0; // Exact match (top priority)
+        if (name.startsWith(rawQuery)) return 1; // Starts with full query
+        final words = name.split(RegExp(r'\s+'));
+        if (words.any((w) => w.startsWith(rawQuery))) return 2; // Any word in dish name starts with query
+        if (name.contains(rawQuery)) return 3; // Contains query substring in dish name
+        final queryWords = rawQuery.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+        if (queryWords.isNotEmpty && queryWords.every((w) => name.contains(w))) return 4; // Contains all query words
+        return 5;
+      }
+
+      final scoreA = score(nameA);
+      final scoreB = score(nameB);
+
+      if (scoreA != scoreB) {
+        return scoreA.compareTo(scoreB);
+      }
+      final lenComp = nameA.length.compareTo(nameB.length);
+      if (lenComp != 0) return lenComp;
+      return nameA.compareTo(nameB);
+    });
+
+    return filtered;
   }
 
   @override
@@ -132,7 +166,7 @@ class _MenuScreenState extends State<MenuScreen> {
                       ),
                       cursorColor: AppTheme.primary,
                       decoration: InputDecoration(
-                        hintText: 'Search dishes, ingredients, drinks...',
+                        hintText: 'Search by dish name (e.g. Biryani, Pasta)...',
                         hintStyle: GoogleFonts.inter(
                           fontSize: 14,
                           color: AppTheme.secondary.withValues(alpha: 0.45),
