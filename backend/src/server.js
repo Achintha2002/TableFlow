@@ -1038,35 +1038,47 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
 
     // 8. Record coupon redemption if applicable
     if (couponRecord) {
-      await supabaseAdmin.from('coupon_redemptions').insert({
-        coupon_id: couponRecord.id,
-        user_id: req.user.id,
-        order_id: newOrder.id
-      }).catch(err => console.warn('Coupon redemption log notice:', err.message));
+      try {
+        await supabaseAdmin.from('coupon_redemptions').insert({
+          coupon_id: couponRecord.id,
+          user_id: req.user.id,
+          order_id: newOrder.id
+        });
+      } catch (err) {
+        console.warn('Coupon redemption log notice:', err.message);
+      }
     }
 
     // 9. Atomic Loyalty Points Deduction
     if (pointsDiscount > 0) {
-      await supabaseAdmin.rpc('redeem_loyalty_points', {
-        p_user_id: req.user.id,
-        p_points: pointsDiscount,
-        p_order_id: newOrder.id
-      }).catch(async () => {
+      try {
+        const { error: rpcErr } = await supabaseAdmin.rpc('redeem_loyalty_points', {
+          p_user_id: req.user.id,
+          p_points: pointsDiscount,
+          p_order_id: newOrder.id
+        });
+        if (rpcErr) throw rpcErr;
+      } catch (e) {
         // Fallback if RPC not yet run
-        const { data: u } = await supabaseAdmin.from('users').select('loyalty_points').eq('id', req.user.id).single();
-        if (u) {
-          await supabaseAdmin.from('users').update({ loyalty_points: Math.max(0, u.loyalty_points - pointsDiscount) }).eq('id', req.user.id);
-        }
-      });
+        try {
+          const { data: u } = await supabaseAdmin.from('users').select('loyalty_points').eq('id', req.user.id).single();
+          if (u) {
+            await supabaseAdmin.from('users').update({ loyalty_points: Math.max(0, u.loyalty_points - pointsDiscount) }).eq('id', req.user.id);
+          }
+        } catch (_) {}
+      }
     }
 
     // 10. Update table status to occupied if dine-in table is specified
     if (table_id) {
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'occupied' })
-        .eq('id', table_id)
-        .catch(err => console.warn('Table occupancy update notice:', err.message));
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'occupied' })
+          .eq('id', table_id);
+      } catch (err) {
+        console.warn('Table occupancy update notice:', err.message);
+      }
     }
 
     res.status(201).json({
