@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck, Share2, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function Sidebar() {
@@ -157,6 +157,10 @@ export default function Sidebar() {
               <CalendarDays size={20} />
               Reservations
             </Link>
+            <Link href="/partner-sync" className={`nav-item ${isActive('/partner-sync')}`}>
+              <Share2 size={20} />
+              Partner Sync
+            </Link>
             <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
               <UtensilsCrossed size={20} />
               Menu
@@ -174,6 +178,10 @@ export default function Sidebar() {
         {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
           <>
             <div className="nav-section-label">Management</div>
+            <Link href="/staff-roster" className={`nav-item ${isActive('/staff-roster')}`}>
+              <Clock size={20} />
+              Staff Roster &amp; Ops
+            </Link>
             <Link href="/users" className={`nav-item ${isActive('/users')}`}>
               <ShieldCheck size={20} />
               Users & Staff
