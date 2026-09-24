@@ -34,7 +34,7 @@ class _ReservationsManagementScreenState extends State<ReservationsManagementScr
 
       final res = await sb
           .from('reservations')
-          .select('id, user_id, party_size, reservation_time, status, table_id, special_requests, users(full_name, email), restaurant_tables(table_number)')
+          .select('id, user_id, pax, reservation_date, reservation_time, status, table_id, special_requests, created_at, users(full_name, email, phone_number), restaurant_tables(table_number)')
           .eq('reservation_date', dateStr)
           .order('reservation_time', ascending: true);
 
@@ -292,8 +292,21 @@ class _ReservationsManagementScreenState extends State<ReservationsManagementScr
     final guestName = r['customer_name'] ?? r['users']?['full_name'] ?? 'Guest';
     final rawTime = r['reservation_time'] ?? '19:00';
     final timeFormatted = rawTime.length >= 5 ? rawTime.substring(0, 5) : rawTime;
-    final partySize = r['party_size'] ?? 2;
+    final partySize = r['pax'] ?? r['party_size'] ?? 2;
     final tableNum = r['table_number'] ?? r['restaurant_tables']?['table_number'] ?? (r['table_id'] != null ? '${r['table_id']}' : 'TBD');
+    final phone = r['phone'] ?? r['users']?['phone_number'];
+    final createdAtStr = r['created_at'];
+
+    int? diffMins;
+    bool isWithinGrace = false;
+    if (createdAtStr != null) {
+      final createdAt = DateTime.tryParse(createdAtStr);
+      if (createdAt != null) {
+        final secs = DateTime.now().toUtc().difference(createdAt.toUtc()).inSeconds;
+        diffMins = secs < 0 ? 0 : secs ~/ 60;
+        isWithinGrace = diffMins < 10;
+      }
+    }
 
     Color statusColor;
     Color statusBg;
@@ -373,14 +386,69 @@ class _ReservationsManagementScreenState extends State<ReservationsManagementScr
           ),
           const SizedBox(height: 6),
 
-          // Subtitle: Party & Table info
-          Text(
-            '$partySize People | Table $tableNum',
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF8C827A),
-            ),
+          // Subtitle: Party & Table info + Phone
+          Row(
+            children: [
+              Text(
+                '$partySize Guests | Table $tableNum',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF8C827A),
+                ),
+              ),
+              if (phone != null && phone.toString().isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '• $phone',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF8C827A),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
           ),
+
+          // 10-Minute Policy Status Badge for active reservations
+          if (status != 'cancelled' && status != 'completed') ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isWithinGrace
+                    ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                    : const Color(0xFFF59E0B).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isWithinGrace
+                      ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                      : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isWithinGrace ? Icons.timer_outlined : Icons.support_agent_rounded,
+                    size: 13,
+                    color: isWithinGrace ? const Color(0xFF047857) : const Color(0xFFB45309),
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    isWithinGrace
+                        ? 'Customer app cancel active (${10 - (diffMins ?? 0)}m left)'
+                        : 'Hotline cancellation required (${diffMins != null ? (diffMins >= 60 ? '${diffMins ~/ 60}h ago' : '${diffMins}m ago') : 'Booked'})',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isWithinGrace ? const Color(0xFF047857) : const Color(0xFFB45309),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           // Action Buttons: View, Edit, Cancel

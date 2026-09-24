@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import '../../services/api_service.dart';
 
@@ -13,11 +14,12 @@ class CancelReservationSheet extends StatefulWidget {
 }
 
 class _CancelReservationSheetState extends State<CancelReservationSheet> {
-  String _selectedReason = 'Customer cancelled';
+  String _selectedReason = 'Customer called hotline (>10m policy)';
   final TextEditingController _notesController = TextEditingController();
   bool _isProcessing = false;
 
   final List<String> _reasons = [
+    'Customer called hotline (>10m policy)',
     'Customer cancelled',
     'No show',
     'Duplicate booking',
@@ -35,10 +37,14 @@ class _CancelReservationSheetState extends State<CancelReservationSheet> {
     setState(() => _isProcessing = true);
     final resId = widget.reservation['id'];
     try {
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
       final url = Uri.parse('${ApiService.baseUrl}/api/reservations/$resId/cancel-with-reason');
       final res = await http.patch(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'reason': _selectedReason,
           'notes': _notesController.text.trim(),
