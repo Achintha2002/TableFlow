@@ -93,7 +93,6 @@ export default function PaymentAuditPage() {
           total_amount,
           status,
           payment_status,
-          payment_method,
           special_notes,
           created_at,
           users (id, full_name, email, phone_number),
@@ -115,9 +114,10 @@ export default function PaymentAuditPage() {
 
       // Filter bank transfer orders needing verification
       const bankOrders = (dbOrders || []).filter(o => 
-        o.payment_method === 'bank_transfer' || 
+        (o.payment_method === 'bank_transfer') || 
         o.status === 'payment_pending' || 
         o.status === 'payment_rejected' ||
+        (o.special_notes && o.special_notes.toLowerCase().includes('bank transfer')) ||
         (o.payment_status === 'pending' && !['served', 'completed', 'cancelled'].includes(o.status))
       );
 
@@ -676,7 +676,7 @@ export default function PaymentAuditPage() {
                 const isPending = isOrderPending(order);
                 const isRejected = isOrderRejected(order);
                 const isApproved = isOrderApproved(order);
-                const elapsedMin = Math.round((Date.now() - new Date(order.created_at).getTime()) / 60000);
+                const elapsedMin = Math.round(((order.payment_transaction?.created_at ? new Date(order.payment_transaction.created_at).getTime() : new Date().getTime()) - new Date(order.created_at).getTime()) / 60000);
 
                 return (
                   <tr 

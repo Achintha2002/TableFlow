@@ -34,6 +34,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
   bool _hasReviewed = false;
   Map<String, dynamic>? _paymentTxn;
   bool _isReuploading = false;
+  static bool _canQueryPaymentTransactions = false;
 
   StreamSubscription? _orderStreamSub;
   Timer? _fallbackPollTimer;
@@ -137,16 +138,20 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
       } catch (_) {}
 
       Map<String, dynamic>? pt;
-      try {
-        final ptRes = await Supabase.instance.client
-            .from('payment_transactions')
-            .select('*')
-            .eq('order_id', orderId)
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
-        pt = ptRes;
-      } catch (_) {}
+      if (_canQueryPaymentTransactions) {
+        try {
+          final ptRes = await Supabase.instance.client
+              .from('payment_transactions')
+              .select('*')
+              .eq('order_id', orderId)
+              .order('created_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          pt = ptRes;
+        } catch (_) {
+          _canQueryPaymentTransactions = false;
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -184,18 +189,37 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             .eq('id', orderId)
             .maybeSingle();
 
+        Map<String, dynamic>? pt;
+        if (_canQueryPaymentTransactions) {
+          try {
+            pt = await Supabase.instance.client
+                .from('payment_transactions')
+                .select('*')
+                .eq('order_id', orderId)
+                .order('created_at', ascending: false)
+                .limit(1)
+                .maybeSingle();
+          } catch (_) {
+            _canQueryPaymentTransactions = false;
+          }
+        }
+
         if (orderRes != null && mounted) {
           final newStatus = orderRes['status']?.toString() ?? 'pending';
-          if (newStatus != _previousStatus) {
+          final newPaymentStatus = orderRes['payment_status']?.toString();
+          final oldPaymentStatus = _orderData?['payment_status']?.toString();
+
+          if (newStatus != _previousStatus || (oldPaymentStatus != 'paid' && newPaymentStatus == 'paid')) {
             _triggerFeedbackOnStatusChange(newStatus);
-            setState(() {
-              _orderData = {
-                ...?_orderData,
-                ...orderRes,
-              };
-              _previousStatus = newStatus;
-            });
           }
+          setState(() {
+            _orderData = {
+              ...?_orderData,
+              ...orderRes,
+            };
+            if (pt != null) _paymentTxn = pt;
+            _previousStatus = newStatus;
+          });
         }
       } catch (e) {
         debugPrint('Fallback poller error: $e');
@@ -215,10 +239,13 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             if (data.isNotEmpty && mounted) {
               final newRecord = data.first;
               final newStatus = newRecord['status']?.toString() ?? 'pending';
+              final newPaymentStatus = newRecord['payment_status']?.toString();
+              final oldPaymentStatus = _orderData?['payment_status']?.toString();
 
-              // Trigger Haptic & Audio cues on state transitions
-              if (newStatus != _previousStatus) {
+              // Trigger Haptic & Audio cues on state transitions or payment approval
+              if (newStatus != _previousStatus || (oldPaymentStatus != 'paid' && newPaymentStatus == 'paid')) {
                 _triggerFeedbackOnStatusChange(newStatus);
+                _fetchInitialOrderDetails(orderId);
               }
 
               setState(() {
@@ -241,7 +268,10 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
   }
 
   void _triggerFeedbackOnStatusChange(String status) {
-    if (status == 'preparing') {
+    if (status == 'pending') {
+      HapticFeedback.mediumImpact();
+      SystemSound.play(SystemSoundType.click);
+    } else if (status == 'preparing') {
       HapticFeedback.lightImpact();
     } else if (status == 'ready') {
       HapticFeedback.mediumImpact();
@@ -483,8 +513,17 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
     final createdAt = _formatTime(_orderData?['created_at']);
     final totalAmount = (_orderData?['total_amount'] as num?) ?? 0;
     final isServed = currentStatus == 'served';
-    final isPaymentPending = currentStatus == 'payment_pending';
-    final isPaymentRejected = currentStatus == 'payment_rejected';
+
+    final isBankTransfer = _orderData?['payment_method'] == 'bank_transfer' ||
+        _paymentTxn != null ||
+        (_orderData?['special_notes']?.toString().toLowerCase().contains('bank transfer') ?? false);
+    final isPaymentPaid = _orderData?['payment_status'] == 'paid' ||
+        _paymentTxn?['status'] == 'approved';
+    final isPaymentRejected = currentStatus == 'payment_rejected' ||
+        _paymentTxn?['status'] == 'rejected' ||
+        _orderData?['payment_status'] == 'failed';
+    final isPaymentPending = !isPaymentPaid && !isPaymentRejected &&
+        (currentStatus == 'payment_pending' || (isBankTransfer && _orderData?['payment_status'] != 'paid'));
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -895,14 +934,46 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                                 color: AppTheme.background,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Row(
+                              child: Row(
                                 children: [
-                                  Icon(Icons.point_of_sale, size: 16, color: Colors.grey),
-                                  SizedBox(width: 8),
+                                  Icon(
+                                    isBankTransfer
+                                        ? (isPaymentPaid
+                                            ? Icons.check_circle_rounded
+                                            : isPaymentRejected
+                                                ? Icons.error_rounded
+                                                : Icons.hourglass_top_rounded)
+                                        : Icons.point_of_sale,
+                                    size: 16,
+                                    color: isBankTransfer
+                                        ? (isPaymentPaid
+                                            ? const Color(0xFF16A34A)
+                                            : isPaymentRejected
+                                                ? Colors.red.shade700
+                                                : const Color(0xFFD97706))
+                                        : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'Settlement: Pay at Counter (Cash or Card with Waiter)',
-                                      style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600),
+                                      isBankTransfer
+                                          ? (isPaymentPaid
+                                              ? 'Settlement: Bank Transfer (Verified & Confirmed)'
+                                              : isPaymentRejected
+                                                  ? 'Settlement: Bank Transfer (Slip Needs Re-upload)'
+                                                  : 'Settlement: Bank Transfer (Audit in Progress)')
+                                          : 'Settlement: Pay at Counter (Cash or Card with Waiter)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isBankTransfer
+                                            ? (isPaymentPaid
+                                                ? const Color(0xFF16A34A)
+                                                : isPaymentRejected
+                                                    ? Colors.red.shade700
+                                                    : const Color(0xFFD97706))
+                                            : Colors.grey,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1150,11 +1221,23 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
   }
 
   Widget _buildPaymentPendingHero() {
-    final ref = _paymentTxn?['transaction_reference'] ?? 'Submitted';
+    String ref = _paymentTxn?['transaction_reference']?.toString() ?? '';
+    if (ref.isEmpty && _orderData?['special_notes'] != null) {
+      final notes = _orderData!['special_notes'].toString();
+      final match = RegExp(r'\[Bank Transfer Ref:\s*([^\]|]+)', caseSensitive: false).firstMatch(notes) ??
+                    RegExp(r'Ref(?:erence)?[:\s#]+([A-Za-z0-9_-]+)', caseSensitive: false).firstMatch(notes);
+      if (match != null && match.group(1) != null) {
+        ref = match.group(1)!.trim();
+      }
+    }
+    if (ref.isEmpty) {
+      final orderId = _orderData?['id']?.toString() ?? _activeOrderId ?? '';
+      ref = orderId.length >= 8 ? '#${orderId.substring(0, 8).toUpperCase()}' : 'Submitted';
+    }
     final bank = _paymentTxn?['bank_name'];
 
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
@@ -1171,29 +1254,34 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Payment Verification',
-                style: GoogleFonts.playfairDisplay(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.secondary,
+              Expanded(
+                child: Text(
+                  'Payment Verification',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.secondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFB45309)),
-                    SizedBox(width: 4),
+                    Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFB45309)),
+                    SizedBox(width: 3),
                     Text(
                       'Audit in Progress',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
                     ),
                   ],
                 ),
@@ -1267,10 +1355,18 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
   }
 
   Widget _buildPaymentRejectedHero() {
-    final reason = _paymentTxn?['rejection_reason'] ?? 'The submitted bank slip details could not be verified.';
+    String reason = _paymentTxn?['rejection_reason']?.toString() ?? '';
+    if (reason.isEmpty && _orderData?['special_notes'] != null) {
+      final notes = _orderData!['special_notes'].toString();
+      final match = RegExp(r'\[Rejected:\s*([^\]]+)\]', caseSensitive: false).firstMatch(notes);
+      if (match != null && match.group(1) != null) {
+        reason = match.group(1)!.trim();
+      }
+    }
+    if (reason.isEmpty) reason = 'The submitted bank slip details could not be verified.';
 
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
@@ -1287,29 +1383,34 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Verification Required',
-                style: GoogleFonts.playfairDisplay(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.secondary,
+              Expanded(
+                child: Text(
+                  'Verification Required',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.secondary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                 decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.error_outline_rounded, size: 14, color: Colors.red),
-                    SizedBox(width: 4),
+                    Icon(Icons.error_outline_rounded, size: 12, color: Colors.red),
+                    SizedBox(width: 3),
                     Text(
-                      'Payment Rejected',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red),
+                      'Slip Rejected',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red),
                     ),
                   ],
                 ),
@@ -1368,9 +1469,16 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
 
   void _showReuploadSlipSheet() {
     PickedSlip? newSlip;
-    final refController = TextEditingController(
-      text: _paymentTxn?['transaction_reference'] ?? '',
-    );
+    String existingRef = _paymentTxn?['transaction_reference']?.toString() ?? '';
+    if (existingRef.isEmpty && _orderData?['special_notes'] != null) {
+      final notes = _orderData!['special_notes'].toString();
+      final match = RegExp(r'\[Bank Transfer Ref:\s*([^\]|]+)', caseSensitive: false).firstMatch(notes) ??
+                    RegExp(r'Ref(?:erence)?[:\s#]+([A-Za-z0-9_-]+)', caseSensitive: false).firstMatch(notes);
+      if (match != null && match.group(1) != null) {
+        existingRef = match.group(1)!.trim();
+      }
+    }
+    final refController = TextEditingController(text: existingRef);
     final bankController = TextEditingController(
       text: _paymentTxn?['bank_name'] ?? '',
     );

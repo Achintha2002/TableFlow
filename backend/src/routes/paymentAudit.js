@@ -353,8 +353,8 @@ module.exports = function(supabaseAdmin) {
       // 2. Create the Order
       let newOrder;
       const notesWithRef = special_notes 
-        ? `[Bank Transfer Ref: ${cleanRef}] ${special_notes}`
-        : `[Bank Transfer Ref: ${cleanRef}]`;
+        ? `[Bank Transfer Ref: ${cleanRef} | Slip: ${slipPath}] ${special_notes}`
+        : `[Bank Transfer Ref: ${cleanRef} | Slip: ${slipPath}]`;
 
       const primaryPayload = {
         user_id: req.user.id,
@@ -367,7 +367,6 @@ module.exports = function(supabaseAdmin) {
         total_amount: serverTotal,
         status: 'pending',
         payment_status: 'pending',
-        payment_method: 'bank_transfer',
         prep_time_minutes: maxPrepTime,
         target_serve_time: targetServeTime.toISOString(),
         special_notes: notesWithRef
@@ -389,9 +388,15 @@ module.exports = function(supabaseAdmin) {
         }
 
         const fallbackPayload = {
-          ...primaryPayload,
+          user_id: req.user.id,
           reservation_id: effectiveReservationId,
-          status: 'pending'
+          table_id: table_id || null,
+          total_amount: serverTotal,
+          status: 'pending',
+          payment_status: 'pending',
+          prep_time_minutes: maxPrepTime,
+          target_serve_time: targetServeTime.toISOString(),
+          special_notes: notesWithRef
         };
         const { data: fbData, error: fbErr } = await supabaseAdmin
           .from('orders')
@@ -408,7 +413,6 @@ module.exports = function(supabaseAdmin) {
             total_amount: serverTotal,
             status: 'pending',
             payment_status: 'pending',
-            payment_method: 'bank_transfer',
             special_notes: notesWithRef
           };
           const { data: minData, error: minErr } = await supabaseAdmin
@@ -416,8 +420,27 @@ module.exports = function(supabaseAdmin) {
             .insert(basicPayload)
             .select()
             .single();
-          if (minErr) throw minErr;
-          newOrder = minData;
+
+          if (minErr) {
+            console.warn('Basic payload failed, trying bare minimum orders table schema:', minErr.message);
+            const barePayload = {
+              user_id: req.user.id,
+              reservation_id: effectiveReservationId,
+              table_id: table_id || null,
+              total_amount: serverTotal,
+              status: 'pending',
+              special_notes: notesWithRef
+            };
+            const { data: bareData, error: bareErr } = await supabaseAdmin
+              .from('orders')
+              .insert(barePayload)
+              .select()
+              .single();
+            if (bareErr) throw bareErr;
+            newOrder = bareData;
+          } else {
+            newOrder = minData;
+          }
         } else {
           newOrder = fbData;
         }
@@ -542,18 +565,22 @@ module.exports = function(supabaseAdmin) {
         return res.status(400).json({ error: `Cannot re-submit slip for order with status "${order.status}".` });
       }
 
-      // Check unique constraint for duplicate transaction reference
-      const { data: existingRef } = await supabaseAdmin
-        .from('payment_transactions')
-        .select('id, order_id')
-        .eq('transaction_reference', cleanRef)
-        .neq('order_id', orderId)
-        .maybeSingle();
+      // Check unique constraint for duplicate transaction reference safely
+      try {
+        const { data: existingRef, error: refErr } = await supabaseAdmin
+          .from('payment_transactions')
+          .select('id, order_id')
+          .eq('transaction_reference', cleanRef)
+          .neq('order_id', orderId)
+          .maybeSingle();
 
-      if (existingRef) {
-        return res.status(409).json({
-          error: `Transaction Reference "${cleanRef}" is already used for another order.`
-        });
+        if (!refErr && existingRef) {
+          return res.status(409).json({
+            error: `Transaction Reference "${cleanRef}" is already used for another order.`
+          });
+        }
+      } catch (e) {
+        console.warn('payment_transactions ref check notice:', e.message);
       }
 
       // Upload new slip
@@ -585,32 +612,45 @@ module.exports = function(supabaseAdmin) {
         }
       }
 
-      // Update or create payment_transactions
-      const { data: newTrans } = await supabaseAdmin
-        .from('payment_transactions')
-        .upsert({
-          order_id: order.id,
-          user_id: req.user.id,
-          payment_method: 'bank_transfer',
-          slip_path: slipPath,
-          transaction_reference: cleanRef,
-          bank_name: bank_name ? bank_name.trim() : null,
-          amount_paid: order.total_amount,
-          status: 'pending_verification',
-          rejection_reason: null,
-          reviewed_by: null,
-          reviewed_at: null,
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+      // Update or create payment_transactions safely if table exists
+      let newTrans = null;
+      try {
+        const { data: tData } = await supabaseAdmin
+          .from('payment_transactions')
+          .upsert({
+            order_id: order.id,
+            user_id: req.user.id,
+            payment_method: 'bank_transfer',
+            slip_path: slipPath,
+            transaction_reference: cleanRef,
+            bank_name: bank_name ? bank_name.trim() : null,
+            amount_paid: order.total_amount,
+            status: 'pending_verification',
+            rejection_reason: null,
+            reviewed_by: null,
+            reviewed_at: null,
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+        newTrans = tData;
+      } catch (tErr) {
+        console.warn('payment_transactions upsert notice:', tErr.message);
+      }
 
-      // Set order status back to payment_pending
+      // Set order status back to payment_pending and update special_notes
+      const cleanOldNotes = (order.special_notes || '')
+        .replace(/\[Bank Transfer Ref:[^\]]+\]/g, '')
+        .replace(/\[Rejected:[^\]]+\]/g, '')
+        .trim();
+      const updatedNotes = `[Bank Transfer Ref: ${cleanRef} | Slip: ${slipPath}] ${cleanOldNotes}`.trim();
+
       await supabaseAdmin
         .from('orders')
         .update({
           status: 'payment_pending',
-          payment_status: 'pending'
+          payment_status: 'pending',
+          special_notes: updatedNotes
         })
         .eq('id', order.id);
 
@@ -636,7 +676,7 @@ module.exports = function(supabaseAdmin) {
     try {
       let orders = [];
 
-      // Query bank transfer orders with joins
+      // Query orders with joins
       const { data: qOrders, error: qErr } = await supabaseAdmin
         .from('orders')
         .select(`
@@ -645,7 +685,6 @@ module.exports = function(supabaseAdmin) {
           restaurant_tables(table_number),
           order_items(*, menu_items(id, name, price, image_url))
         `)
-        .eq('payment_method', 'bank_transfer')
         .order('created_at', { ascending: false });
 
       if (qErr) {
@@ -657,7 +696,6 @@ module.exports = function(supabaseAdmin) {
             users(id, full_name, email, phone_number),
             order_items(*)
           `)
-          .eq('payment_method', 'bank_transfer')
           .order('created_at', { ascending: false });
 
         if (fbErr) {
@@ -675,7 +713,11 @@ module.exports = function(supabaseAdmin) {
 
       // Filter only orders awaiting verification or rejected
       const pendingOrders = orders.filter(o => {
-        const isBankTransfer = o.payment_method === 'bank_transfer' || o.payment_status === 'pending';
+        const notes = (o.special_notes || '').toLowerCase();
+        const isBankTransfer = (o.payment_method === 'bank_transfer') || 
+                               notes.includes('bank transfer') || 
+                               o.status === 'payment_pending' ||
+                               o.status === 'payment_rejected';
         const isNotFinal = !['served', 'completed', 'cancelled'].includes(o.status);
         const isPendingPayment = o.status === 'payment_pending' || o.status === 'payment_rejected' || (o.payment_status === 'pending' && isNotFinal);
         return isBankTransfer && isPendingPayment;
@@ -857,12 +899,16 @@ module.exports = function(supabaseAdmin) {
 
         // 2. Set order status = 'payment_rejected' and payment_status = 'failed'
         let updatedOrder = null;
+        const cleanNotes = (order.special_notes || '').replace(/\[Rejected:[^\]]+\]/g, '').trim();
+        const rejectedNotes = `[Rejected: ${reason}] ${cleanNotes}`.trim();
+
         try {
           const { data: uOrder, error: updateErr } = await supabaseAdmin
             .from('orders')
             .update({
               status: 'payment_rejected',
-              payment_status: 'failed'
+              payment_status: 'failed',
+              special_notes: rejectedNotes
             })
             .eq('id', order.id)
             .select()
@@ -876,7 +922,8 @@ module.exports = function(supabaseAdmin) {
           const { data: fbOrder, error: fbErr } = await supabaseAdmin
             .from('orders')
             .update({
-              payment_status: 'failed'
+              payment_status: 'failed',
+              special_notes: rejectedNotes
             })
             .eq('id', order.id)
             .select()

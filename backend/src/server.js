@@ -1106,7 +1106,21 @@ app.get('/api/kitchen/orders', authMiddleware, async (req, res) => {
       throw error;
     }
 
-    res.json(data || []);
+    // Filter out unapproved bank transfer orders awaiting audit approval
+    const kitchenOrders = (data || []).filter(o => {
+      const isBankTransfer = o.payment_method === 'bank_transfer' || 
+                             o.status === 'payment_pending' || 
+                             (o.special_notes && o.special_notes.toLowerCase().includes('bank transfer'));
+      if (isBankTransfer && o.payment_status !== 'paid') {
+        return false; // Withheld from kitchen until payment is verified by admin
+      }
+      if (o.status === 'payment_rejected' || o.payment_status === 'failed') {
+        return false;
+      }
+      return true;
+    });
+
+    res.json(kitchenOrders);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -35,7 +35,18 @@ class _ActiveOrderCardState extends State<ActiveOrderCard>
     super.dispose();
   }
 
-  String _getStatusTitle(String status) {
+  bool _isAwaitingPaymentAudit(Map<String, dynamic> order) {
+    final method = order['payment_method']?.toString();
+    final paymentStatus = order['payment_status']?.toString();
+    final notes = order['special_notes']?.toString().toLowerCase() ?? '';
+    final isBank = method == 'bank_transfer' || notes.contains('bank transfer');
+    return isBank && paymentStatus != 'paid';
+  }
+
+  String _getStatusTitle(String status, [Map<String, dynamic>? order]) {
+    if (order != null && _isAwaitingPaymentAudit(order)) {
+      return 'Payment Verification in Progress';
+    }
     switch (status) {
       case 'pending':
         return 'Order Received by Kitchen';
@@ -48,7 +59,10 @@ class _ActiveOrderCardState extends State<ActiveOrderCard>
     }
   }
 
-  Color _getStatusColor(String status) {
+  Color _getStatusColor(String status, [Map<String, dynamic>? order]) {
+    if (order != null && _isAwaitingPaymentAudit(order)) {
+      return const Color(0xFFD97706);
+    }
     switch (status) {
       case 'pending':
         return Colors.orange;
@@ -61,7 +75,10 @@ class _ActiveOrderCardState extends State<ActiveOrderCard>
     }
   }
 
-  IconData _getStatusIcon(String status) {
+  IconData _getStatusIcon(String status, [Map<String, dynamic>? order]) {
+    if (order != null && _isAwaitingPaymentAudit(order)) {
+      return Icons.hourglass_top_rounded;
+    }
     switch (status) {
       case 'pending':
         return Icons.receipt_long_rounded;
@@ -136,9 +153,9 @@ class _ActiveOrderCardState extends State<ActiveOrderCard>
               ...activeOrders.map((order) {
                 final orderId = order['id']?.toString() ?? '';
                 final status = order['status']?.toString() ?? 'pending';
-                final statusColor = _getStatusColor(status);
-                final statusTitle = _getStatusTitle(status);
-                final statusIcon = _getStatusIcon(status);
+                final statusColor = _getStatusColor(status, order);
+                final statusTitle = _getStatusTitle(status, order);
+                final statusIcon = _getStatusIcon(status, order);
                 final tableId = order['table_id'];
 
                 return Container(
