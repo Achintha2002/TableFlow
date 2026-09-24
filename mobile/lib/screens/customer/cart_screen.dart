@@ -794,11 +794,11 @@ class _CartScreenState extends State<CartScreen> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: hasTable || _selectedTableId != null
-                  ? AppTheme.primary.withValues(alpha: 0.4)
-                  : Colors.amber.withValues(alpha: 0.5),
+                  ? AppTheme.primary.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.08),
             ),
             boxShadow: [
-              BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 3)),
+              BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.02), blurRadius: 8, offset: const Offset(0, 2)),
             ],
           ),
           child: Column(
@@ -890,44 +890,44 @@ class _CartScreenState extends State<CartScreen> {
 
         // Section Title: Order Items
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                'Selected Dishes (${cartItems.length})',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.secondary),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Text(
+              'Selected Dishes (${cartItems.length})',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.secondary),
             ),
-            if (cartItems.isNotEmpty)
-              TextButton.icon(
-                onPressed: () => _confirmClearCart(cart),
-                icon: const Icon(Icons.delete_sweep_outlined, size: 15, color: Colors.redAccent),
-                label: const Text('Clear', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Row(
+              children: [
+                if (cartItems.length > 1)
+                  TextButton(
+                    onPressed: () => _confirmClearCart(cart),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text('Clear All', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/menu');
+                    }
+                  },
+                  icon: const Icon(Icons.add, size: 14, color: AppTheme.primary),
+                  label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
-              ),
-            const SizedBox(width: 4),
-            TextButton.icon(
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/menu');
-                }
-              },
-              icon: const Icon(Icons.add, size: 15, color: AppTheme.primary),
-              label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+              ],
             ),
           ],
         ),
@@ -1847,87 +1847,88 @@ class _CartScreenState extends State<CartScreen> {
             ),
           ],
 
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Action Buttons: Edit and Remove
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: () => _handleEditCartItem(item),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4)),
-                        borderRadius: BorderRadius.circular(8),
+              // Left: Customize / Edit link
+              InkWell(
+                onTap: () => _handleEditCartItem(item),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasCustomizations ? Icons.tune_rounded : Icons.add_circle_outline,
+                        size: 14,
+                        color: hasCustomizations ? AppTheme.primary : Colors.grey.shade600,
                       ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.edit_outlined, size: 13, color: AppTheme.primary),
-                          SizedBox(width: 4),
-                          Text(
-                            'Edit',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary),
-                          ),
-                        ],
+                      const SizedBox(width: 4),
+                      Text(
+                        hasCustomizations ? 'Edit Options' : 'Customize',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: hasCustomizations ? AppTheme.primary : Colors.grey.shade600,
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () => _confirmRemoveCartItem(cart, item),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.delete_outline_rounded, size: 14, color: Colors.redAccent),
-                          SizedBox(width: 4),
-                          Text(
-                            'Remove',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
 
-              // Stepper Quantity Controls
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      item.quantity == 1 ? Icons.delete_outline_rounded : Icons.remove_circle_outline,
-                      size: 22,
-                      color: item.quantity == 1 ? Colors.redAccent : Colors.grey.shade700,
+              // Right: Sleek Pill Quantity Stepper
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F3EF),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        if (item.quantity == 1) {
+                          _confirmRemoveCartItem(cart, item);
+                        } else {
+                          cart.updateQuantity(item.cartLineId, item.quantity - 1);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(
+                          item.quantity == 1 ? Icons.delete_outline_rounded : Icons.remove_rounded,
+                          size: 16,
+                          color: item.quantity == 1 ? Colors.redAccent : Colors.black87,
+                        ),
+                      ),
                     ),
-                    tooltip: item.quantity == 1 ? 'Remove from cart' : 'Decrease quantity',
-                    onPressed: () {
-                      if (item.quantity == 1) {
-                        _confirmRemoveCartItem(cart, item);
-                      } else {
-                        cart.updateQuantity(item.cartLineId, item.quantity - 1);
-                      }
-                    },
-                  ),
-                  Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, size: 22, color: AppTheme.primary),
-                    tooltip: 'Increase quantity',
-                    onPressed: () => cart.updateQuantity(item.cartLineId, item.quantity + 1),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        '${item.quantity}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => cart.updateQuantity(item.cartLineId, item.quantity + 1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(5),
+                        child: Icon(
+                          Icons.add_rounded,
+                          size: 16,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
