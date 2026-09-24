@@ -40,6 +40,9 @@ export default function ReservationsPage() {
   const [replyText, setReplyText] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
 
+  // Floating Toast State
+  const [toastMessage, setToastMessage] = useState(null);
+
   const fetchReservations = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -146,35 +149,43 @@ export default function ReservationsPage() {
 
   async function handleConfirmCancel() {
     if (!selectedResForCancel) return;
-    setIsSubmittingCancel(true);
     const targetId = selectedResForCancel.id;
+    const targetGuest = selectedResForCancel.users?.full_name || 'Guest';
+    const targetTable = selectedResForCancel.restaurant_tables?.table_number
+      ? `Table ${selectedResForCancel.restaurant_tables.table_number}`
+      : 'Reservation';
+
+    const noteToSave = staffNote.trim()
+      ? `[Cancelled: ${cancelReason}] ${staffNote.trim()}`
+      : `[Cancelled via Hotline: ${cancelReason}]`;
+
+    // 1. Close modal IMMEDIATELY (auto dismiss)
+    setCancelModalOpen(false);
+    setSelectedResForCancel(null);
+
+    // 2. Optimistic UI update so table row shows CANCELLED right away
+    setReservations(prev => prev.map(r => r.id === targetId ? {
+      ...r,
+      status: 'cancelled',
+      admin_reply: noteToSave
+    } : r));
+
+    // 3. Show floating toast notification
+    setToastMessage(`✓ ${targetTable} (${targetGuest}) cancelled successfully!`);
+    setTimeout(() => setToastMessage(null), 3500);
+
+    // 4. Background API persistence
     try {
-      const noteToSave = staffNote.trim()
-        ? `[Cancelled: ${cancelReason}] ${staffNote.trim()}`
-        : `[Cancelled via Hotline: ${cancelReason}]`;
-
-      // Optimistic update so UI reflects cancellation immediately
-      setReservations(prev => prev.map(r => r.id === targetId ? {
-        ...r,
-        status: 'cancelled',
-        admin_reply: noteToSave
-      } : r));
-
       await callReservationStatusApi(targetId, {
         status: 'cancelled',
         admin_reply: noteToSave,
         cancel_reason: cancelReason,
         staff_note: staffNote.trim()
       });
-
-      setCancelModalOpen(false);
-      setSelectedResForCancel(null);
       fetchReservations();
     } catch (err) {
-      alert('Error cancelling reservation: ' + err.message);
+      console.error('Error syncing cancel with backend:', err);
       fetchReservations();
-    } finally {
-      setIsSubmittingCancel(false);
     }
   }
 
@@ -186,28 +197,31 @@ export default function ReservationsPage() {
 
   async function handleSaveReply() {
     if (!selectedResForReply) return;
-    setIsSubmittingReply(true);
     const targetId = selectedResForReply.id;
-    try {
-      const trimmed = replyText.trim();
-      setReservations(prev => prev.map(r => r.id === targetId ? {
-        ...r,
-        admin_reply: trimmed || null
-      } : r));
+    const trimmed = replyText.trim();
 
+    // 1. Close modal IMMEDIATELY (auto dismiss)
+    setReplyModalOpen(false);
+    setSelectedResForReply(null);
+
+    // 2. Optimistic update
+    setReservations(prev => prev.map(r => r.id === targetId ? {
+      ...r,
+      admin_reply: trimmed || null
+    } : r));
+
+    setToastMessage('✓ Reply note saved successfully!');
+    setTimeout(() => setToastMessage(null), 3000);
+
+    try {
       await callReservationStatusApi(targetId, {
         status: selectedResForReply.status,
         admin_reply: trimmed || null
       });
-
-      setReplyModalOpen(false);
-      setSelectedResForReply(null);
       fetchReservations();
     } catch (err) {
-      alert('Error saving reply: ' + err.message);
+      console.error('Error saving reply:', err);
       fetchReservations();
-    } finally {
-      setIsSubmittingReply(false);
     }
   }
 
