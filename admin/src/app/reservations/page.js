@@ -679,27 +679,36 @@ export default function ReservationsPage() {
 
       {/* ── 4. Hotline Cancellation Modal ── */}
       {cancelModalOpen && selectedResForCancel && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(3px)'
-        }}>
-          <div style={{
-            background: '#ffffff',
-            borderRadius: '16px',
-            width: '90%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-          }}>
+        <div 
+          onClick={() => {
+            setCancelModalOpen(false);
+            setSelectedResForCancel(null);
+          }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(3px)'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              width: '90%',
+              maxWidth: '520px',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            }}
+          >
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -846,7 +855,7 @@ export default function ReservationsPage() {
                   gap: '6px'
                 }}
               >
-                {isSubmittingCancel ? 'Cancelling...' : 'Confirm Hotline Cancellation'}
+                Confirm Hotline Cancellation
               </button>
             </div>
           </div>
@@ -855,27 +864,36 @@ export default function ReservationsPage() {
 
       {/* ── 5. Admin Reply Modal ── */}
       {replyModalOpen && selectedResForReply && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(3px)'
-        }}>
-          <div style={{
-            background: '#ffffff',
-            borderRadius: '16px',
-            width: '90%',
-            maxWidth: '480px',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
-          }}>
+        <div 
+          onClick={() => {
+            setReplyModalOpen(false);
+            setSelectedResForReply(null);
+          }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(3px)'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              width: '90%',
+              maxWidth: '480px',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+            }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>
                 Reply to Guest
@@ -943,10 +961,34 @@ export default function ReservationsPage() {
                   cursor: isSubmittingReply ? 'not-allowed' : 'pointer'
                 }}
               >
-                {isSubmittingReply ? 'Saving...' : 'Send Reply'}
+                Send Reply
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── 6. Toast Notification ── */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '28px',
+          background: '#0f172a',
+          color: '#ffffff',
+          padding: '14px 22px',
+          borderRadius: '12px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontSize: '14px',
+          fontWeight: '600',
+          zIndex: 9999,
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        }}>
+          <span style={{ color: '#22c55e', fontSize: '18px', fontWeight: 'bold' }}>✓</span>
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>
