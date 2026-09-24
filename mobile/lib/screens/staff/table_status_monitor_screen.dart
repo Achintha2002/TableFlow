@@ -99,62 +99,75 @@ class _TableStatusMonitorScreenState extends State<TableStatusMonitorScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFAF7F2),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.table_restaurant, color: Color(0xFFB87F5C), size: 24),
-                const SizedBox(width: 10),
-                Text(
-                  '${table['table_number']} Actions',
-                  style: const TextStyle(fontFamily: 'Playfair Display', fontSize: 20, fontWeight: FontWeight.bold),
+      builder: (ctx) => Material(
+        color: const Color(0xFFFAF7F2),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.table_restaurant, color: Color(0xFFB87F5C), size: 24),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${table['table_number']} Actions',
+                    style: const TextStyle(fontFamily: 'Playfair Display', fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  Text('${table['capacity']} Seats • ${table['section']}', style: const TextStyle(color: Color(0xFF8C827A), fontSize: 12)),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.check_circle_outline, color: Color(0xFF2E7D32)),
+                  title: const Text('Mark Available & Sanitized'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _updateTableStatus(table, 'available');
+                  },
                 ),
-                const Spacer(),
-                Text('${table['capacity']} Seats • ${table['section']}', style: const TextStyle(color: Color(0xFF8C827A), fontSize: 12)),
-              ],
-            ),
-            const SizedBox(height: 18),
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline, color: Color(0xFF2E7D32)),
-              title: const Text('Mark Available & Sanitized'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _updateTableStatus(table, 'available');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.restaurant, color: Color(0xFFB87F5C)),
-              title: const Text('Mark Occupied (Guests Seated)'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _updateTableStatus(table, 'occupied');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.cleaning_services, color: Colors.blueAccent),
-              title: const Text('Mark for Cleaning / Bussing'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _updateTableStatus(table, 'cleaning');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.bookmark_outline, color: Colors.purple),
-              title: const Text('Mark Reserved for Upcoming Booking'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _updateTableStatus(table, 'reserved');
-              },
-            ),
-          ],
+              ),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.restaurant, color: Color(0xFFB87F5C)),
+                  title: const Text('Mark Occupied (Guests Seated)'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _updateTableStatus(table, 'occupied');
+                  },
+                ),
+              ),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.cleaning_services, color: Colors.blueAccent),
+                  title: const Text('Mark for Cleaning / Bussing'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _updateTableStatus(table, 'cleaning');
+                  },
+                ),
+              ),
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  leading: const Icon(Icons.bookmark_outline, color: Colors.purple),
+                  title: const Text('Mark Reserved for Upcoming Booking'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _updateTableStatus(table, 'reserved');
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

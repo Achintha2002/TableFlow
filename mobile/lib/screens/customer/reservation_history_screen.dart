@@ -214,15 +214,15 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      builder: (ctx) => Material(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
               child: Container(
@@ -457,7 +457,8 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   void _showModifyReservationSheet(Map<String, dynamic> res) {
@@ -478,81 +479,87 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
-          return Container(
-            padding: EdgeInsets.only(
-              top: 20,
-              left: 20,
-              right: 20,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-            ),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
+          return Material(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: EdgeInsets.only(
+                top: 20,
+                left: 20,
+                right: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Modify Booking #${res['restaurant_tables']?['table_number'] != null ? 'Table ${res['restaurant_tables']['table_number']}' : ''}',
-                        style: const TextStyle(fontFamily: 'Playfair Display', fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Modify Booking #${res['restaurant_tables']?['table_number'] != null ? 'Table ${res['restaurant_tables']['table_number']}' : ''}',
+                          style: const TextStyle(fontFamily: 'Playfair Display', fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
-                  // Date selector
-                  ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-                    leading: const Icon(Icons.calendar_today_rounded, color: AppTheme.primary),
-                    title: const Text('Date', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    subtitle: Text(DateFormat('EEEE, MMM dd, yyyy').format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    trailing: const Icon(Icons.edit_outlined, size: 18),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate.isBefore(DateTime.now()) ? DateTime.now() : selectedDate,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 60)),
-                      );
-                      if (picked != null) {
-                        setSheetState(() => selectedDate = picked);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
+                    // Date selector
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                        leading: const Icon(Icons.calendar_today_rounded, color: AppTheme.primary),
+                        title: const Text('Date', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        subtitle: Text(DateFormat('EEEE, MMM dd, yyyy').format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        trailing: const Icon(Icons.edit_outlined, size: 18),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate.isBefore(DateTime.now()) ? DateTime.now() : selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 60)),
+                          );
+                          if (picked != null) {
+                            setSheetState(() => selectedDate = picked);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
 
-                  // Time selector
-                  ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
-                    leading: const Icon(Icons.access_time_rounded, color: AppTheme.primary),
-                    title: const Text('Time', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                    subtitle: Text(selectedTime.format(context), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    trailing: const Icon(Icons.edit_outlined, size: 18),
-                    onTap: () async {
-                      final picked = await showTimePicker(context: context, initialTime: selectedTime);
-                      if (picked != null) {
-                        setSheetState(() => selectedTime = picked);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
+                    // Time selector
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                        leading: const Icon(Icons.access_time_rounded, color: AppTheme.primary),
+                        title: const Text('Time', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        subtitle: Text(selectedTime.format(context), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        trailing: const Icon(Icons.edit_outlined, size: 18),
+                        onTap: () async {
+                          final picked = await showTimePicker(context: context, initialTime: selectedTime);
+                          if (picked != null) {
+                            setSheetState(() => selectedTime = picked);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                   // Pax Stepper
                   Row(
@@ -651,7 +658,8 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           );

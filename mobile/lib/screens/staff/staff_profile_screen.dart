@@ -212,32 +212,37 @@ class _StaffProfileScreenState extends State<StaffProfileScreen> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: const Color(0xFFEFEAE4)),
               ),
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.table_restaurant, color: Color(0xFFB87F5C)),
-                    title: const Text('Waiter Floor Mode', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Open POS floor layout & table punch-in', style: TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/waiter-floor'),
-                  ),
-                  const Divider(height: 1, color: Color(0xFFF0EBE6)),
-                  ListTile(
-                    leading: const Icon(Icons.cleaning_services, color: Colors.blueAccent),
-                    title: const Text('Table Cleaning Tracker', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Manage bussing & turnover tasks', style: TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/table-cleaning-tasks'),
-                  ),
-                  const Divider(height: 1, color: Color(0xFFF0EBE6)),
-                  ListTile(
-                    leading: const Icon(Icons.calendar_month, color: Color(0xFF5A524C)),
-                    title: const Text('Daily Shift Schedule', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('View roster & staff allocations', style: TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/daily-schedule'),
-                  ),
-                ],
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.table_restaurant, color: Color(0xFFB87F5C)),
+                      title: const Text('Waiter Floor Mode', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Open POS floor layout & table punch-in', style: TextStyle(fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/waiter-floor'),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF0EBE6)),
+                    ListTile(
+                      leading: const Icon(Icons.cleaning_services, color: Colors.blueAccent),
+                      title: const Text('Table Cleaning Tracker', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Manage bussing & turnover tasks', style: TextStyle(fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/table-cleaning-tasks'),
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF0EBE6)),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_month, color: Color(0xFF5A524C)),
+                      title: const Text('Daily Shift Schedule', style: TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: const Text('View roster & staff allocations', style: TextStyle(fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/daily-schedule'),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 24),

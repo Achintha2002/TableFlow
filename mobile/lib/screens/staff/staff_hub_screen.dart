@@ -314,60 +314,65 @@ class StaffHubScreen extends StatelessWidget {
           ),
         ],
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, color: Color(0xFFF0EBE6)),
-        itemBuilder: (context, index) {
-          final item = items[index];
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFAF7F2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE8E2DC)),
-              ),
-              child: Icon(item.icon, color: const Color(0xFFB87F5C), size: 22),
-            ),
-            title: Row(
-              children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E1E1E),
-                  ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const Divider(height: 1, color: Color(0xFFF0EBE6)),
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAF7F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE8E2DC)),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: item.badgeColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    item.badge,
-                    style: TextStyle(
-                      fontSize: 10,
+                child: Icon(item.icon, color: const Color(0xFFB87F5C), size: 22),
+              ),
+              title: Row(
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: item.badgeColor,
+                      color: Color(0xFF1E1E1E),
                     ),
                   ),
-                ),
-              ],
-            ),
-            subtitle: Text(
-              item.subtitle,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF8C827A)),
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFB0A7A0)),
-            onTap: () => context.push(item.route),
-          );
-        },
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: item.badgeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      item.badge,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: item.badgeColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              subtitle: Text(
+                item.subtitle,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF8C827A)),
+              ),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFFB0A7A0)),
+              onTap: () => context.push(item.route),
+            );
+          },
+        ),
       ),
     );
   }

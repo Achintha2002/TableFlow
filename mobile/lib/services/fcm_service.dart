@@ -74,23 +74,25 @@ class FCMService {
         FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       }
 
-      // 4. Retrieve and Register Device Token
-      try {
-        final token = await messaging.getToken();
-        if (token != null) {
-          _currentToken = token;
-          debugPrint("FCMService: Device token registered: ${token.substring(0, token.length > 20 ? 20 : token.length)}...");
-          await registerDeviceToken(token);
+      // 4. Retrieve and Register Device Token (native mobile only; web falls back to Supabase Realtime)
+      if (!kIsWeb) {
+        try {
+          final token = await messaging.getToken();
+          if (token != null) {
+            _currentToken = token;
+            debugPrint("FCMService: Device token registered: ${token.substring(0, token.length > 20 ? 20 : token.length)}...");
+            await registerDeviceToken(token);
+          }
+        } catch (tokenErr) {
+          debugPrint("FCMService: getToken notice: $tokenErr");
         }
-      } catch (tokenErr) {
-        debugPrint("FCMService: getToken notice (expected on unconfigured web): $tokenErr");
-      }
 
-      // 5. Listen to Token Refreshes
-      messaging.onTokenRefresh.listen((newToken) {
-        _currentToken = newToken;
-        registerDeviceToken(newToken);
-      });
+        // 5. Listen to Token Refreshes
+        messaging.onTokenRefresh.listen((newToken) {
+          _currentToken = newToken;
+          registerDeviceToken(newToken);
+        });
+      }
 
       // 6. Foreground Messages Handler
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
