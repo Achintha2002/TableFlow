@@ -154,49 +154,130 @@ class _PartnerSyncScreenState extends State<PartnerSyncScreen> {
 
               // Master toggle card
               Container(
-                padding: const EdgeInsets.all(18),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFEBE5DF)),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _liveSyncMaster
+                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        : const Color(0xFFEBE5DF),
+                    width: _liveSyncMaster ? 1.5 : 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 8,
+                      color: _liveSyncMaster
+                          ? const Color(0xFF10B981).withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Share Live Availability',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E1E1E),
-                            ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                'Live Partner Sync',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E1E1E),
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Broadcast floor tables & booking slots in real time',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF8C827A),
+                                ),
+                              ),
+                            ],
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Sync availability with booking partners',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF8C827A),
-                            ),
+                        ),
+                        // Clear high-contrast On/Off Switch
+                        Transform.scale(
+                          scale: 1.1,
+                          child: Switch(
+                            value: _liveSyncMaster,
+                            activeThumbColor: const Color(0xFF10B981),
+                            activeTrackColor: const Color(0xFF10B981).withValues(alpha: 0.35),
+                            inactiveThumbColor: Colors.grey.shade400,
+                            inactiveTrackColor: Colors.grey.shade200,
+                            onChanged: _toggleMaster,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    Switch(
-                      value: _liveSyncMaster,
-                      activeThumbColor: primaryColor,
-                      onChanged: _toggleMaster,
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: Color(0xFFF0EAE4)),
+                    const SizedBox(height: 14),
+
+                    // Clear Status Badge Label: Shows if sync is working or not
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _liveSyncMaster
+                                ? const Color(0xFFECFDF5)
+                                : const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _liveSyncMaster
+                                  ? const Color(0xFFA7F3D0)
+                                  : const Color(0xFFFECACA),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _liveSyncMaster
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFEF4444),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _liveSyncMaster
+                                    ? 'SYNC IS ACTIVE & WORKING'
+                                    : 'SYNC IS PAUSED / OFF',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                  color: _liveSyncMaster
+                                      ? const Color(0xFF065F46)
+                                      : const Color(0xFF991B1B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _fetchSyncStatus,
+                          icon: const Icon(Icons.sync_rounded, size: 15, color: Color(0xFF8C827A)),
+                          label: const Text('Test Sync', style: TextStyle(fontSize: 12, color: Color(0xFF8C827A))),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

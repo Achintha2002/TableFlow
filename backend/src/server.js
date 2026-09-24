@@ -1813,6 +1813,92 @@ app.patch('/api/service-requests/:id/attend', authMiddleware, requireStaffRole, 
 });
 
 // ==========================================
+// Customer/Staff Reservations: Modify & Cancel
+// ==========================================
+app.patch('/api/reservations/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reservation_date, reservation_time, pax, special_requests } = req.body;
+
+    const { data: existing, error: findErr } = await supabaseAdmin
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findErr || !existing) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    if (existing.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+      return res.status(403).json({ error: 'Not authorized to modify this reservation' });
+    }
+
+    if (existing.status === 'cancelled' || existing.status === 'completed') {
+      return res.status(400).json({ error: `Cannot modify a ${existing.status} reservation` });
+    }
+
+    const updates = {};
+    if (reservation_date) updates.reservation_date = reservation_date;
+    if (reservation_time) updates.reservation_time = reservation_time;
+    if (pax) updates.pax = parseInt(pax);
+    if (special_requests !== undefined) updates.special_requests = special_requests;
+    updates.updated_at = new Date().toISOString();
+
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('reservations')
+      .update(updates)
+      .eq('id', id)
+      .select('*, restaurant_tables(table_number)')
+      .single();
+
+    if (updateErr) {
+      return res.status(500).json({ error: updateErr.message });
+    }
+
+    res.json({ message: 'Reservation updated successfully', reservation: updated });
+  } catch (err) {
+    console.error('Error modifying reservation:', err);
+    res.status(500).json({ error: 'Server error modifying reservation' });
+  }
+});
+
+app.post('/api/reservations/:id/cancel', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: existing, error: findErr } = await supabaseAdmin
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findErr || !existing) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    if (existing.user_id !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'manager' && req.user.role !== 'staff') {
+      return res.status(403).json({ error: 'Not authorized to cancel this reservation' });
+    }
+
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('reservations')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateErr) {
+      return res.status(500).json({ error: updateErr.message });
+    }
+
+    res.json({ message: 'Reservation cancelled successfully', reservation: updated });
+  } catch (err) {
+    console.error('Error cancelling reservation:', err);
+    res.status(500).json({ error: 'Server error cancelling reservation' });
+  }
+});
+
+// ==========================================
 // Waiter Floor Mode: Table Status Management
 // ==========================================
 app.patch('/api/tables/:id/status', authMiddleware, requireStaffRole, async (req, res) => {

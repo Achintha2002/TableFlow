@@ -128,13 +128,28 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'available':
-        return const Color(0xFF2E7D32);
+        return const Color(0xFF10B981); // Bright Emerald Green
       case 'occupied':
-        return AppTheme.primary;
+        return const Color(0xFFEF4444); // Vibrant Red
       case 'needs_cleaning':
-        return const Color(0xFFE65100);
+      case 'cleaning':
+        return const Color(0xFF2563EB); // Azure Blue
       default:
         return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'available':
+        return Icons.check_circle_rounded;
+      case 'occupied':
+        return Icons.person_rounded;
+      case 'needs_cleaning':
+      case 'cleaning':
+        return Icons.cleaning_services_rounded;
+      default:
+        return Icons.table_restaurant_rounded;
     }
   }
 
@@ -608,11 +623,11 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+                      border: Border.all(color: color.withValues(alpha: 0.45), width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          blurRadius: 8,
+                          color: color.withValues(alpha: 0.08),
+                          blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
                       ],
@@ -624,33 +639,50 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            // Big table number display
                             Text(
-                              'Table #${t['table_number']}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                              '#${t['table_number']}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 26,
+                                color: color,
+                                letterSpacing: -0.5,
+                              ),
                             ),
+                            // Simple clear icon
                             Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getStatusIcon(status),
+                                color: color,
+                                size: 18,
+                              ),
                             ),
                           ],
                         ),
                         Text(
                           '${t['capacity'] ?? 2} Seats • ${t['table_categories']?['name'] ?? 'Main Dining'}',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.1),
+                            color: color.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             _formatStatus(status),
                             style: TextStyle(
                               color: color,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
                               fontSize: 11,
+                              letterSpacing: 0.4,
                             ),
                           ),
                         ),

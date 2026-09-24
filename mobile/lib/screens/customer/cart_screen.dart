@@ -890,34 +890,44 @@ class _CartScreenState extends State<CartScreen> {
 
         // Section Title: Order Items
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Selected Dishes (${cartItems.length})',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.secondary),
+            Expanded(
+              child: Text(
+                'Selected Dishes (${cartItems.length})',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.secondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            Row(
-              children: [
-                if (cartItems.isNotEmpty)
-                  TextButton.icon(
-                    onPressed: () => _confirmClearCart(cart),
-                    icon: const Icon(Icons.delete_sweep_outlined, size: 16, color: Colors.redAccent),
-                    label: const Text('Clear Cart', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                  ),
-                TextButton.icon(
-                  onPressed: () {
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go('/menu');
-                    }
-                  },
-                  icon: const Icon(Icons.add, size: 16, color: AppTheme.primary),
-                  label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
-                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            if (cartItems.isNotEmpty)
+              TextButton.icon(
+                onPressed: () => _confirmClearCart(cart),
+                icon: const Icon(Icons.delete_sweep_outlined, size: 15, color: Colors.redAccent),
+                label: const Text('Clear', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-              ],
+              ),
+            const SizedBox(width: 4),
+            TextButton.icon(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/menu');
+                }
+              },
+              icon: const Icon(Icons.add, size: 15, color: AppTheme.primary),
+              label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         ),

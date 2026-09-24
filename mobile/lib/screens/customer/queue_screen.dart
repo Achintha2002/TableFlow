@@ -194,87 +194,138 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.table_restaurant, color: Colors.green.shade700, size: 28),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Tables Available!',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green.shade800,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ],
-        ),
+        contentPadding: EdgeInsets.zero,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Bright illuminated header
             Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.shade200),
-              ),
-              child: Text(
-                '$availableCount ${availableCount == 1 ? 'table is' : 'tables are'} currently available for a party of $pax.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.green.shade800,
-                  fontSize: 15,
-                  height: 1.5,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF10B981), Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.table_restaurant_rounded, color: Colors.white, size: 36),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Tables Available Right Now!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'The waitlist is only for when the restaurant is fully occupied.\nPlease scan a table QR code or ask a staff member to seat you.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-                height: 1.5,
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                    ),
+                    child: Text(
+                      'Great news! $availableCount ${availableCount == 1 ? 'table is' : 'tables are'} open for a party of $pax without waiting in line.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF065F46),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'What to do next:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1F2937)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildStepRow('1', 'Walk directly inside to the host reception counter.'),
+                  const SizedBox(height: 6),
+                  _buildStepRow('2', 'Scan the QR code on any free table to order immediately.'),
+                  const SizedBox(height: 20),
+
+                  // Large prominent Action Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        context.go('/home');
+                      },
+                      icon: const Icon(Icons.restaurant_menu_rounded, size: 22),
+                      label: const Text(
+                        'Proceed to Dine In',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 4,
+                        shadowColor: const Color(0xFF10B981).withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('View Waitlist Anyway', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                context.go('/home');
-              },
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Go to Home', style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('I still want to browse the waitlist'),
-          ),
-        ],
       ),
+    );
+  }
+
+  static Widget _buildStepRow(String num, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 20,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: Color(0xFFE5E7EB),
+            shape: BoxShape.circle,
+          ),
+          child: Text(num, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF374151))),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF4B5563), height: 1.3)),
+        ),
+      ],
     );
   }
 
@@ -451,66 +502,155 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-        Container(
-          padding: const EdgeInsets.all(40),
-          decoration: BoxDecoration(
-            color: AppTheme.white.withValues(alpha: 0.6),
-            shape: BoxShape.circle,
-            border: Border.all(color: AppTheme.white, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.secondary.withValues(alpha: 0.05),
-                blurRadius: 40,
-                offset: const Offset(0, 10),
-              )
-            ],
-          ),
-          child: Icon(Icons.people_alt, size: 80, color: AppTheme.primary),
-        ),
-        const SizedBox(height: 48),
-        Text(
-          'Join the Waitlist',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-            color: AppTheme.secondary,
-            fontFamily: 'Playfair Display',
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppTheme.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.secondary.withValues(alpha: 0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 5),
-              )
-            ]
-          ),
-          child: Column(
-            children: [
-              Text(
-                '$_totalWaiting parties waiting',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+          // ── Prominent Top CTA: Move "Join Queue" to Top with vibrant styling ──
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFC48858), Color(0xFF9E6538)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFC48858).withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _joinQueue,
+                borderRadius: BorderRadius.circular(22),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.people_alt_rounded, size: 28, color: Colors.white),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'JOIN WAITLIST NOW',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$_totalWaiting parties waiting • ~${_totalWaiting * 5} min turnaround',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.white),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Estimated wait time is ~${_totalWaiting * 5} minutes.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.secondary.withValues(alpha: 0.6),
-                  height: 1.5,
-                ),
+            ),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Illustration Graphic
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: AppTheme.white.withValues(alpha: 0.8),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.secondary.withValues(alpha: 0.05),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
               ),
-              // Live availability status banner
-              if (_availableTablesForParty >= 0) ...
-                [
+              child: const Icon(Icons.access_time_filled_rounded, size: 60, color: AppTheme.primary),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Live Table Waitlist',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+              color: AppTheme.secondary,
+              fontFamily: 'Playfair Display',
+              fontWeight: FontWeight.bold,
+              fontSize: 26,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Live Availability Status Card
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.secondary.withValues(alpha: 0.05),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$_totalWaiting parties currently waiting',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Average table turnaround time is ~${_totalWaiting * 5} minutes.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.secondary.withValues(alpha: 0.65),
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+                // Live availability status banner
+                if (_availableTablesForParty >= 0) ...[
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -529,13 +669,9 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _availableTablesForParty > 0
-                              ? Icons.table_restaurant
-                              : Icons.event_busy,
+                          _availableTablesForParty > 0 ? Icons.table_restaurant : Icons.event_busy,
                           size: 16,
-                          color: _availableTablesForParty > 0
-                              ? Colors.green.shade700
-                              : AppTheme.primary,
+                          color: _availableTablesForParty > 0 ? Colors.green.shade700 : AppTheme.primary,
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -545,30 +681,17 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: _availableTablesForParty > 0
-                                ? Colors.green.shade700
-                                : AppTheme.primary,
+                            color: _availableTablesForParty > 0 ? Colors.green.shade700 : AppTheme.primary,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ],
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 48),
-        ElevatedButton(
-          onPressed: _joinQueue,
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            elevation: 10,
-            shadowColor: AppTheme.primary.withValues(alpha: 0.5),
-          ),
-          child: const Text('Join Waitlist Now', style: TextStyle(fontSize: 18)),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -580,6 +703,65 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ── Queue Live Push Reminder: Alert when position is 1 or 2 ──
+          if (_position <= 2 && _position > 0)
+            Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFF59E0B), width: 1.8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.amber.withValues(alpha: 0.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFD97706),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.notifications_active_rounded, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _position == 1 ? '🔥 You are Next in Line!' : '⚡ Get Ready! (Position #2)',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Color(0xFF92400E),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          'Please head towards the host / reception desk. Your table is being prepped and will be called shortly!',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF78350F),
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         AnimatedBuilder(
           animation: _pulseController,
           builder: (context, child) {

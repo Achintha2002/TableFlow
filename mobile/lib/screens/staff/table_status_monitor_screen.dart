@@ -164,15 +164,31 @@ class _TableStatusMonitorScreenState extends State<TableStatusMonitorScreen> {
     switch (status) {
       case 'available':
       case 'ready':
-        return const Color(0xFF2E7D32); // Green
+        return const Color(0xFF10B981); // Bright Emerald Green
       case 'occupied':
-        return const Color(0xFFC48858); // Terracotta
+        return const Color(0xFFEF4444); // Vibrant Red
       case 'cleaning':
-        return Colors.blueAccent;
+        return const Color(0xFF2563EB); // Azure Blue
       case 'reserved':
         return Colors.purple;
       default:
         return const Color(0xFF8C827A);
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'available':
+      case 'ready':
+        return Icons.check_circle_rounded;
+      case 'occupied':
+        return Icons.person_rounded;
+      case 'cleaning':
+        return Icons.cleaning_services_rounded;
+      case 'reserved':
+        return Icons.bookmark_rounded;
+      default:
+        return Icons.table_restaurant_rounded;
     }
   }
 
@@ -295,24 +311,29 @@ class _TableStatusMonitorScreenState extends State<TableStatusMonitorScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    t['table_number'],
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: Color(0xFF1E1E1E),
-                                    ),
+                                  Row(
+                                    children: [
+                                      Icon(_getStatusIcon(status), color: color, size: 18),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        t['table_number'],
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 20,
+                                          color: color,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFFAF7F2),
+                                      color: color.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFFE8E2DC)),
                                     ),
                                     child: Text(
                                       '${t['capacity']}P',
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF5A524C)),
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
                                     ),
                                   ),
                                 ],

@@ -344,7 +344,7 @@ class _ManageQueueScreenState extends State<ManageQueueScreen> {
                             Text(
                               '${_queue.length}',
                               style: const TextStyle(
-                                fontSize: 22,
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFFB87F5C),
                               ),
@@ -358,7 +358,7 @@ class _ManageQueueScreenState extends State<ManageQueueScreen> {
                             Text(
                               '~${_queue.length * 5}m',
                               style: const TextStyle(
-                                fontSize: 22,
+                                fontSize: 24,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF1E1E1E),
                               ),
@@ -367,19 +367,42 @@ class _ManageQueueScreenState extends State<ManageQueueScreen> {
                           ],
                         ),
                         Container(width: 1, height: 32, color: const Color(0xFFEFEAE4)),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFB87F5C),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: _showAddWalkInDialog,
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Walk-in', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        Column(
+                          children: [
+                            const Icon(Icons.hourglass_top_rounded, color: Color(0xFFB87F5C), size: 22),
+                            const SizedBox(height: 2),
+                            Text('${_queue.where((e) => (e['pax'] ?? 2) > 4).length} Large Parties', style: const TextStyle(fontSize: 11, color: Color(0xFF8C827A))),
+                          ],
                         ),
                       ],
+                    ),
+                  ),
+                ),
+
+                // ── Big "+ Add Walk-In" Button at top of queue list ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFB87F5C),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 4,
+                        shadowColor: const Color(0xFFB87F5C).withValues(alpha: 0.45),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: _showAddWalkInDialog,
+                      icon: const Icon(Icons.person_add_alt_1_rounded, size: 24),
+                      label: const Text(
+                        '+ Add Walk-In Party',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
                     ),
                   ),
                 ),
