@@ -118,6 +118,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       // Navigate to Onboarding for new users
       if (mounted) context.go('/onboarding');
+    } on DatabaseConnectionException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.cloud_off, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.message,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade800,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,10 +148,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errText = e.toString();
+        final isNetwork = errText.toLowerCase().contains('socket') ||
+            errText.toLowerCase().contains('client') ||
+            errText.toLowerCase().contains('connection') ||
+            errText.toLowerCase().contains('failed host lookup') ||
+            errText.toLowerCase().contains('network is unreachable');
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('An unexpected error occurred.'),
-            backgroundColor: Colors.red,
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.cloud_off, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isNetwork
+                        ? 'Database connection failed. Cannot create account without a live database connection.'
+                        : 'Registration error: $errText',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade800,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -144,6 +188,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final response = await SupabaseService.signInWithGoogle();
       if (response != null && mounted) {
         context.go('/onboarding');
+      }
+    } on DatabaseConnectionException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.cloud_off, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    e.message,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade800,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } on AuthException catch (e) {
       if (mounted) {

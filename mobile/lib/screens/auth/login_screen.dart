@@ -44,6 +44,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         _postAuthSuccess(res.user?.id);
       }
+    } on DatabaseConnectionException catch (e) {
+      setState(() => _errorMessage = e.message);
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
@@ -60,6 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response != null && mounted) {
         _postAuthSuccess(response.user?.id);
       }
+    } on DatabaseConnectionException catch (e) {
+      setState(() => _errorMessage = e.message);
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e, stacktrace) {

@@ -3,6 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+/// Exception thrown when Supabase database cannot be reached or connected to
+class DatabaseConnectionException implements Exception {
+  final String message;
+  const DatabaseConnectionException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class SupabaseService {
   static final SupabaseClient _client = Supabase.instance.client;
 
@@ -17,34 +26,94 @@ class SupabaseService {
     debugPrint('SupabaseService: Initialized');
   }
 
+  /// Strict connectivity pre-flight test to verify database is reachable
+  static Future<bool> isDatabaseConnected() async {
+    try {
+      await _client
+          .from('restaurant_tables')
+          .select('id')
+          .limit(1)
+          .timeout(const Duration(seconds: 4));
+      return true;
+    } catch (_) {
+      try {
+        await _client
+            .from('menu_items')
+            .select('id')
+            .limit(1)
+            .timeout(const Duration(seconds: 4));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
   // ─────────────────────────────────────────
   // AUTH
   // ─────────────────────────────────────────
 
-  /// Sign up with email and password
+  /// Sign up with email and password with strict database connectivity verification
   static Future<AuthResponse> signUp({
     required String email,
     required String password,
     required String fullName,
     required String phone,
   }) async {
+    // 1. Pre-flight check: Verify database connection is alive
+    final isConnected = await isDatabaseConnected();
+    if (!isConnected) {
+      throw const DatabaseConnectionException(
+        'Database connection failed. Cannot create account without an active database connection. Please check your internet connection.',
+      );
+    }
+
+    // 2. Perform authentication signup
     final response = await _client.auth.signUp(
       email: email,
       password: password,
       data: {'full_name': fullName, 'phone': phone},
     );
 
-    // The user record is automatically inserted into public.users via a Supabase trigger
-    // on the auth.users table (handle_new_user).
+    final user = response.user;
+    if (user == null) {
+      throw const DatabaseConnectionException(
+        'Authentication service failed to generate user credentials. Please try again.',
+      );
+    }
+
+    // 3. Verify and guarantee that the user record exists in public.users
+    try {
+      await _client.from('users').upsert({
+        'id': user.id,
+        'email': email,
+        'full_name': fullName,
+        'phone_number': phone,
+        'role': 'customer',
+      }).timeout(const Duration(seconds: 5));
+    } catch (dbError) {
+      // If the database write/connect fails, roll back local session and abort
+      await _client.auth.signOut();
+      throw DatabaseConnectionException(
+        'Database write failed: Account could not be verified in user database. Account creation aborted.',
+      );
+    }
 
     return response;
   }
 
-  /// Sign in with email and password
+  /// Sign in with email and password with database connectivity check
   static Future<AuthResponse> signIn({
     required String email,
     required String password,
   }) async {
+    final isConnected = await isDatabaseConnected();
+    if (!isConnected) {
+      throw const DatabaseConnectionException(
+        'Database connection failed. Please check your internet or database connection.',
+      );
+    }
+
     return await _client.auth.signInWithPassword(
       email: email,
       password: password,
@@ -97,10 +166,37 @@ class SupabaseService {
       throw 'No ID Token found.';
     }
 
-    return _client.auth.signInWithIdToken(
+    final res = await _client.auth.signInWithIdToken(
       provider: OAuthProvider.google,
       idToken: idToken,
     );
+
+    if (res.user != null) {
+      final isConnected = await isDatabaseConnected();
+      if (!isConnected) {
+        await _client.auth.signOut();
+        throw const DatabaseConnectionException(
+          'Database connection failed. Cannot connect Google account without a live database connection.',
+        );
+      }
+      try {
+        await _client.from('users').upsert({
+          'id': res.user!.id,
+          'email': res.user!.email,
+          'full_name': res.user!.userMetadata?['full_name'] ?? 
+                       res.user!.userMetadata?['name'] ?? 
+                       'Valued Guest',
+          'role': 'customer',
+        }).timeout(const Duration(seconds: 5));
+      } catch (dbErr) {
+        await _client.auth.signOut();
+        throw DatabaseConnectionException(
+          'Database record creation failed: $dbErr',
+        );
+      }
+    }
+
+    return res;
   }
 
   /// Sign out

@@ -405,7 +405,15 @@ app.post('/api/admin/create-staff', async (req, res) => {
       return res.status(400).json({ error: 'Invalid role specified' });
     }
 
-    // Create auth user
+    // 1. Pre-flight check: Verify database connectivity
+    const { error: pingError } = await supabaseAdmin.from('users').select('id').limit(1);
+    if (pingError) {
+      return res.status(503).json({ 
+        error: `Database connection failed (${pingError.message}). Cannot create account without an active database connection.` 
+      });
+    }
+
+    // 2. Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -414,15 +422,22 @@ app.post('/api/admin/create-staff', async (req, res) => {
     });
     if (authError) throw authError;
 
-    // The database trigger might run, but let's wait a second just in case
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Force role to selected role
+    // 3. Ensure user record exists in public.users with assigned role
     const { error: dbError } = await supabaseAdmin.from('users')
-      .update({ role: role })
-      .eq('id', authData.user.id);
+      .upsert({ 
+        id: authData.user.id,
+        email: email,
+        full_name: full_name,
+        role: role 
+      });
 
-    if (dbError) throw dbError;
+    if (dbError) {
+      // Roll back created auth user if database table write failed
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {});
+      return res.status(500).json({ 
+        error: `Failed to insert user into database: ${dbError.message}. Account creation cancelled.` 
+      });
+    }
 
     res.json({ message: 'Staff user created successfully!', user: authData.user });
   } catch (error) {
