@@ -7,130 +7,130 @@
 [![Supabase](https://img.shields.io/badge/Supabase-Realtime_DB-3ECF8E?logo=supabase)](https://supabase.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-gold.svg)]()
 
-> **TableFlow** යනු සුඛෝපභෝගී සහ නවීන ආපනශාලා (Fine Dining & Contemporary Restaurants) සඳහාම විශේෂයෙන් නිර්මාණය කරන ලද සම්පූර්ණ ඩිජිටල් කළමනාකරණ පද්ධතියකි (End-to-End Restaurant Management & Operating System). 
+> **TableFlow** is an end-to-end, real-time restaurant operating system purpose-built for contemporary and luxury dining establishments.
 > 
-> මෙහි **Flutter Mobile App** (පාරිභෝගිකයින් සඳහා), **Next.js Web Console** (ආපනශාලා කළමනාකරුවන්, මුදල් අයකැමියන් සහ මුළුතැන්ගෙයි කාර්ය මණ්ඩලය සඳහා), සහ **Express/Node.js Backend Engine** එකක් අන්තර්ගත වන අතර, මේ සියල්ල **Supabase Realtime Database** මඟින් තත්‍ය කාලීනව (Real-time) සම්බන්ධ වේ.
+> The platform unifies a cross-platform **Flutter Mobile App** for guests, a high-performance **Next.js 16 Web Console** for staff and management, and a robust **Node.js/Express Backend Engine**, fully synchronized via **Supabase Realtime PostgreSQL** and cross-tab browser broadcast messaging.
 
 ---
 
-## 📑 පටුන (Table of Contents)
+## 📑 Table of Contents
 
-1. [පද්ධති සැකැස්ම සහ තාක්ෂණය (System Architecture & Tech Stack)](#-system-architecture--tech-stack)
-2. [ප්‍රධාන විශේෂාංග (Core Features)](#-core-features)
-3. [ෆෝල්ඩර ව්‍යුහය (Project Structure)](#-project-structure)
-4. [පූර්වාවශ්‍යතා (Prerequisites)](#-prerequisites)
-5. [පද්ධතිය පිහිටුවීම සහ Run කරන ආකාරය (Installation & Running Guide)](#-installation--running-guide)
-   - [පියවර 1: Supabase Database සැකසීම (Database Setup)](#step-1-supabase-database-setup)
-   - [පියවර 2: Backend API එක Run කිරීම (Backend Setup)](#step-2-backend-setup--run)
-   - [පියවර 3: Admin Web Console එක Run කිරීම (Admin Setup)](#step-3-admin-web-console-setup--run)
-   - [පියවර 4: Flutter Mobile App එක Run කිරීම (Mobile App Setup)](#step-4-flutter-mobile-app-setup--run)
-6. [Production Build සාදන ආකාරය (Building for Production)](#-building-for-production)
-7. [තත්‍ය කාලීන දත්ත සමමුහුර්තකරණය (Real-time Live Sync Architecture)](#-real-time-live-sync-architecture)
-8. [පොදු ගැටලු සහ විසඳුම් (Troubleshooting & FAQs)](#-troubleshooting--faqs)
+1. [System Architecture & Tech Stack](#-system-architecture--tech-stack)
+2. [Key Platform Features](#-key-platform-features)
+3. [Repository Directory Structure](#-repository-directory-structure)
+4. [Prerequisites](#-prerequisites)
+5. [Step-by-Step Setup & Run Guide](#-step-by-step-setup--run-guide)
+   - [Step 1: Database Setup & Migrations (Supabase)](#step-1-database-setup--migrations-supabase)
+   - [Step 2: Backend API Setup (`/backend`)](#step-2-backend-api-setup-backend)
+   - [Step 3: Admin Web Console Setup (`/admin`)](#step-3-admin-web-console-setup-admin)
+   - [Step 4: Mobile Application Setup (`/mobile`)](#step-4-mobile-application-setup-mobile)
+6. [Building for Production](#-building-for-production)
+7. [Real-time Synchronization Architecture](#-real-time-synchronization-architecture)
+8. [Roles & Access Permissions](#-roles--access-permissions)
+9. [Troubleshooting & FAQs](#-troubleshooting--faqs)
 
 ---
 
 ## 🏛️ System Architecture & Tech Stack
 
 ```text
- ┌─────────────────────────────────────────────────────────────┐
- │                     TableFlow Ecosystem                     │
- └──────────────────────────────┬──────────────────────────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                       ▼
- 📱 Mobile App (Flutter)   🌐 Admin Portal (Next.js) ⚙️ Backend API (Node)
- ├─ Customer Pre-orders    ├─ Live Kitchen KDS      ├─ Inventory Lock RPC
- ├─ Table Reservations     ├─ POS Cashier Billing   ├─ Order Verification
- ├─ Bank Slip Upload       ├─ Payment Audit Desk    ├─ FCM Notification
- └─ Live Order Tracking    └─ Reports & CSV Export  └─ Background Cron Jobs
-        ▲                       ▲                       ▲
-        │                       │                       │
-        └───────────────────────┼───────────────────────┘
-                                ▼
-               🗄️ Supabase Cloud (PostgreSQL)
-               ├─ Row Level Security (RLS)
-               ├─ Real-time Websocket Pub/Sub
-               └─ Private Storage Bucket (Payment Slips)
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                          TableFlow Ecosystem                           │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+        ┌────────────────────────────┼────────────────────────────┐
+        ▼                            ▼                            ▼
+ 📱 Mobile App (Flutter)        🌐 Admin Portal (Next.js)    ⚙️ Backend API (Express)
+ ├─ Customer Pre-orders         ├─ Kitchen Display (KDS)     ├─ Inventory Locking RPC
+ ├─ Table Reservations          ├─ Cashier POS Billing       ├─ Payment Audit Endpoints
+ ├─ Bank Slip Upload            ├─ Payment Slip Audit Desk   ├─ FCM Push Notifications
+ └─ Live Order Tracking         └─ Sales & Shift Reports     └─ Order Auto-Expiry Job
+        ▲                            ▲                            ▲
+        │                            │                            │
+        └────────────────────────────┼────────────────────────────┘
+                                     ▼
+                      🗄️ Supabase Cloud (PostgreSQL)
+                      ├─ Row Level Security (RLS)
+                      ├─ Realtime Pub/Sub WebSockets
+                      └─ Private Storage Bucket (payment-slips)
 ```
 
-| Component | Framework / Library | Primary Role |
+| Tier | Technology | Key Responsibilities |
 | :--- | :--- | :--- |
-| **Mobile Client** | **Flutter 3.13+ / Dart** | පාරිභෝගිකයින්ට Menu බැලීම, Table Reserve කිරීම, Pre-order දැමීම සහ Slip Upload කිරීම |
-| **Admin Console** | **Next.js 16 (Turbopack) / React 19** | Cashier POS, Kitchen Display (KDS), Payment Slip Audit Desk, Analytics |
-| **Backend API** | **Node.js / Express.js** | Atomic Inventory Locks, FCM Push Notifications, Background Order Expiry |
-| **Database & Auth** | **Supabase (PostgreSQL + RLS)** | User Authentication, Real-time Subscriptions, Data Storage |
-| **Push Alerts** | **Firebase Cloud Messaging (FCM)** | Order Updates පාරිභෝගිකයාගේ දුරකථනයට Push Notification ලෙස යැවීම |
+| **Mobile Client** | **Flutter 3.13+ (Dart)** | Guest interface for browsing menu items, table reservations, pre-ordering, bank slip uploads, and live food prep tracking. |
+| **Admin Portal** | **Next.js 16 (Turbopack) & React 19** | Management cockpit: Kitchen Display System (KDS), Cashier POS, Bank Slip Audit Desk, Analytics, Floor layouts. |
+| **Backend Engine** | **Node.js & Express.js** | Business logic, atomic stock reservations, FCM push notification dispatch, and scheduled background workers. |
+| **Database & Auth** | **Supabase (PostgreSQL + RLS)** | User identity authentication, persistent database, WebSocket subscriptions, and secure file storage. |
+| **Push Notifications**| **Firebase Cloud Messaging (FCM)** | Automated push alerts dispatched directly to the customer's mobile device as order statuses evolve. |
 
 ---
 
-## ✨ Core Features
+## ✨ Key Platform Features
 
-### 1. 📱 Customer Mobile App (Flutter)
-- **Interactive Fine Dining Menu**: Portion sizing (Regular / King Cut), Gourmet Add-ons, සහ Signature Sauces සමඟ ඇණවුම් කිරීම.
-- **Table Booking & Floor Reservations**: වේලාව සහ පැමිණෙන පුද්ගලයින් ගණන අනුව මේස වෙන්කරවා ගැනීම.
-- **Direct Bank Transfer & Slip Upload**: බැංකු හුවමාරු රිසිට්පත් කැමරාවෙන් හෝ ගැලරියෙන් සෘජුවම upload කිරීම.
-- **Live Order Tracker**: ආහාර පිළියෙළ වන ආකාරය (Pending → Preparing → Ready → Served) Real-time බලාගැනීම.
-- **Accessibility Modes**: පෙනීමේ අපහසුතා ඇති අය සඳහා High Contrast සහ Large Font පහසුකම්.
+### 1. 📱 Guest Mobile App (Flutter)
+- **Portion Sizing & Signature Customizations**: Support for portion variants (e.g. Regular Cut vs. King Cut 400g), artisanal sauces (e.g. Red Wine Glaze, Truffle Peppercorn), and gourmet add-ons with dynamic price calculation.
+- **Direct Bank Transfer with Proof of Payment**: Seamless bank transfer workflow allowing customers to input their transaction reference number and upload receipt slips directly via camera or photo gallery.
+- **Table Booking & Floor Reservations**: Select date, preferred time slot, and guest party count with instant floor allocation.
+- **Live Order Status Tracker**: Real-time progress updates (`Pending` → `Preparing` → `Ready` → `Served`) with real-time WebSocket listeners.
+- **Accessibility Modes**: Integrated toggle for High Contrast Theme and Large Font scaling to accommodate visually impaired guests.
 
 ### 2. 🧾 Payment Slip Audit Desk
-- පාරිභෝගිකයින් Upload කරන බැංකු රිසිට්පත් පරීක්ෂා කිරීම සඳහා වූ විශේෂිත Audit Desk.
-- Zoom in / out සහ 90° Rotate කළ හැකි Interactive Lightbox Slip Viewer.
-- 1-Click Verification: රිසිට්පත තහවුරු කළ සැණින් ස්වයංක්‍රීයව Order එක Kitchen Queue එකට යොමු වේ.
-- Dispute Rejection: වැරදි රිසිට්පත් Canned Reason හෝ Custom හේතුවක් සමඟ Reject කර පාරිභෝගිකයාට දැනුම් දීම.
-- Multi-Tab Live Sync: Audit Desk එකේදී සිදුකරන වෙනස්කම් Orders පිටුව සහ Sidebar එක තුළ ක්ෂණිකව live update වීම.
+- **Interactive Lightbox Inspector**: High-resolution image preview supporting zoom in/out, 90° clockwise rotation, and reference number copy-to-clipboard.
+- **1-Click Kitchen Release**: Immediate verification triggers inventory commitment and pushes the order straight into the kitchen queue.
+- **Dispute Resolution & Canned Rejection**: Categorize invalid receipts (e.g., blurry image, duplicate receipt, reference mismatch) with instant customer notification.
+- **Zero-Latency Multi-Tab Sync**: Actions taken in the audit desk immediately update the Kitchen Orders page and sidebar badge counters without requiring a page reload.
 
 ### 3. 🍳 Kitchen Display System (KDS)
-- මුළුතැන්ගෙයි කෝකියන් සඳහාම වෙන්වූ විශේෂ Screen එකක්.
-- නව Order එකක් පැමිණි විට හෝ Review එකක් ලැබුණු විට ස්වයංක්‍රීයව නාද වන **Web Audio Synthesizer Chimes**.
-- Order එකක් ප්‍රමාද වන විට වර්ණය වෙනස් වන (Green → Gold → Red) Urgent Timers.
+- **Hands-Free Kitchen Interface**: Real-time order cards showing order items, selected portion sizes, notes, and elapsed preparation times.
+- **Urgency Time Thresholds**: Visual color-coded cards (Normal Green → Warning Gold after 10 mins → Critical Red after 20 mins).
+- **Web Audio Chimes**: Synthesized browser audio alerts automatically fire whenever a new order arrives or a customer leaves a rating.
 
-### 4. 💳 Cashier POS & Billing
-- Walk-in පාරිභෝගිකයන් සහ Table Dine-in ඇණවුම් ඉක්මනින් Punch කළ හැකි POS Interface.
-- Cash, Card, හෝ Split Payment ක්‍රම මඟින් බිල්පත් පියවීම සහ Instant Receipt Generation.
+### 4. 💳 Cashier POS & Billing Terminal
+- **Fast-Paced Dine-in & Takeaway Billing**: Rapid dish selection, table selection, and discount handling.
+- **Payment Processing**: Multi-tender support (Cash, Card, Online) with instantaneous status updates and printable receipts.
 
-### 5. 📊 Reports & Register Reconciliation (Z-Reports)
-- දෛනික ආදායම, Shift Summary, සහ Net Sales විශ්ලේෂණය.
-- RFC 4180 Standard CSV Export පහසුකම.
+### 5. 📊 Sales Reports & Shift Analytics (Z-Reports)
+- **Revenue Summaries**: Gross sales, net revenue, tax breakdown, and service charges.
+- **RFC 4180 Standard CSV Export**: Direct export of transactional data for external accounting tools.
 
 ---
 
-## 📂 Project Structure
+## 📂 Repository Directory Structure
 
 ```text
 TableFlow/
-├── backend/                       # Node.js & Express REST Backend
+├── backend/                       # Node.js & Express REST Backend Engine
 │   ├── src/
-│   │   ├── config/supabase.js     # Supabase Service Role Client
-│   │   ├── routes/paymentAudit.js # Bank Transfer Audit & Verification APIs
-│   │   ├── services/fcm.js        # Firebase Cloud Messaging Service
-│   │   ├── jobs/orderExpiryJob.js # Auto-release unverified stock cron
-│   │   └── server.js              # Express Application Entry
-│   ├── payment_verification_migration.sql # DB Schema for Slips & Audit
+│   │   ├── config/supabase.js     # Supabase Service Role client configuration
+│   │   ├── routes/paymentAudit.js # Payment verification & slip audit APIs
+│   │   ├── services/fcm.js        # Firebase Cloud Messaging push dispatch
+│   │   ├── jobs/orderExpiryJob.js # Background cron job for unverified stock
+│   │   └── server.js              # Express app entry & HTTP routes
+│   ├── payment_verification_migration.sql # DB schema, storage & RPC functions
 │   └── package.json
 │
-├── admin/                         # Next.js 16 Admin & Staff Dashboard
+├── admin/                         # Next.js 16 Web Administration Portal
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── orders/            # Kitchen & Live Orders Management
-│   │   │   ├── payment-audit/     # Bank Slip Verification Lightbox
+│   │   │   ├── orders/            # Kitchen & Live Orders view
+│   │   │   ├── payment-audit/     # Bank Transfer Slip Verification Lightbox
 │   │   │   ├── kds/               # Kitchen Display System Screen
-│   │   │   ├── pos/               # Cashier POS Billing Terminal
+│   │   │   ├── pos/               # Cashier POS & Billing Terminal
 │   │   │   ├── tables/            # Table & Floor Plan Management
 │   │   │   ├── reservations/      # Booking Calendar & Table Sync
 │   │   │   ├── reports/           # Financial Summaries & CSV Export
 │   │   │   └── login/             # Staff Authentication Screen
-│   │   ├── components/Sidebar.js  # Live Badge Navigation Sidebar
-│   │   └── lib/supabase.js        # Browser Supabase Client
-│   ├── admin.css                  # Modern High-End UI Stylesheet
+│   │   ├── components/Sidebar.js  # Navigation Sidebar with live badge counts
+│   │   └── lib/supabase.js        # Browser Supabase client instance
+│   ├── admin.css                  # Design system stylesheet
 │   └── package.json
 │
-└── mobile/                        # Flutter Cross-Platform Client App
+└── mobile/                        # Flutter Cross-Platform Client Application
     ├── lib/
     │   ├── screens/customer/      # Cart, Menu, Tracker, Reservations
     │   ├── providers/             # CartProvider, SettingsProvider
     │   ├── services/              # SupabaseService, FCMService, ApiService
-    │   └── main.dart              # Flutter Entry Point
+    │   └── main.dart              # Flutter App Entry Point
     └── pubspec.yaml
 ```
 
@@ -138,25 +138,26 @@ TableFlow/
 
 ## 🛠️ Prerequisites
 
-පද්ධතිය run කිරීමට පෙර ඔබේ පරිගණකයේ පහත මෘදුකාංග ස්ථාපනය කර තිබිය යුතුය:
+Ensure you have the following installed on your machine:
 
-1. **Node.js**: `v18.0.0` හෝ ඊට වැඩි (LTS recommended) — [Download Node.js](https://nodejs.org/)
-2. **Flutter SDK**: `v3.13.0` හෝ ඊට වැඩි — [Install Flutter](https://docs.flutter.dev/get-started/install)
+1. **Node.js**: `v18.0.0` or higher (LTS recommended) — [Download Node.js](https://nodejs.org/)
+2. **Flutter SDK**: `v3.13.0` or higher — [Install Flutter](https://docs.flutter.dev/get-started/install)
 3. **Git**: [Install Git](https://git-scm.com/)
-4. **Google Chrome / Android Studio / Xcode**: Mobile App එක Run කර බැලීම සඳහා Device Emulator එකක් හෝ Web Browser එකක්.
-5. **Supabase Account**: දත්ත ගබඩාව සඳහා [Supabase](https://supabase.com/) ගිණුමක්.
+4. **Google Chrome / Android Studio / Xcode**: A web browser, emulator, or physical device to run the mobile app.
+5. **Supabase Account**: A Supabase project — [Create Supabase Project](https://supabase.com/)
 
 ---
 
-## 🚀 Installation & Running Guide
+## 🚀 Step-by-Step Setup & Run Guide
 
-### Step 1: Supabase Database Setup
+### Step 1: Database Setup & Migrations (Supabase)
 
-1. [Supabase Dashboard](https://supabase.com/dashboard) එකට ගොස් නව Project එකක් සාදන්න (හෝ පවතින Project එක තෝරන්න).
-2. Supabase හි **SQL Editor** එක විවෘත කරන්න.
-3. `backend/payment_verification_migration.sql` හි ඇති SQL code එක Run කරන්න:
-   - මෙමඟින් `payment-slips` Private Storage Bucket එක, `payment_transactions` table එක, සහ Stock Reservation stored functions (`reserve_inventory_for_order`, `commit_reserved_stock`, `release_reserved_stock`) නිර්මාණය වේ.
-4. Real-time සක්‍රීය කිරීමට පහත SQL විධානයද SQL Editor එකේ run කරන්න:
+1. Open your project on the [Supabase Dashboard](https://supabase.com/dashboard).
+2. Navigate to the **SQL Editor** tab.
+3. Open and run the migration script located at:
+   `backend/payment_verification_migration.sql`
+   - This sets up the private `payment-slips` Storage bucket, creates the `payment_transactions` table, and adds atomic stock reservation RPC functions (`reserve_inventory_for_order`, `commit_reserved_stock`, `release_reserved_stock`).
+4. Enable Supabase Realtime publication for live subscriptions by running:
    ```sql
    ALTER PUBLICATION supabase_realtime ADD TABLE orders;
    ALTER PUBLICATION supabase_realtime ADD TABLE payment_transactions;
@@ -165,21 +166,21 @@ TableFlow/
 
 ---
 
-### Step 2: Backend Setup & Run
+### Step 2: Backend API Setup (`/backend`)
 
-Backend Engine එක Express.js මඟින් ක්‍රියාත්මක වන අතර port `3000` හි ධාවනය වේ.
+The backend API handles core business logic, stock locks, and verification endpoints.
 
-1. Terminal එකක් විවෘත කර `backend` ෆෝල්ඩරය වෙත යන්න:
+1. Open a terminal and navigate to `backend`:
    ```bash
    cd backend
    ```
 
-2. Dependencies ස්ථාපනය කරන්න:
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. `backend/.env` ගොනුව සාදන්න (හෝ පවතින ගොනුව සකසන්න):
+3. Configure your environment variables in `backend/.env`:
    ```env
    PORT=3000
    SUPABASE_URL=https://<YOUR-PROJECT-REF>.supabase.co
@@ -187,77 +188,77 @@ Backend Engine එක Express.js මඟින් ක්‍රියාත්ම�
    SUPABASE_SERVICE_ROLE_KEY=<YOUR-SUPABASE-SERVICE-ROLE-KEY>
    ```
 
-4. Backend සේවාදායකය (Development Mode) ධාවනය කරන්න:
+4. Start the backend development server:
    ```bash
    npm run dev
    ```
-   > ✅ සාර්ථකව ක්‍රියාත්මක වූ විට Terminal එකේ `Server is running on port 3000` ලෙස දිස්වේ.
+   > ✅ When running successfully, the terminal displays: `Server is running on port 3000`.
 
 ---
 
-### Step 3: Admin Web Console Setup & Run
+### Step 3: Admin Web Console Setup (`/admin`)
 
-Admin Dashboard එක Next.js 16 මඟින් ධාවනය වේ.
+The administrative portal runs on Next.js 16 with React 19.
 
-1. නව Terminal ටැබ් එකක් විවෘත කර `admin` ෆෝල්ඩරය වෙත යන්න:
+1. Open a new terminal tab and navigate to `admin`:
    ```bash
    cd admin
    ```
 
-2. Dependencies ස්ථාපනය කරන්න:
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. `admin/.env.local` ගොනුව සාදන්න:
+3. Create or verify `admin/.env.local`:
    ```env
    PORT=3001
    NEXT_PUBLIC_SUPABASE_URL=https://<YOUR-PROJECT-REF>.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=<YOUR-SUPABASE-ANON-KEY>
    ```
 
-4. Admin Dashboard එක ධාවනය කරන්න:
+4. Start the Next.js development server:
    ```bash
    npm run dev
    ```
 
-5. ඔබේ Web Browser එක විවෘත කර පහත ලිපිනයට යන්න:
-   - **Admin Portal**: [http://localhost:3000](http://localhost:3000) (හෝ Port 3000 busy නම් [http://localhost:3001](http://localhost:3001))
+5. Access the application in your browser:
+   - **Admin Portal**: [http://localhost:3000](http://localhost:3000) (or [http://localhost:3001](http://localhost:3001) if port 3000 is occupied by the backend)
    - **Payment Audit Desk**: [http://localhost:3001/payment-audit](http://localhost:3001/payment-audit)
    - **Kitchen Screen (KDS)**: [http://localhost:3001/kds](http://localhost:3001/kds)
    - **Orders Management**: [http://localhost:3001/orders](http://localhost:3001/orders)
 
 ---
 
-### Step 4: Flutter Mobile App Setup & Run
+### Step 4: Mobile Application Setup (`/mobile`)
 
-Mobile App එක Android, iOS, හෝ Web Browser මත පහසුවෙන්ම run කළ හැක.
+The mobile client runs seamlessly across iOS, Android, and Web browsers.
 
-1. නව Terminal ටැබ් එකක් විවෘත කර `mobile` ෆෝල්ඩරය වෙත යන්න:
+1. Open a new terminal tab and navigate to `mobile`:
    ```bash
    cd mobile
    ```
 
-2. Flutter packages බාගත කරගන්න:
+2. Fetch Flutter package dependencies:
    ```bash
    flutter pub get
    ```
 
-3. සම්බන්ධිත Devices / Emulators පරීක්ෂා කරන්න:
+3. Check available devices/emulators:
    ```bash
    flutter devices
    ```
 
-4. App එක ධාවනය කරන්න:
-   - **Chrome Web Browser මත:**
+4. Launch the application:
+   - **On Chrome Web Browser:**
      ```bash
      flutter run -d chrome
      ```
-   - **Android Emulator / Physical Device මත:**
+   - **On Android Emulator / Connected Phone:**
      ```bash
      flutter run
      ```
-   - **iOS Simulator (macOS පමණි):**
+   - **On iOS Simulator (macOS only):**
      ```bash
      open -a Simulator
      flutter run -d iPhone
@@ -272,82 +273,82 @@ Mobile App එක Android, iOS, හෝ Web Browser මත පහසුවෙන�
 cd backend
 npm start
 ```
-*(Docker භාවිත කරන්නේ නම්: `docker-compose up --build -d`)*
+*(Or with Docker: `docker-compose up --build -d`)*
 
-### 2. Admin Dashboard Production Build
+### 2. Admin Dashboard Production Bundle
 ```bash
 cd admin
 npm run build
 npm run start
 ```
-*(Build එක සාර්ථකව `.next` ෆෝල්ඩරය තුළ සම්පාදනය වේ)*
+*(Produces an optimized production bundle inside the `.next` directory)*
 
 ### 3. Flutter Mobile App Release Builds
 ```bash
 cd mobile
 
-# Android APK සාදාගැනීමට
+# Android Release APK
 flutter build apk --release
 
-# Android App Bundle (Play Store සඳහා)
+# Android App Bundle (Google Play Store)
 flutter build appbundle --release
 
-# iOS Release (macOS & Xcode අවශ්‍ය වේ)
+# iOS Release Archive (Requires Xcode on macOS)
 flutter build ios --release
 
-# Web Static Build
+# Production Web Build
 flutter build web --release
 ```
 
 ---
 
-## ⚡ Real-time Live Sync Architecture
+## ⚡ Real-time Synchronization Architecture
 
-TableFlow පද්ධතියේ කිසිදු පිටුවක් Manual Refresh කිරීමට අවශ්‍ය නොවන පරිදි ස්ථර 4 කින් යුත් **Multi-Channel Real-time Engine** එකක් ක්‍රියාත්මක වේ:
+To eliminate the need for manual browser refreshes, TableFlow employs a **4-layer live synchronization architecture**:
 
-1. **Supabase Realtime Websockets**:
-   - Database එකේ `orders` හෝ `payment_transactions` වෙනස් වූ සැණින් සියලු සම්බන්ධිත Clients වෙත WebSocket Push පැමිණේ.
-2. **Browser `BroadcastChannel` (`tableflow_orders_channel`)**:
-   - Admin කෙනෙක් වෙනම Tab එකක Payment Audit Desk හි Slip එකක් Approve/Reject කළ සැණින් Orders tab එක සහ Sidebar එක ක්ෂණිකව (<10ms) update වේ.
-3. **Window Focus / Tab Visibility Detection**:
-   - පරිශීලකයා වෙනත් Tab එකක සිට නැවත Orders tab එකට පැමිණි විගස `window.onfocus` මඟින් දත්ත අලුත් වේ.
-4. **Heartbeat Polling Fallback (4s)**:
-   - අන්තර්ජාල සම්බන්ධතාවය බිඳවැටී නැවත පැමිණියද කිසිදු ඇණවුමක් මගනොහැරෙන බව තහවුරු කරයි.
-
----
-
-## 🔧 Troubleshooting & FAQs
-
-### ප්‍රශ්නය 1: "Port 3000 is already in use" දෝෂය පැමිණියහොත්?
-**විසඳුම:**
-Backend එක port 3000 භාවිතා කරන බැවින් Next.js Admin app එක port 3001 හෝ 3002 හි ස්වයංක්‍රීයව ධාවනය වේ. පැරණි process එකක් නවතා දැමීමට අවශ්‍ය නම්:
-```bash
-# macOS / Linux:
-kill $(lsof -t -i:3000)
-```
-
-### ප්‍රශ්නය 2: Audit Desk එකේ රිසිට්පත් නොමැති වුවද Orders පිටුවේ Banner එක දිස්වේද?
-**විසඳුම:**
-අප විසින් [orders/page.js](file:///Users/achinthaedirisinghe/Desktop/TableFlow/admin/src/app/orders/page.js) හි `isAwaitingVerification` ශ්‍රිතය නිවැරදි කර ඇති අතර, Cancelled, Rejected, Paid, හෝ Completed orders ස්වයංක්‍රීයව බැහැර කරනු ලබයි. ගැටලුවක් මතු වුවහොත් `orders` table එකේ status එක `'cancelled'` හෝ payment_status එක `'failed'` දැයි තහවුරු කරගන්න.
-
-### ප්‍රශ්නය 3: Flutter App එකේ Slip Upload කරන විට Storage Permission දෝෂයක් ආවොත්?
-**විසඳුම:**
-Supabase Dashboard හි Storage අංශයට ගොස් `payment-slips` නමින් bucket එකක් පවතින බවත්, `payment_verification_migration.sql` හි අඩංගු Storage Policies ක්‍රියාත්මක කර ඇති බවත් තහවුරු කරගන්න.
+1. **Supabase Realtime WebSockets**:
+   - `postgres_changes` events on `orders`, `payment_transactions`, and `reviews` broadcast database modifications directly to active subscribers.
+2. **Browser `BroadcastChannel` API (`tableflow_orders_channel`)**:
+   - When a staff member approves or rejects a slip in the Payment Audit Desk tab, an instant message is broadcast to all other open tabs/windows, refreshing the Kitchen Orders page and Sidebar badge counters in sub-10ms.
+3. **Window Focus & Visibility Lifecycle Listeners**:
+   - Switching back to an inactive tab triggers `window.onfocus` and `document.visibilityState === 'visible'` to re-sync the latest queue state immediately.
+4. **Heartbeat Polling (4-second interval)**:
+   - Serves as a reliable safety net in case network drops temporarily interrupt active WebSocket connections.
 
 ---
 
 ## 👥 Roles & Access Permissions
 
-| භූමිකාව (Role) | Access & Permissions |
+| Role | Permitted Areas & Capabilities |
 | :--- | :--- |
-| **`admin` / `manager`** | පද්ධතියේ සියලුම අංශ (Dashboard, Audit Desk, POS, KDS, Tables, Reports, User Management) වෙත පූර්ණ ප්‍රවේශය. |
-| **`cashier`** | POS Billing, Orders පියවීම, Cash/Card Settlement, සහ Payment Slip Review. |
-| **`kitchen`** | Kitchen Display Screen (KDS) පමණක් විවෘත වන අතර ඇණවුම් පිළියෙළ කිරීම සහ Ready කිරීම. |
-| **`customer`** | Mobile App එක මඟින් ආහාර ඇණවුම් කිරීම, මේස වෙන්කරවා ගැනීම, සහ රිසිට්පත් Upload කිරීම. |
+| **`admin` / `manager`** | Complete access across all modules: Dashboard, Payment Audit, POS, KDS, Floor Plans, Financial Reports, and User Roles. |
+| **`cashier`** | Access to POS Billing, Order Settlement (Cash/Card/Online), and Payment Slip Verification. |
+| **`kitchen`** | Access restricted to the Kitchen Display System (KDS) screen to view tickets, manage prep stages, and mark food ready. |
+| **`customer`** | Mobile app access for browsing luxury menus, placing pre-orders, reserving tables, and uploading bank transfer slips. |
+
+---
+
+## 🔧 Troubleshooting & FAQs
+
+### Q1: "Port 3000 is already in use" Error
+**Solution:**
+Because the Express backend typically runs on port `3000`, the Next.js Admin dev server will automatically offer to run on port `3001` or `3002`. If an old zombie process is occupying port 3000, terminate it using:
+```bash
+# macOS / Linux:
+kill $(lsof -t -i:3000)
+```
+
+### Q2: Orders page still shows "awaiting audit approval" banner even after slips are removed?
+**Solution:**
+Ensure you have the latest code in [orders/page.js](file:///Users/achinthaedirisinghe/Desktop/TableFlow/admin/src/app/orders/page.js). The `isAwaitingVerification` function excludes orders where `status` is `cancelled`, `payment_rejected`, `served`, `completed`, or where `payment_status` is `paid` or `failed`.
+
+### Q3: Storage Permission Error when uploading slips from mobile
+**Solution:**
+Verify in your Supabase Dashboard under **Storage** that the bucket `payment-slips` exists and that the Row Level Security policies from `backend/payment_verification_migration.sql` have been executed.
 
 ---
 
 ## 📜 License & Credits
 
-Developed with ❤️ for **TableFlow Luxury Dining Solutions**.  
+Developed with excellence for **TableFlow Luxury Dining Solutions**.  
 All rights reserved © 2026.
