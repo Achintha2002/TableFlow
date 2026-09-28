@@ -26,11 +26,38 @@ export default function OrdersPage() {
     setTimeout(() => setToast(null), 3000);
   }
 
+  // Cross-tab notification helper
+  function notifyOrdersUpdated() {
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.BroadcastChannel) {
+          const bc = new BroadcastChannel('tableflow_orders_channel');
+          bc.postMessage({ type: 'ORDERS_CHANGED', timestamp: Date.now() });
+          bc.close();
+        }
+        localStorage.setItem('tableflow_orders_last_updated', Date.now().toString());
+      }
+    } catch (_) {}
+  }
+
   const isAwaitingVerification = (o) => {
+    // 1. If order is cancelled, rejected, served or completed -> NOT awaiting audit
+    if (['cancelled', 'served', 'completed', 'payment_rejected'].includes(o.status)) return false;
+    
+    // 2. If payment is already marked as paid or failed -> NOT awaiting audit
+    if (o.payment_status === 'paid' || o.payment_status === 'failed') return false;
+
+    // 3. If special notes indicate it was rejected -> NOT awaiting audit
+    const notes = (o.special_notes || '').toLowerCase();
+    if (notes.includes('[rejected:') || notes.includes('payment rejected') || notes.includes('payment_rejected')) return false;
+
+    // 4. Must be a bank transfer order
     const isBank = (o.payment_method === 'bank_transfer') || 
                    o.status === 'payment_pending' || 
-                   (o.special_notes && o.special_notes.toLowerCase().includes('bank transfer'));
-    return isBank && o.payment_status !== 'paid' && o.status !== 'payment_rejected';
+                   notes.includes('bank transfer') || 
+                   notes.includes('[bank transfer ref:');
+
+    return Boolean(isBank);
   };
 
   async function fetchOrders() {
@@ -41,6 +68,7 @@ export default function OrdersPage() {
         total_amount, 
         status, 
         payment_status,
+        payment_method,
         special_notes,
         created_at,
         users (full_name),
@@ -50,7 +78,7 @@ export default function OrdersPage() {
       `)
       .order('created_at', { ascending: false });
       
-    if (error) console.error(error);
+    if (error) console.error('Fetch orders error:', error);
     setOrders(data || []);
     setLoading(false);
   }
@@ -58,20 +86,63 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchOrders();
     
-    // Supabase Realtime for automatic updates when payment is approved
-    const channel = supabase.channel('admin_orders').on('postgres_changes', 
+    // Unique channel names to prevent Supabase Realtime channel clashes
+    const channelId = Math.random().toString(36).substring(2, 9);
+    
+    const orderChannel = supabase.channel(`admin_orders_${channelId}`).on('postgres_changes', 
       { event: '*', schema: 'public', table: 'orders' }, 
       () => { fetchOrders(); }
     ).subscribe();
 
-    const reviewChannel = supabase.channel('admin_orders_reviews').on('postgres_changes',
+    const transChannel = supabase.channel(`admin_trans_${channelId}`).on('postgres_changes',
+      { event: '*', schema: 'public', table: 'payment_transactions' },
+      () => { fetchOrders(); }
+    ).subscribe();
+
+    const reviewChannel = supabase.channel(`admin_rev_${channelId}`).on('postgres_changes',
       { event: '*', schema: 'public', table: 'reviews' },
       () => { fetchOrders(); }
     ).subscribe();
 
+    // Cross-tab / cross-window live sync via BroadcastChannel
+    let bc = null;
+    try {
+      if (typeof window !== 'undefined' && window.BroadcastChannel) {
+        bc = new BroadcastChannel('tableflow_orders_channel');
+        bc.onmessage = () => {
+          fetchOrders();
+        };
+      }
+    } catch (_) {}
+
+    // Storage event sync fallback across browser tabs
+    const onStorage = (e) => {
+      if (e.key === 'tableflow_orders_last_updated') {
+        fetchOrders();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // Instant refresh when user returns to this tab / window
+    const onFocus = () => fetchOrders();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchOrders();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    // Fast polling heartbeat (4s) ensuring 100% live updates even if websockets drop
+    const pollInterval = setInterval(fetchOrders, 4000);
+
     return () => { 
-      supabase.removeChannel(channel); 
+      supabase.removeChannel(orderChannel); 
+      supabase.removeChannel(transChannel);
       supabase.removeChannel(reviewChannel);
+      if (bc) bc.close();
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      clearInterval(pollInterval);
     };
   }, []);
 
@@ -86,6 +157,7 @@ export default function OrdersPage() {
       fetchOrders();
     } else {
       showToast(`Order #${id.slice(0, 8)} status updated to "${newStatus.toUpperCase()}"!`);
+      notifyOrdersUpdated();
       fetchOrders();
     }
   }
@@ -99,12 +171,16 @@ export default function OrdersPage() {
       fetchOrders();
     } else {
       showToast(`Order #${id.slice(0, 8)} marked as PAID!`);
+      notifyOrdersUpdated();
       fetchOrders();
     }
   }
 
   const awaitingOrders = orders.filter(isAwaitingVerification);
-  const activeOrders = orders.filter(o => !isAwaitingVerification(o) && o.status !== 'payment_rejected');
+  const activeOrders = orders.filter(o => 
+    !isAwaitingVerification(o) && 
+    !['payment_rejected', 'cancelled'].includes(o.status)
+  );
   
   const displayedOrders = filterTab === 'active' 
     ? activeOrders 
@@ -294,7 +370,13 @@ export default function OrdersPage() {
                         Awaiting Audit
                       </span>
                     ) : (
-                      badge(o.status === 'served' ? 'success' : o.status === 'preparing' ? 'info' : o.status === 'pending' ? 'warning' : 'muted', o.status)
+                      badge(
+                        o.status === 'served' ? 'success' : 
+                        o.status === 'preparing' ? 'info' : 
+                        o.status === 'pending' ? 'warning' : 
+                        (o.status === 'cancelled' || o.status === 'payment_rejected') ? 'danger' : 'muted', 
+                        o.status
+                      )
                     )}
                   </td>
                   <td>
@@ -312,6 +394,21 @@ export default function OrdersPage() {
                         gap: '4px'
                       }}>
                         ⏳ Unverified Slip
+                      </span>
+                    ) : o.payment_status === 'failed' ? (
+                      <span style={{
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                        color: '#ef4444',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        ✕ Payment Rejected
                       </span>
                     ) : (
                       <button 

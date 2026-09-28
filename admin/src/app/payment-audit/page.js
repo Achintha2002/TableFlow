@@ -51,6 +51,19 @@ export default function PaymentAuditPage() {
     setTimeout(() => setToast(null), 3500);
   }
 
+  function notifyOrdersUpdated() {
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.BroadcastChannel) {
+          const bc = new BroadcastChannel('tableflow_orders_channel');
+          bc.postMessage({ type: 'PAYMENT_AUDIT_UPDATED', timestamp: Date.now() });
+          bc.close();
+        }
+        localStorage.setItem('tableflow_orders_last_updated', Date.now().toString());
+      }
+    } catch (_) {}
+  }
+
   async function enrichOrdersWithSlips(ordersList) {
     const userFilesCache = new Map();
 
@@ -297,6 +310,7 @@ export default function PaymentAuditPage() {
 
       showToast(`Order #${orderId} payment verified! Food order sent to kitchen.`);
       setActiveModalOrder(null);
+      notifyOrdersUpdated();
       fetchVerificationQueue();
     } catch (err) {
       showToast(err.message, true);
@@ -394,6 +408,7 @@ export default function PaymentAuditPage() {
       setRejectingOrder(null);
       setRejectionReason('');
       setActiveModalOrder(null);
+      notifyOrdersUpdated();
       fetchVerificationQueue();
     } catch (err) {
       showToast(err.message, true);

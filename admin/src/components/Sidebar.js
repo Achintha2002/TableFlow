@@ -44,26 +44,65 @@ export default function Sidebar() {
 
     async function fetchAuditCount() {
       try {
-        const { count, error } = await supabase
+        const { data, error } = await supabase
           .from('orders')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'payment_pending');
-        if (!error && count !== null) {
-          setPendingAuditCount(count);
+          .select('id, status, payment_status, payment_method, special_notes')
+          .not('status', 'in', '("cancelled","served","completed","payment_rejected")')
+          .not('payment_status', 'eq', 'paid')
+          .not('payment_status', 'eq', 'failed');
+
+        if (!error && data) {
+          const pending = data.filter(o => {
+            const notes = (o.special_notes || '').toLowerCase();
+            if (notes.includes('[rejected:') || notes.includes('payment rejected') || notes.includes('payment_rejected')) return false;
+            return (o.payment_method === 'bank_transfer') || 
+                   o.status === 'payment_pending' || 
+                   notes.includes('bank transfer') || 
+                   notes.includes('[bank transfer ref:');
+          });
+          setPendingAuditCount(pending.length);
         }
       } catch (_) {}
     }
     fetchAuditCount();
 
-    const channel = supabase
-      .channel('sidebar_pending_audit')
+    const channelId = Math.random().toString(36).substring(2, 9);
+    const orderChannel = supabase
+      .channel(`sidebar_orders_${channelId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchAuditCount();
       })
       .subscribe();
 
+    const transChannel = supabase
+      .channel(`sidebar_trans_${channelId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_transactions' }, () => {
+        fetchAuditCount();
+      })
+      .subscribe();
+
+    let bc = null;
+    try {
+      if (typeof window !== 'undefined' && window.BroadcastChannel) {
+        bc = new BroadcastChannel('tableflow_orders_channel');
+        bc.onmessage = () => fetchAuditCount();
+      }
+    } catch (_) {}
+
+    const onStorage = (e) => {
+      if (e.key === 'tableflow_orders_last_updated') fetchAuditCount();
+    };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', fetchAuditCount);
+    const interval = setInterval(fetchAuditCount, 8000);
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(orderChannel);
+      supabase.removeChannel(transChannel);
+      if (bc) bc.close();
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', fetchAuditCount);
+      clearInterval(interval);
     };
   }, []);
 
