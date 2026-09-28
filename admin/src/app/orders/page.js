@@ -68,7 +68,6 @@ export default function OrdersPage() {
         total_amount, 
         status, 
         payment_status,
-        payment_method,
         special_notes,
         created_at,
         users (full_name),
@@ -78,7 +77,9 @@ export default function OrdersPage() {
       `)
       .order('created_at', { ascending: false });
       
-    if (error) console.error('Fetch orders error:', error);
+    if (error) {
+      console.warn('Fetch orders notice:', error.message || error);
+    }
     setOrders(data || []);
     setLoading(false);
   }

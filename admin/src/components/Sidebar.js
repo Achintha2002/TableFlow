@@ -46,7 +46,7 @@ export default function Sidebar() {
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, status, payment_status, payment_method, special_notes')
+          .select('id, status, payment_status, special_notes')
           .not('status', 'in', '("cancelled","served","completed","payment_rejected")')
           .not('payment_status', 'eq', 'paid')
           .not('payment_status', 'eq', 'failed');
