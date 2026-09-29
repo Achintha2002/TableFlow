@@ -17,7 +17,11 @@ class TableSelectionScreen extends StatefulWidget {
 
 class _TableSelectionScreenState extends State<TableSelectionScreen> {
   String? _selectedTableId;
-  DateTime _selectedDate = DateTime.now();
+  DateTime _selectedDate = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
   TimeOfDay _selectedTime = const TimeOfDay(hour: 19, minute: 0);
 
   List<Map<String, dynamic>> _tables = [];
@@ -29,6 +33,11 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (_selectedDate.isBefore(today)) {
+      _selectedDate = today;
+    }
     _fetchTables();
     _setupRealtime();
   }
@@ -493,7 +502,19 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   }
 
   Future<void> _showPremiumDatePicker() async {
-    DateTime tempDate = _selectedDate;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final minDate = today;
+    final maxDate = today.add(const Duration(days: 30));
+
+    DateTime initialDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    if (initialDate.isBefore(minDate)) {
+      initialDate = minDate;
+    } else if (initialDate.isAfter(maxDate)) {
+      initialDate = maxDate;
+    }
+
+    DateTime tempDate = initialDate;
     await showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -523,7 +544,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     const Text('Select Date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                     TextButton(
                       onPressed: () {
-                        setState(() => _selectedDate = tempDate);
+                        setState(() => _selectedDate = DateTime(tempDate.year, tempDate.month, tempDate.day));
                         _fetchTables();
                         Navigator.pop(context);
                       }, 
@@ -536,9 +557,9 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               Expanded(
                 child: CupertinoDatePicker(
                   mode: CupertinoDatePickerMode.date,
-                  initialDateTime: _selectedDate,
-                  minimumDate: DateTime.now().subtract(const Duration(days: 1)),
-                  maximumDate: DateTime.now().add(const Duration(days: 30)),
+                  initialDateTime: initialDate,
+                  minimumDate: minDate,
+                  maximumDate: maxDate,
                   onDateTimeChanged: (DateTime newDate) {
                     tempDate = newDate;
                   },
@@ -552,7 +573,8 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   }
 
   Future<void> _showPremiumTimePicker() async {
-    DateTime tempTime = DateTime(2020, 1, 1, _selectedTime.hour, _selectedTime.minute);
+    final roundedMinute = (_selectedTime.minute ~/ 15) * 15;
+    DateTime tempTime = DateTime(2020, 1, 1, _selectedTime.hour, roundedMinute);
     await showModalBottomSheet(
       context: context,
       useRootNavigator: true,

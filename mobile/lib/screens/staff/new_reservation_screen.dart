@@ -32,11 +32,17 @@ class _NewReservationScreenState extends State<NewReservationScreen> {
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateUtils.dateOnly(now);
+    DateTime initial = DateUtils.dateOnly(_selectedDate);
+    if (initial.isBefore(today)) {
+      initial = today;
+    }
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
+      initialDate: initial,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 90)),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(

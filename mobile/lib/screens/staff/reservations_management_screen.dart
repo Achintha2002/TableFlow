@@ -101,11 +101,18 @@ class _ReservationsManagementScreenState extends State<ReservationsManagementScr
   }
 
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final today = DateUtils.dateOnly(now);
+    final minDate = today.subtract(const Duration(days: 30));
+    final maxDate = today.add(const Duration(days: 90));
+    DateTime initial = DateUtils.dateOnly(_selectedDate);
+    if (initial.isBefore(minDate)) initial = minDate;
+    if (initial.isAfter(maxDate)) initial = maxDate;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
+      initialDate: initial,
+      firstDate: minDate,
+      lastDate: maxDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(

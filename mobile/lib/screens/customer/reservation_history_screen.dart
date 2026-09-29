@@ -528,11 +528,17 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                         subtitle: Text(DateFormat('EEEE, MMM dd, yyyy').format(selectedDate), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                         trailing: const Icon(Icons.edit_outlined, size: 18),
                         onTap: () async {
+                          final now = DateTime.now();
+                          final today = DateUtils.dateOnly(now);
+                          DateTime initial = DateUtils.dateOnly(selectedDate);
+                          if (initial.isBefore(today)) {
+                            initial = today;
+                          }
                           final picked = await showDatePicker(
                             context: context,
-                            initialDate: selectedDate.isBefore(DateTime.now()) ? DateTime.now() : selectedDate,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 60)),
+                            initialDate: initial,
+                            firstDate: today,
+                            lastDate: today.add(const Duration(days: 60)),
                           );
                           if (picked != null) {
                             setSheetState(() => selectedDate = picked);
