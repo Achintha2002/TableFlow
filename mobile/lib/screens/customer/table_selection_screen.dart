@@ -38,6 +38,14 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     if (_selectedDate.isBefore(today)) {
       _selectedDate = today;
     }
+    if (_selectedDate.isAtSameMomentAs(today)) {
+      final currentMinutes = now.hour * 60 + now.minute;
+      final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+      if (selectedMinutes <= currentMinutes) {
+        final nextHour = (now.hour + 1).clamp(0, 23);
+        _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
+      }
+    }
     _fetchTables();
     _setupRealtime();
   }
@@ -137,6 +145,50 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   }
 
   Future<void> _proceedToReservation() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final bookingDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+
+    if (bookingDate.isBefore(today)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(child: Text('Cannot book for a past date. Please select today or a future date.')),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    if (bookingDate.isAtSameMomentAs(today)) {
+      final currentMinutes = now.hour * 60 + now.minute;
+      final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+      if (selectedMinutes <= currentMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(child: Text('Cannot book for a past time. Please select an upcoming reservation time.')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+    }
+
     if (Supabase.instance.client.auth.currentUser == null) {
       final loggedIn = await AuthGuard.requireAuth(
         context,
@@ -544,7 +596,36 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     const Text('Select Date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                     TextButton(
                       onPressed: () {
-                        setState(() => _selectedDate = DateTime(tempDate.year, tempDate.month, tempDate.day));
+                        final chosenDate = DateTime(tempDate.year, tempDate.month, tempDate.day);
+                        if (chosenDate.isBefore(today)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Expanded(child: Text('Cannot select a past date. Please select today or an upcoming date.')),
+                                ],
+                              ),
+                              backgroundColor: Colors.red.shade700,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          );
+                          return;
+                        }
+                        setState(() {
+                          _selectedDate = chosenDate;
+                          // If user selected today, adjust time if it has already passed
+                          if (chosenDate.isAtSameMomentAs(today)) {
+                            final currentMinutes = now.hour * 60 + now.minute;
+                            final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+                            if (selectedMinutes <= currentMinutes) {
+                              final nextHour = (now.hour + 1).clamp(0, 23);
+                              _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
+                            }
+                          }
+                        });
                         _fetchTables();
                         Navigator.pop(context);
                       }, 
@@ -560,6 +641,8 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                   initialDateTime: initialDate,
                   minimumDate: minDate,
                   maximumDate: maxDate,
+                  minimumYear: today.year,
+                  maximumYear: maxDate.year,
                   onDateTimeChanged: (DateTime newDate) {
                     tempDate = newDate;
                   },
@@ -573,8 +656,21 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
   }
 
   Future<void> _showPremiumTimePicker() async {
-    final roundedMinute = (_selectedTime.minute ~/ 15) * 15;
-    DateTime tempTime = DateTime(2020, 1, 1, _selectedTime.hour, roundedMinute);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final isToday = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day).isAtSameMomentAs(today);
+
+    int initialHour = _selectedTime.hour;
+    int initialMinute = (_selectedTime.minute ~/ 15) * 15;
+    if (isToday) {
+      final currentMinutes = now.hour * 60 + now.minute;
+      if (initialHour * 60 + initialMinute <= currentMinutes) {
+        initialHour = (now.hour + 1).clamp(0, 23);
+        initialMinute = 0;
+      }
+    }
+
+    DateTime tempTime = DateTime(2020, 1, 1, initialHour, initialMinute);
     await showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -604,6 +700,27 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     const Text('Select Time', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                     TextButton(
                       onPressed: () {
+                        if (isToday) {
+                          final currentMinutes = now.hour * 60 + now.minute;
+                          final pickedMinutes = tempTime.hour * 60 + tempTime.minute;
+                          if (pickedMinutes <= currentMinutes) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: Colors.white),
+                                    SizedBox(width: 8),
+                                    Expanded(child: Text('Cannot select a past time for today. Please select an upcoming time.')),
+                                  ],
+                                ),
+                                backgroundColor: Colors.red.shade700,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            );
+                            return;
+                          }
+                        }
                         setState(() => _selectedTime = TimeOfDay(hour: tempTime.hour, minute: tempTime.minute));
                         _fetchTables();
                         Navigator.pop(context);

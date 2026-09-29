@@ -46,6 +46,33 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
     try {
       final date = DateTime.parse(widget.date);
       final parts = widget.time.split(':');
+      final reservationDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+      );
+
+      if (reservationDateTime.isBefore(DateTime.now())) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Cannot book for a past date or time. Please select an upcoming schedule.')),
+                ],
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
       
       await Supabase.instance.client.from('reservations').insert({
         'user_id': user.id,

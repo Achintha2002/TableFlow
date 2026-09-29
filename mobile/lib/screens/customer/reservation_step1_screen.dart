@@ -75,6 +75,50 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
   }
 
   void _proceedToStep2() {
+    final now = DateTime.now();
+    final today = DateUtils.dateOnly(now);
+    final bookingDate = DateUtils.dateOnly(_selectedDate);
+
+    if (bookingDate.isBefore(today)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(child: Text('Cannot book for a past date. Please select today or a future date.')),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    if (bookingDate.isAtSameMomentAs(today)) {
+      final currentMinutes = now.hour * 60 + now.minute;
+      final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+      if (selectedMinutes <= currentMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(child: Text('Cannot book for a past time. Please select an upcoming reservation time.')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+    }
+
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
     final timeStr = '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
 
