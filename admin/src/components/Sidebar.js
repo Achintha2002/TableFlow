@@ -17,11 +17,27 @@ export default function Sidebar() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         try {
-          const res = await fetch('http://localhost:3000/api/admin/my-role', {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
+          let roleData = null;
+          for (const base of ['http://localhost:5000', 'http://localhost:3000']) {
+            try {
+              const res = await fetch(`${base}/api/admin/my-role`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+              });
+              if (res.ok) {
+                roleData = await res.json();
+                break;
+              }
+            } catch (_) {}
+          }
+
+          if (!roleData) {
+            const { data: dbUser } = await supabase.from('users').select('role, full_name').eq('id', session.user.id).maybeSingle();
+            if (dbUser) {
+              roleData = { role: dbUser.role, full_name: dbUser.full_name, email: session.user.email };
+            }
+          }
+
+          if (roleData) {
             const roleLabels = {
               'admin': 'Administrator',
               'manager': 'Manager',
@@ -30,9 +46,9 @@ export default function Sidebar() {
               'staff': 'Staff Member'
             };
             setProfile({
-              name: data.full_name || data.email.split('@')[0],
-              role: roleLabels[data.role] || 'Staff',
-              rawRole: data.role
+              name: roleData.full_name || roleData.email?.split('@')[0] || 'Admin',
+              role: roleLabels[roleData.role] || 'Staff',
+              rawRole: roleData.role
             });
           }
         } catch (e) {
