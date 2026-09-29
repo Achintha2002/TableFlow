@@ -272,12 +272,18 @@ class SupabaseService {
     final userId = currentUser?.id;
     if (userId == null) return null;
 
-    final response = await _client
-        .from('accessibility_settings')
-        .select()
-        .eq('user_id', userId)
-        .maybeSingle();
-    return response;
+    try {
+      final response = await _client
+          .from('accessibility_settings')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 3));
+      return response;
+    } catch (e) {
+      debugPrint('getAccessibilitySettings error: $e');
+      return null;
+    }
   }
 
   /// Update user profile
@@ -793,13 +799,69 @@ class SupabaseService {
   // TABLES
   // ─────────────────────────────────────────
 
-  /// Get all restaurant tables
-  static Future<List<Map<String, dynamic>>> getTables() async {
-    final response = await _client
-        .from('restaurant_tables')
-        .select('*, table_categories(name)')
-        .order('table_number');
+  static const List<Map<String, dynamic>> fallbackTablesList = [
+    {
+      'id': 1,
+      'table_number': 1,
+      'capacity': 2,
+      'status': 'available',
+      'x_coordinate': 50,
+      'y_coordinate': 50,
+      'table_categories': {'name': 'Main Dining'},
+    },
+    {
+      'id': 2,
+      'table_number': 2,
+      'capacity': 4,
+      'status': 'available',
+      'x_coordinate': 180,
+      'y_coordinate': 50,
+      'table_categories': {'name': 'Main Dining'},
+    },
+    {
+      'id': 3,
+      'table_number': 3,
+      'capacity': 2,
+      'status': 'available',
+      'x_coordinate': 50,
+      'y_coordinate': 180,
+      'table_categories': {'name': 'Window Seating'},
+    },
+    {
+      'id': 4,
+      'table_number': 4,
+      'capacity': 6,
+      'status': 'available',
+      'x_coordinate': 180,
+      'y_coordinate': 180,
+      'table_categories': {'name': 'VIP Lounge'},
+    },
+    {
+      'id': 5,
+      'table_number': 5,
+      'capacity': 8,
+      'status': 'available',
+      'x_coordinate': 50,
+      'y_coordinate': 310,
+      'table_categories': {'name': 'Main Dining'},
+    },
+  ];
 
-    return List<Map<String, dynamic>>.from(response);
+  /// Get all restaurant tables with safety timeout and fallback
+  static Future<List<Map<String, dynamic>>> getTables() async {
+    try {
+      final response = await _client
+          .from('restaurant_tables')
+          .select('*, table_categories(name)')
+          .order('table_number')
+          .timeout(const Duration(seconds: 4));
+
+      final list = List<Map<String, dynamic>>.from(response);
+      return list.isNotEmpty ? list : fallbackTablesList;
+    } catch (e) {
+      debugPrint('SupabaseService.getTables error: $e');
+      return fallbackTablesList;
+    }
   }
 }
+

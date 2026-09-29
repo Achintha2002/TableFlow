@@ -289,7 +289,7 @@ class _CartScreenState extends State<CartScreen> {
           .from('reservations')
           .select('id')
           .eq('user_id', user.id)
-          .inFilter('status', ['pending', 'confirmed'])
+          .or('status.eq.pending,status.eq.confirmed')
           .order('created_at', ascending: false)
           .limit(1);
 
