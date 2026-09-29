@@ -46,17 +46,32 @@ export default function AuthGuard({ children }) {
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         if (!currentSession) throw new Error('Session lost');
 
-        const res = await fetch('http://localhost:3000/api/admin/my-role', {
-          headers: {
-            'Authorization': `Bearer ${currentSession.access_token}`
-          }
-        });
-        
-        if (!res.ok) {
-          throw new Error('Failed to fetch role');
+        let role = null;
+        const apiPorts = ['http://localhost:5000', 'http://localhost:3000'];
+        for (const base of apiPorts) {
+          try {
+            const res = await fetch(`${base}/api/admin/my-role`, {
+              headers: { 'Authorization': `Bearer ${currentSession.access_token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              role = data.role;
+              break;
+            }
+          } catch (_) {}
         }
-        
-        const { role } = await res.json();
+
+        // If backend was unreachable, query Supabase database directly
+        if (!role) {
+          const { data: userProfile } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', currentSession.user.id)
+            .maybeSingle();
+          if (userProfile?.role) {
+            role = userProfile.role;
+          }
+        }
 
         const allowedRoles = ['admin', 'manager', 'cashier', 'kitchen', 'staff'];
         if (role && allowedRoles.includes(role)) {
@@ -90,9 +105,17 @@ export default function AuthGuard({ children }) {
     return children;
   }
 
-  // If not authorized and not on login, render nothing (will redirect)
+  // If not authorized and not on login, redirect to /login
   if (!authorized) {
-    return null;
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16 }}>
+        <p style={{ color: 'var(--text-muted)' }}>Redirecting to login...</p>
+        <a href="/login" className="btn btn-primary" style={{ padding: '8px 16px', borderRadius: 4, background: 'var(--primary)', color: 'white' }}>Go to Login</a>
+      </div>
+    );
   }
 
   return (

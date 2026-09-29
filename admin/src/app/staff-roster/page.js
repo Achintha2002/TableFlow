@@ -24,7 +24,7 @@ import {
   BellRing
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default function StaffRosterAndBroadcastPage() {
   const [activeTab, setActiveTab] = useState('roster'); // 'roster' | 'broadcast' | 'cleaning'

@@ -42,8 +42,9 @@ export default function Dashboard() {
         fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] }))
       ]);
 
-      const customerCount = usersRes.filter(u => u.role === 'customer').length;
-      const adminCount = usersRes.filter(u => u.role === 'admin').length;
+      const safeUsers = Array.isArray(usersRes) ? usersRes : [];
+      const customerCount = safeUsers.filter(u => u.role === 'customer').length;
+      const adminCount = safeUsers.filter(u => u.role === 'admin').length;
 
       const { data: oData } = await supabase.from('orders').select('id, status, total_amount, created_at').order('created_at', { ascending: false }).limit(5);
       const { data: qData } = await supabase.from('queue_entries').select('id, pax, status, joined_at').order('joined_at', { ascending: false }).limit(5);
