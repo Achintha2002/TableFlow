@@ -212,6 +212,14 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final bookingDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final isToday = bookingDate.isAtSameMomentAs(today);
+    final isDatePast = bookingDate.isBefore(today);
+    final isTimePast = isToday && (_selectedTime.hour * 60 + _selectedTime.minute <= now.hour * 60 + now.minute);
+    final isScheduleInvalid = isDatePast || isTimePast;
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Column(
@@ -261,6 +269,8 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                       child: _buildPickerButton(
                         icon: Icons.calendar_today,
                         label: DateFormat('MMM d, yyyy').format(_selectedDate),
+                        isInvalid: isDatePast,
+                        invalidText: 'Past date',
                         onTap: _showPremiumDatePicker,
                       ),
                     ),
@@ -269,6 +279,8 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                       child: _buildPickerButton(
                         icon: Icons.access_time,
                         label: _selectedTime.format(context),
+                        isInvalid: isTimePast,
+                        invalidText: 'Past time',
                         onTap: _showPremiumTimePicker,
                       ),
                     ),
@@ -327,18 +339,37 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _proceedToReservation,
+            onPressed: isScheduleInvalid ? () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(isDatePast 
+                            ? 'Cannot reserve for a past date. Please pick today or a future date.' 
+                            : 'Cannot reserve for a past time. Please pick an upcoming time for today.'),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.red.shade700,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            } : _proceedToReservation,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
+              backgroundColor: isScheduleInvalid ? Colors.grey.shade600 : AppTheme.primary,
               foregroundColor: AppTheme.white,
               padding: const EdgeInsets.symmetric(vertical: 18),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              elevation: 10,
+              elevation: isScheduleInvalid ? 2 : 10,
               shadowColor: AppTheme.primary.withValues(alpha: 0.5),
             ),
-            child: const Text(
-              'Reserve Table',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            child: Text(
+              isScheduleInvalid ? 'Select Valid Time to Reserve' : 'Reserve Table',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -346,32 +377,60 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     );
   }
 
-  Widget _buildPickerButton({required IconData icon, required String label, required VoidCallback onTap}) {
+  Widget _buildPickerButton({
+    required IconData icon, 
+    required String label, 
+    required VoidCallback onTap,
+    bool isInvalid = false,
+    String? invalidText,
+  }) {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
           decoration: BoxDecoration(
-            color: AppTheme.background,
+            color: isInvalid ? Colors.red.shade50 : AppTheme.background,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.secondary.withValues(alpha: 0.1)),
+            border: Border.all(
+              color: isInvalid ? Colors.red.shade300 : AppTheme.secondary.withValues(alpha: 0.1),
+              width: isInvalid ? 1.5 : 1.0,
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 20, color: AppTheme.primary),
+              Icon(
+                isInvalid ? Icons.warning_amber_rounded : icon, 
+                size: 20, 
+                color: isInvalid ? Colors.red.shade700 : AppTheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppTheme.secondary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isInvalid ? Colors.red.shade900 : AppTheme.secondary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (isInvalid && invalidText != null)
+                      Text(
+                        invalidText,
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -572,84 +631,121 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          height: 320,
-          decoration: BoxDecoration(
-            color: AppTheme.white,
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.secondary.withValues(alpha: 0.2),
-                blurRadius: 30,
-                offset: const Offset(0, -10),
-              )
-            ],
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary, fontSize: 16))),
-                    const Text('Select Date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                    TextButton(
-                      onPressed: () {
-                        final chosenDate = DateTime(tempDate.year, tempDate.month, tempDate.day);
-                        if (chosenDate.isBefore(today)) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Row(
-                                children: [
-                                  Icon(Icons.warning_amber_rounded, color: Colors.white),
-                                  SizedBox(width: 8),
-                                  Expanded(child: Text('Cannot select a past date. Please select today or an upcoming date.')),
-                                ],
-                              ),
-                              backgroundColor: Colors.red.shade700,
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final chosenDate = DateTime(tempDate.year, tempDate.month, tempDate.day);
+            final isPastDate = chosenDate.isBefore(today);
+            final formattedDate = DateFormat('EEE, MMM d, yyyy').format(tempDate);
+
+            return Container(
+              height: 380,
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.secondary.withValues(alpha: 0.2),
+                    blurRadius: 30,
+                    offset: const Offset(0, -10),
+                  )
+                ],
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context), 
+                          child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary, fontSize: 16)),
+                        ),
+                        const Text('Select Date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        TextButton(
+                          onPressed: isPastDate ? null : () {
+                            setState(() {
+                              _selectedDate = chosenDate;
+                              // If user selected today, adjust time if it has already passed
+                              if (chosenDate.isAtSameMomentAs(today)) {
+                                final currentMinutes = now.hour * 60 + now.minute;
+                                final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+                                if (selectedMinutes <= currentMinutes) {
+                                  final nextHour = (now.hour + 1).clamp(0, 23);
+                                  _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
+                                }
+                              }
+                            });
+                            _fetchTables();
+                            Navigator.pop(context);
+                          }, 
+                          child: Text(
+                            'Confirm', 
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold, 
+                              fontSize: 16,
+                              color: isPastDate ? Colors.grey.shade400 : AppTheme.primary,
                             ),
-                          );
-                          return;
-                        }
-                        setState(() {
-                          _selectedDate = chosenDate;
-                          // If user selected today, adjust time if it has already passed
-                          if (chosenDate.isAtSameMomentAs(today)) {
-                            final currentMinutes = now.hour * 60 + now.minute;
-                            final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-                            if (selectedMinutes <= currentMinutes) {
-                              final nextHour = (now.hour + 1).clamp(0, 23);
-                              _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
-                            }
-                          }
-                        });
-                        _fetchTables();
-                        Navigator.pop(context);
-                      }, 
-                      child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const Divider(height: 1),
+                  // Real-time Past Date Warning Indicator
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isPastDate ? Colors.red.shade50 : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isPastDate ? Colors.red.shade200 : Colors.green.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isPastDate ? Icons.error_outline : Icons.check_circle_outline,
+                          size: 18,
+                          color: isPastDate ? Colors.red.shade700 : Colors.green.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isPastDate
+                                ? '$formattedDate is in the past. Cannot book past date.'
+                                : 'Selected Date: $formattedDate (Available)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isPastDate ? Colors.red.shade800 : Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: CupertinoDatePicker(
+                      mode: CupertinoDatePickerMode.date,
+                      initialDateTime: initialDate,
+                      minimumDate: minDate,
+                      maximumDate: maxDate,
+                      minimumYear: today.year,
+                      maximumYear: maxDate.year,
+                      onDateTimeChanged: (DateTime newDate) {
+                        setSheetState(() {
+                          tempDate = newDate;
+                        });
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const Divider(height: 1),
-              Expanded(
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.date,
-                  initialDateTime: initialDate,
-                  minimumDate: minDate,
-                  maximumDate: maxDate,
-                  minimumYear: today.year,
-                  maximumYear: maxDate.year,
-                  onDateTimeChanged: (DateTime newDate) {
-                    tempDate = newDate;
-                  },
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -659,11 +755,11 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final isToday = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day).isAtSameMomentAs(today);
+    final currentMinutes = now.hour * 60 + now.minute;
 
     int initialHour = _selectedTime.hour;
     int initialMinute = (_selectedTime.minute ~/ 15) * 15;
     if (isToday) {
-      final currentMinutes = now.hour * 60 + now.minute;
       if (initialHour * 60 + initialMinute <= currentMinutes) {
         initialHour = (now.hour + 1).clamp(0, 23);
         initialMinute = 0;
@@ -676,74 +772,108 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return Container(
-          height: 320,
-          decoration: BoxDecoration(
-            color: AppTheme.white,
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.secondary.withValues(alpha: 0.2),
-                blurRadius: 30,
-                offset: const Offset(0, -10),
-              )
-            ],
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary, fontSize: 16))),
-                    const Text('Select Time', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                    TextButton(
-                      onPressed: () {
-                        if (isToday) {
-                          final currentMinutes = now.hour * 60 + now.minute;
-                          final pickedMinutes = tempTime.hour * 60 + tempTime.minute;
-                          if (pickedMinutes <= currentMinutes) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Row(
-                                  children: [
-                                    Icon(Icons.warning_amber_rounded, color: Colors.white),
-                                    SizedBox(width: 8),
-                                    Expanded(child: Text('Cannot select a past time for today. Please select an upcoming time.')),
-                                  ],
-                                ),
-                                backgroundColor: Colors.red.shade700,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            );
-                            return;
-                          }
-                        }
-                        setState(() => _selectedTime = TimeOfDay(hour: tempTime.hour, minute: tempTime.minute));
-                        _fetchTables();
-                        Navigator.pop(context);
-                      }, 
-                      child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final pickedMinutes = tempTime.hour * 60 + tempTime.minute;
+            final isPastTime = isToday && (pickedMinutes <= currentMinutes);
+            final timeFormat = DateFormat('h:mm a').format(tempTime);
+
+            return Container(
+              height: 380,
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: const BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.secondary.withValues(alpha: 0.2),
+                    blurRadius: 30,
+                    offset: const Offset(0, -10),
+                  )
+                ],
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context), 
+                          child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary, fontSize: 16)),
+                        ),
+                        const Text('Select Time', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                        TextButton(
+                          onPressed: isPastTime ? null : () {
+                            setState(() => _selectedTime = TimeOfDay(hour: tempTime.hour, minute: tempTime.minute));
+                            _fetchTables();
+                            Navigator.pop(context);
+                          }, 
+                          child: Text(
+                            'Confirm', 
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold, 
+                              fontSize: 16,
+                              color: isPastTime ? Colors.grey.shade400 : AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  const Divider(height: 1),
+                  // Real-time Past Time Warning Indicator
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isPastTime ? Colors.red.shade50 : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isPastTime ? Colors.red.shade200 : Colors.green.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isPastTime ? Icons.error_outline : Icons.check_circle_outline,
+                          size: 18,
+                          color: isPastTime ? Colors.red.shade700 : Colors.green.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            isPastTime
+                                ? '$timeFormat has already passed today. Cannot book past time.'
+                                : 'Selected Time: $timeFormat (Valid for booking)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isPastTime ? Colors.red.shade800 : Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: CupertinoDatePicker(
+                      mode: CupertinoDatePickerMode.time,
+                      initialDateTime: tempTime,
+                      use24hFormat: false,
+                      minuteInterval: 15,
+                      onDateTimeChanged: (DateTime newTime) {
+                        setSheetState(() {
+                          tempTime = newTime;
+                        });
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const Divider(height: 1),
-              Expanded(
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.time,
-                  initialDateTime: tempTime,
-                  use24hFormat: false,
-                  minuteInterval: 15,
-                  onDateTimeChanged: (DateTime newTime) {
-                    tempTime = newTime;
-                  },
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
