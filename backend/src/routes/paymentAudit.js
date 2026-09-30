@@ -115,7 +115,26 @@ module.exports = function(supabaseAdmin) {
 
       const cleanRef = transaction_reference.trim().toUpperCase();
 
-      // Check unique constraint for duplicate transaction reference (safely)
+      // Idempotency check: prevent duplicate submissions via headers
+      const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotency_key;
+      if (idempotencyKey) {
+        try {
+          const { data: existingIdempotentOrder } = await supabaseAdmin
+            .from('orders')
+            .select('id, created_at')
+            .eq('idempotency_key', idempotencyKey)
+            .maybeSingle();
+          if (existingIdempotentOrder) {
+            return res.status(200).json({
+              message: 'Order already submitted (idempotent)',
+              order: existingIdempotentOrder,
+              id: existingIdempotentOrder.id
+            });
+          }
+        } catch (_) {}
+      }
+
+      // Check unique constraint for duplicate transaction reference across transactions & orders
       let existingRef = null;
       try {
         const { data: refCheck, error: refErr } = await supabaseAdmin
@@ -128,6 +147,23 @@ module.exports = function(supabaseAdmin) {
         }
       } catch (err) {
         console.warn('[payment_transactions] check warning:', err.message);
+      }
+
+      // Also check orders.special_notes in case payment_transactions table had fallback
+      if (!existingRef) {
+        try {
+          const { data: noteCheck } = await supabaseAdmin
+            .from('orders')
+            .select('id, created_at')
+            .ilike('special_notes', `%[Bank Transfer Ref: ${cleanRef}%`)
+            .limit(1)
+            .maybeSingle();
+          if (noteCheck) {
+            existingRef = { order_id: noteCheck.id };
+          }
+        } catch (err) {
+          console.warn('[orders] special_notes ref check notice:', err.message);
+        }
       }
 
       if (existingRef) {

@@ -530,31 +530,32 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
     final isPaymentPending = !isPaymentPaid && !isPaymentRejected && currentStatus != 'cancelled' &&
         (currentStatus == 'payment_pending' || (isBankTransfer && _orderData?['payment_status'] != 'paid'));
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10),
-              ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          context.go('/home');
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.background,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10),
+                ],
+              ),
+              child: const Icon(Icons.arrow_back_ios_new, size: 16, color: AppTheme.secondary),
             ),
-            child: const Icon(Icons.arrow_back_ios_new, size: 16, color: AppTheme.secondary),
+            onPressed: () => context.go('/home'),
           ),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/home');
-            }
-          },
-        ),
         title: Text(
           'Live Order Journey',
           style: GoogleFonts.playfairDisplay(
@@ -1087,11 +1088,44 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
                   onPressed: _showRatingModal,
                 ),
             ],
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.go('/home'),
+                    icon: const Icon(Icons.home_outlined, size: 18),
+                    label: const Text('Home'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.secondary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => context.go('/menu'),
+                    icon: const Icon(Icons.restaurant_menu_rounded, size: 18),
+                    label: const Text('Order More'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildProgressStep({
     required int stepNumber,

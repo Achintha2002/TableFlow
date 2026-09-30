@@ -266,6 +266,7 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Future<void> _submitOrder() async {
+    if (_isSubmitting) return; // Prevent double-tap submissions
     final cart = context.read<CartProvider>();
     var user = Supabase.instance.client.auth.currentUser;
 
@@ -356,6 +357,7 @@ class _CartScreenState extends State<CartScreen> {
         if (token != null) {
           request.headers['Authorization'] = 'Bearer $token';
         }
+        request.headers['Idempotency-Key'] = idempotencyKey;
         request.fields['transaction_reference'] = _transactionRefController.text.trim().toUpperCase();
         if (_bankNameController.text.trim().isNotEmpty) {
           request.fields['bank_name'] = _bankNameController.text.trim();
@@ -427,8 +429,38 @@ class _CartScreenState extends State<CartScreen> {
         final orderId = respData['order']?['id'] ?? respData['id'];
 
         if (mounted) {
-          // Do not auto-clear cart; allow user manual removal or retry
-          context.push('/order-tracker', extra: {'orderId': orderId.toString()});
+          // 1. Clear cart in provider & SharedPreferences
+          cart.clear();
+
+          // 2. Reset text controllers and slip selection
+          _transactionRefController.clear();
+          _bankNameController.clear();
+          _specialNotesController.clear();
+          setState(() {
+            _pickedSlip = null;
+            _selectedTableId = null;
+            _currentStep = 0;
+          });
+
+          // 3. Show celebratory confirmation feedback
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Order Placed Successfully! Tracking kitchen status...')),
+                ],
+              ),
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+
+          // 4. Replace navigation stack with /order-tracker so user cannot pop back to checkout
+          context.go('/order-tracker', extra: {'orderId': orderId.toString()});
         }
       } else {
         final errMsg = respData['error'] ??

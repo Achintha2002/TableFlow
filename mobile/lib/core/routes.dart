@@ -159,7 +159,8 @@ class AppRoutes {
         path: orderTracker,
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>? ?? {};
-          return LiveOrderTrackerScreen(orderId: extra['orderId']?.toString());
+          final queryOrderId = state.uri.queryParameters['orderId'];
+          return LiveOrderTrackerScreen(orderId: queryOrderId ?? extra['orderId']?.toString());
         },
       ),
       GoRoute(path: waiterFloor, builder: (context, state) => const WaiterFloorScreen()),
