@@ -5,11 +5,11 @@ import 'supabase_service.dart';
 
 class ApiService {
   static String get baseUrl {
-    if (kIsWeb) return 'http://localhost:3000/api';
+    if (kIsWeb) return 'http://localhost:5000/api';
     if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:3000/api';
+      return 'http://10.0.2.2:5000/api';
     }
-    return 'http://localhost:3000/api';
+    return 'http://localhost:5000/api';
   }
 
   /// Helper to get headers with the Supabase JWT token
