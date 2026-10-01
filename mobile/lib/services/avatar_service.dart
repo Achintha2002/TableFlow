@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/theme.dart';
+import '../utils/platform_image_picker.dart';
 import 'api_service.dart';
 
 class PickedAvatar {
@@ -21,119 +21,121 @@ class PickedAvatar {
 }
 
 class AvatarService {
-  static final ImagePicker _picker = ImagePicker();
-
   /// Show bottom sheet to choose Camera or Gallery, or remove photo
   static Future<PickedAvatar?> showPhotoSourcePicker(
     BuildContext context, {
     bool hasExistingPhoto = false,
   }) async {
-    ImageSource? chosenSource;
+    bool isCamera = false;
+    bool didSelect = false;
     bool shouldRemove = false;
 
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
+        return Material(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 18),
-                const Text(
-                  'Profile Photo',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Playfair Display',
-                    color: AppTheme.secondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Select a photo for your TableFlow account',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Profile Photo',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Playfair Display',
+                      color: AppTheme.secondary,
                     ),
-                    child: const Icon(Icons.camera_alt_rounded, color: AppTheme.primary),
+                    textAlign: TextAlign.center,
                   ),
-                  title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Use camera to capture a new photo'),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  onTap: () {
-                    chosenSource = ImageSource.camera;
-                    Navigator.pop(ctx);
-                  },
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.secondary.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
+                  const SizedBox(height: 6),
+                  Text(
+                    'Select a photo for your TableFlow account',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
                     ),
-                    child: const Icon(Icons.photo_library_rounded, color: AppTheme.secondary),
+                    textAlign: TextAlign.center,
                   ),
-                  title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Pick an image from your device photos'),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  onTap: () {
-                    chosenSource = ImageSource.gallery;
-                    Navigator.pop(ctx);
-                  },
-                ),
-                if (hasExistingPhoto) ...[
+                  const SizedBox(height: 20),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded, color: AppTheme.primary),
+                    ),
+                    title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Use camera to capture a new photo'),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    onTap: () {
+                      isCamera = true;
+                      didSelect = true;
+                      Navigator.pop(ctx);
+                    },
+                  ),
                   const SizedBox(height: 8),
                   ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
+                        color: AppTheme.secondary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                      child: const Icon(Icons.photo_library_rounded, color: AppTheme.secondary),
                     ),
-                    title: const Text('Remove Photo', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
-                    subtitle: const Text('Revert back to default avatar'),
+                    title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Pick an image from your device photos'),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     onTap: () {
-                      shouldRemove = true;
+                      isCamera = false;
+                      didSelect = true;
                       Navigator.pop(ctx);
                     },
                   ),
+                  if (hasExistingPhoto) ...[
+                    const SizedBox(height: 8),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                      ),
+                      title: const Text('Remove Photo', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
+                      subtitle: const Text('Revert back to default avatar'),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      onTap: () {
+                        shouldRemove = true;
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 8),
                 ],
-                const SizedBox(height: 8),
-              ],
+              ),
             ),
           ),
         );
@@ -144,27 +146,11 @@ class AvatarService {
       return PickedAvatar(bytes: Uint8List(0), fileName: '__remove__', mimeType: '');
     }
 
-    if (chosenSource == null) return null;
+    if (!didSelect) return null;
 
     try {
-      final XFile? xFile = await _picker.pickImage(
-        source: chosenSource!,
-        maxWidth: 600,
-        maxHeight: 600,
-        imageQuality: 85,
-      );
-
-      if (xFile == null) return null;
-
-      final bytes = await xFile.readAsBytes();
-      final name = xFile.name.isNotEmpty ? xFile.name : 'avatar.jpg';
-      final mime = xFile.mimeType ?? (name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg');
-
-      return PickedAvatar(
-        bytes: bytes,
-        fileName: name,
-        mimeType: mime,
-      );
+      final picked = await pickPlatformAvatar(isCamera: isCamera);
+      return picked;
     } catch (e) {
       debugPrint('AvatarService pick error: $e');
       if (context.mounted) {
