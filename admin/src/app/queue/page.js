@@ -129,6 +129,11 @@ export default function QueuePage() {
   useEffect(() => {
     fetchQueueAndTables();
 
+    // 4-second auto-poll backup in case WebSockets fail or throttle
+    const pollInterval = setInterval(() => {
+      fetchQueueAndTables();
+    }, 4000);
+
     const queueChannel = supabase.channel('admin_queue_realtime_full').on('postgres_changes',
       { event: '*', schema: 'public', table: 'queue_entries' },
       () => { fetchQueueAndTables(); }
@@ -140,6 +145,7 @@ export default function QueuePage() {
     ).subscribe();
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(queueChannel);
       supabase.removeChannel(tablesChannel);
     };
