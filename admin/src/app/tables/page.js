@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getQRCodeSvg, downloadQRCodeImage } from '../../lib/qrHelper';
-import { QrCode, Printer, Download, Copy, Check, X, RefreshCw, Users, CheckSquare, Square } from 'lucide-react';
+import { QrCode, Printer, Download, Copy, Check, X, RefreshCw, Users, CheckSquare, Square, Plus, Edit3, Trash2 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -12,45 +12,266 @@ function badge(type, text) {
 
 export default function TablesPage() {
   const [tables, setTables] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState(null);
 
-  // Single QR Modal State
+  // ── Single QR Modal State ──
   const [singleTable, setSingleTable] = useState(null);
-  const [singleQr, setSingleQr] = useState(null); // { token, qrData, svg }
+  const [singleQr, setSingleQr] = useState(null);
   const [singleLoading, setSingleLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Batch Print Modal State
+  // ── Batch Print Modal State ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [batchItems, setBatchItems] = useState([]); // [{ table, token, qrData, svg }]
+  const [batchItems, setBatchItems] = useState([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
-
-  // Print Mode indicator
   const [isPrintingSingle, setIsPrintingSingle] = useState(false);
 
+  // ── Add Table Modal State (CREATE) ──
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newTableNum, setNewTableNum] = useState('');
+  const [newTableName, setNewTableName] = useState('');
+  const [newCapacity, setNewCapacity] = useState(4);
+  const [newCategoryId, setNewCategoryId] = useState('1');
+  const [newStatus, setNewStatus] = useState('available');
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
+
+  // ── Edit Table Modal State (UPDATE) ──
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingTable, setEditingTable] = useState(null);
+  const [editTableNum, setEditTableNum] = useState('');
+  const [editTableName, setEditTableName] = useState('');
+  const [editCapacity, setEditCapacity] = useState(4);
+  const [editCategoryId, setEditCategoryId] = useState('1');
+  const [editStatus, setEditStatus] = useState('available');
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
+  // ── Delete Confirmation Modal (DELETE) ──
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingTable, setDeletingTable] = useState(null);
+  const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
+
+  function showToast(msg) {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  }
+
   async function fetchTables() {
-    const { data } = await supabase
-      .from('restaurant_tables')
-      .select('*')
-      .order('table_number', { ascending: true });
-    setTables(data || []);
-    setLoading(false);
+    try {
+      // 1. Try Backend API first
+      let tableList = null;
+      try {
+        const res = await fetch(`${API_BASE}/api/tables`);
+        if (res.ok) {
+          tableList = await res.json();
+        }
+      } catch (err) {
+        console.warn('Backend /api/tables fetch error, falling back to Supabase:', err);
+      }
+
+      // 2. Fallback to direct Supabase
+      if (!tableList) {
+        const { data, error } = await supabase
+          .from('restaurant_tables')
+          .select('*, table_categories(id, name, description)')
+          .order('table_number', { ascending: true });
+
+        if (!error && data) tableList = data;
+      }
+
+      if (tableList) setTables(tableList);
+
+      // Fetch Categories
+      const { data: catData } = await supabase
+        .from('table_categories')
+        .select('*')
+        .order('id', { ascending: true });
+      if (catData) setCategories(catData);
+
+    } catch (e) {
+      console.error('Error fetching tables or categories:', e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
     fetchTables();
-    const channel = supabase.channel('admin_tables').on('postgres_changes', 
+
+    // 4-second auto-poll backup for live synchronization
+    const pollInterval = setInterval(() => {
+      fetchTables();
+    }, 4000);
+
+    const channel = supabase.channel('admin_tables_realtime_full').on('postgres_changes', 
       { event: '*', schema: 'public', table: 'restaurant_tables' }, 
       () => { fetchTables(); }
     ).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   async function updateStatus(id, newStatus) {
-    await supabase.from('restaurant_tables').update({ status: newStatus }).eq('id', id);
-    fetchTables();
+    try {
+      await fetch(`${API_BASE}/api/tables/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      fetchTables();
+    } catch {
+      await supabase.from('restaurant_tables').update({ status: newStatus }).eq('id', id);
+      fetchTables();
+    }
+  }
+
+  // ── Open Add Modal ──
+  function handleOpenAddModal() {
+    const highestNum = tables.reduce((max, t) => Math.max(max, parseInt(t.table_number) || 0), 0);
+    setNewTableNum(String(highestNum + 1));
+    setNewTableName('');
+    setNewCapacity(4);
+    setNewCategoryId(categories[0]?.id ? String(categories[0].id) : '1');
+    setNewStatus('available');
+    setAddModalOpen(true);
+  }
+
+  // ── Submit Add Table (CREATE) ──
+  async function handleConfirmAddTable(e) {
+    e.preventDefault();
+    setIsSubmittingAdd(true);
+    try {
+      const parsedNum = parseInt(newTableNum, 10);
+      const parsedCap = parseInt(newCapacity, 10) || 4;
+      const parsedCat = newCategoryId ? parseInt(newCategoryId, 10) : 1;
+
+      const res = await fetch(`${API_BASE}/api/tables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_number: parsedNum,
+          table_name: newTableName.trim() || null,
+          capacity: parsedCap,
+          category_id: parsedCat,
+          status: newStatus
+        })
+      });
+
+      if (res.ok) {
+        showToast(`✅ Table #${parsedNum} created successfully!`);
+      } else {
+        // Direct Supabase fallback
+        const record = {
+          table_number: parsedNum,
+          capacity: parsedCap,
+          category_id: parsedCat,
+          status: newStatus
+        };
+        await supabase.from('restaurant_tables').insert(record);
+        showToast(`✅ Table #${parsedNum} created!`);
+      }
+
+      setAddModalOpen(false);
+      fetchTables();
+    } catch (err) {
+      showToast(`❌ Error creating table: ${err.message}`);
+    } finally {
+      setIsSubmittingAdd(false);
+    }
+  }
+
+  // ── Open Edit Modal ──
+  function handleOpenEditModal(t) {
+    setEditingTable(t);
+    setEditTableNum(String(t.table_number || ''));
+    setEditTableName(t.table_name || '');
+    setEditCapacity(t.capacity || 4);
+    setEditCategoryId(t.category_id ? String(t.category_id) : '1');
+    setEditStatus(t.status || 'available');
+    setEditModalOpen(true);
+  }
+
+  // ── Submit Edit Table (UPDATE) ──
+  async function handleConfirmEditTable(e) {
+    e.preventDefault();
+    if (!editingTable) return;
+    setIsSubmittingEdit(true);
+    try {
+      const parsedNum = parseInt(editTableNum, 10);
+      const parsedCap = parseInt(editCapacity, 10) || 4;
+      const parsedCat = editCategoryId ? parseInt(editCategoryId, 10) : null;
+
+      const res = await fetch(`${API_BASE}/api/tables/${editingTable.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table_number: parsedNum,
+          table_name: editTableName.trim() || null,
+          capacity: parsedCap,
+          category_id: parsedCat,
+          status: editStatus
+        })
+      });
+
+      if (res.ok) {
+        showToast(`✅ Table #${parsedNum} updated successfully!`);
+      } else {
+        // Direct Supabase fallback
+        const updates = {
+          table_number: parsedNum,
+          capacity: parsedCap,
+          category_id: parsedCat,
+          status: editStatus
+        };
+        await supabase.from('restaurant_tables').update(updates).eq('id', editingTable.id);
+        showToast(`✅ Table #${parsedNum} updated!`);
+      }
+
+      setEditModalOpen(false);
+      setEditingTable(null);
+      fetchTables();
+    } catch (err) {
+      showToast(`❌ Error updating table: ${err.message}`);
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  }
+
+  // ── Open Delete Modal ──
+  function handleOpenDeleteModal(t) {
+    setDeletingTable(t);
+    setDeleteModalOpen(true);
+  }
+
+  // ── Submit Delete Table (DELETE) ──
+  async function handleConfirmDeleteTable() {
+    if (!deletingTable) return;
+    setIsSubmittingDelete(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/tables/${deletingTable.id}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        showToast(`🗑️ Table #${deletingTable.table_number} removed from floor plan.`);
+      } else {
+        await supabase.from('restaurant_tables').delete().eq('id', deletingTable.id);
+        showToast(`🗑️ Table #${deletingTable.table_number} removed.`);
+      }
+
+      setDeleteModalOpen(false);
+      setDeletingTable(null);
+      fetchTables();
+    } catch (err) {
+      showToast(`❌ Error deleting table: ${err.message}`);
+    } finally {
+      setIsSubmittingDelete(false);
+    }
   }
 
   // Open Single Table QR Modal
@@ -141,9 +362,8 @@ export default function TablesPage() {
   const occupiedCount = tables.filter(t => t.status === 'occupied').length;
   const cleaningCount = tables.filter(t => t.status === 'cleaning').length;
 
-  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Loading tables...</p>;
+  if (loading) return <p style={{ color: 'var(--text-muted)', padding: '24px' }}>Loading tables & floor plan...</p>;
 
-  // Filter items for batch print view
   const activePrintItems = isPrintingSingle
     ? singleTable && singleQr ? [{ table: singleTable, qrData: singleQr.qrData, svg: singleQr.svg }] : []
     : batchItems.filter(item => selectedIds.has(item.table.id));
@@ -180,24 +400,93 @@ export default function TablesPage() {
         }
       `}</style>
 
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          background: '#0f172a',
+          color: '#ffffff',
+          padding: '12px 20px',
+          borderRadius: '12px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+          zIndex: 9999,
+          fontSize: '13px',
+          fontWeight: '600',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          {toastMessage}
+        </div>
+      )}
+
       {/* Main Screen UI */}
       <div className="full-data-card" style={{ marginBottom: 24 }}>
         <div className="data-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 20 }}>Tables & Floor Plan</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Tables & Floor Plan</h3>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '3px 10px',
+                borderRadius: '20px',
+                background: '#ecfdf5',
+                color: '#059669',
+                fontSize: '11px',
+                fontWeight: '700',
+                border: '1px solid rgba(5,150,105,0.2)'
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />
+                Mobile Live Sync
+              </span>
+            </div>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              Manage live table status, generate HMAC-signed QR cards, and print physical table tents.
+              Add, edit, and organize restaurant dining tables. All changes instantly sync with mobile booking and floor screens.
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Add Table Button (CREATE) */}
+            <button
+              onClick={handleOpenAddModal}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 18px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'var(--primary)',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 10px rgba(184, 127, 92, 0.3)'
+              }}
+            >
+              <Plus size={16} />
+              <span>Add Table</span>
+            </button>
+
+            {/* Print Batch QR Button */}
             <button 
-              className="btn btn-primary" 
+              className="btn btn-ghost" 
               onClick={handleOpenBatchModal}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '9px 16px',
+                borderRadius: '10px',
+                fontSize: '13px',
+                fontWeight: '600',
+                borderColor: 'var(--border)'
+              }}
             >
               <Printer size={16} />
-              <span>Print Table QR Cards</span>
+              <span>Print QR Cards</span>
             </button>
           </div>
         </div>
@@ -241,74 +530,673 @@ export default function TablesPage() {
           </div>
         </div>
 
-        {/* Tables Grid */}
-        <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
-          {tables.map(t => (
-            <div key={t.id} style={{ 
-              border: '1px solid var(--border)', 
-              borderRadius: '14px', 
-              padding: '18px',
-              background: t.status === 'occupied' ? 'rgba(184, 127, 92, 0.05)' : 'var(--bg-secondary)',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              transition: 'all 0.2s ease'
-            }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h4 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Table {t.table_number}</h4>
-                  {badge(t.status === 'available' ? 'success' : t.status === 'occupied' ? 'warning' : 'info', t.status)}
-                </div>
-                <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Users size={14} /> Capacity: {t.capacity} guests
-                </p>
-              </div>
+        {/* Tables Grid with CRUD Cards */}
+        <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
+          {tables.map(t => {
+            const catName = t.table_categories?.name || 'Main Dining';
+            const hasCustomName = Boolean(t.table_name && t.table_name.trim());
 
-              <div>
-                {/* QR Code Action Button */}
-                <button 
-                  className="btn btn-ghost" 
-                  onClick={() => handleOpenSingleQr(t)}
-                  style={{ 
-                    width: '100%', 
-                    marginBottom: 10, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center', 
-                    gap: 6,
-                    padding: '7px 10px',
-                    fontSize: 12,
-                    borderColor: 'var(--border)'
-                  }}
-                >
-                  <QrCode size={14} color="var(--primary)" />
-                  <span>View QR Code</span>
-                </button>
+            return (
+              <div key={t.id} style={{ 
+                border: '1px solid var(--border)', 
+                borderRadius: '14px', 
+                padding: '18px',
+                background: t.status === 'occupied' ? 'rgba(184, 127, 92, 0.05)' : '#ffffff',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.03)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                transition: 'all 0.2s ease',
+                position: 'relative'
+              }}>
+                <div>
+                  {/* Top Bar: Title & Edit/Delete Actions */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>
+                        Table {t.table_number}
+                      </h4>
+                      {hasCustomName && (
+                        <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary)', marginTop: '2px' }}>
+                          🏷️ {t.table_name}
+                        </div>
+                      )}
+                    </div>
 
-                {/* Status Toggle Actions */}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {t.status === 'available' && (
-                    <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'occupied')}>
-                      Occupy
-                    </button>
-                  )}
-                  {t.status === 'occupied' && (
-                    <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'cleaning')}>
-                      Clean
-                    </button>
-                  )}
-                  {t.status === 'cleaning' && (
-                    <button className="btn btn-primary" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'available')}>
-                      Ready
-                    </button>
-                  )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {/* Edit Button */}
+                      <button
+                        onClick={() => handleOpenEditModal(t)}
+                        title="Edit Table Details"
+                        style={{
+                          background: 'none',
+                          border: '1px solid var(--border)',
+                          borderRadius: '6px',
+                          padding: '5px 7px',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Edit3 size={13} />
+                      </button>
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => handleOpenDeleteModal(t)}
+                        title="Remove Table"
+                        style={{
+                          background: '#fff1f2',
+                          border: '1px solid #fee2e2',
+                          borderRadius: '6px',
+                          padding: '5px 7px',
+                          color: '#e11d48',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Status & Zone Badges */}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
+                    {badge(t.status === 'available' ? 'success' : t.status === 'occupied' ? 'warning' : 'info', t.status.toUpperCase())}
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      background: '#f1f5f9',
+                      color: '#475569',
+                      fontWeight: '600'
+                    }}>
+                      📍 {catName}
+                    </span>
+                  </div>
+
+                  {/* Capacity */}
+                  <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Users size={14} /> Capacity: <strong>{t.capacity} guests</strong>
+                  </p>
+                </div>
+
+                <div>
+                  {/* QR Code Action Button */}
+                  <button 
+                    className="btn btn-ghost" 
+                    onClick={() => handleOpenSingleQr(t)}
+                    style={{ 
+                      width: '100%', 
+                      marginBottom: 10, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: 6,
+                      padding: '7px 10px',
+                      fontSize: 12,
+                      borderColor: 'var(--border)'
+                    }}
+                  >
+                    <QrCode size={14} color="var(--primary)" />
+                    <span>View QR Code</span>
+                  </button>
+
+                  {/* Status Toggle Actions */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {t.status === 'available' && (
+                      <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'occupied')}>
+                        Occupy
+                      </button>
+                    )}
+                    {t.status === 'occupied' && (
+                      <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'cleaning')}>
+                        Clean
+                      </button>
+                    )}
+                    {t.status === 'cleaning' && (
+                      <button className="btn btn-primary" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'available')}>
+                        Ready
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
+
+      {/* ─────────────────────────────────────────────── */}
+      {/* ── MODAL 1: ADD NEW TABLE (CREATE) ── */}
+      {/* ─────────────────────────────────────────────── */}
+      {addModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            width: '90%',
+            maxWidth: '460px',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'rgba(184, 127, 92, 0.12)',
+                  padding: '9px',
+                  borderRadius: '10px',
+                  color: 'var(--primary)',
+                  fontSize: '20px'
+                }}>
+                  🪑
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                    Add New Dining Table
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Configure table number, custom name, and seating
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAddModalOpen(false)}
+                style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmAddTable}>
+              {/* Table Number */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Table Number:
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={newTableNum}
+                  onChange={(e) => setNewTableNum(e.target.value)}
+                  required
+                  placeholder="e.g. 21"
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Custom Table Name */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Custom Table Name / Label (Optional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Corner Booth, Patio Terrace 1, VIP 1"
+                  value={newTableName}
+                  onChange={(e) => setNewTableName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Seating Capacity */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '6px' }}>
+                  Seating Capacity (Guests):
+                </label>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  {[2, 4, 6, 8, 10].map(cap => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setNewCapacity(cap)}
+                      style={{
+                        flex: 1,
+                        padding: '6px 0',
+                        borderRadius: '6px',
+                        border: parseInt(newCapacity) === cap ? '2px solid var(--primary)' : '1px solid var(--border)',
+                        background: parseInt(newCapacity) === cap ? 'rgba(184, 127, 92, 0.1)' : '#ffffff',
+                        color: parseInt(newCapacity) === cap ? 'var(--primary)' : 'var(--text-primary)',
+                        fontWeight: '700',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {cap}p
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={newCapacity}
+                  onChange={(e) => setNewCapacity(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Category / Dining Area */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Dining Zone / Category:
+                </label>
+                <select
+                  value={newCategoryId}
+                  onChange={(e) => setNewCategoryId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    background: '#ffffff'
+                  }}
+                >
+                  {categories.length > 0 ? (
+                    categories.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.extra_charge ? `(+$${c.extra_charge})` : ''}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="1">Main Dining</option>
+                      <option value="2">Window Seating</option>
+                      <option value="3">VIP Lounge</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Initial Status */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Initial Status:
+                </label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    background: '#ffffff'
+                  }}
+                >
+                  <option value="available">Available</option>
+                  <option value="occupied">Occupied</option>
+                  <option value="cleaning">Needs Cleaning</option>
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setAddModalOpen(false)}
+                  disabled={isSubmittingAdd}
+                  style={{
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAdd}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'var(--primary)',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: isSubmittingAdd ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 4px 6px rgba(184, 127, 92, 0.25)'
+                  }}
+                >
+                  {isSubmittingAdd ? 'Adding...' : '➕ Add Table'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────── */}
+      {/* ── MODAL 2: EDIT TABLE DETAILS (UPDATE) ── */}
+      {/* ─────────────────────────────────────────────── */}
+      {editModalOpen && editingTable && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            width: '90%',
+            maxWidth: '460px',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  padding: '9px',
+                  borderRadius: '10px',
+                  color: '#2563eb',
+                  fontSize: '20px'
+                }}>
+                  ✏️
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                    Edit Table #{editingTable.table_number}
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Modify capacity, custom name, zone, or status
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmEditTable}>
+              {/* Table Number */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Table Number:
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={editTableNum}
+                  onChange={(e) => setEditTableNum(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Table Name */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Custom Table Name / Label:
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Corner Booth, VIP 1"
+                  value={editTableName}
+                  onChange={(e) => setEditTableName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Capacity */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Capacity (Guests):
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={editCapacity}
+                  onChange={(e) => setEditCapacity(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Zone / Category */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Dining Zone / Category:
+                </label>
+                <select
+                  value={editCategoryId}
+                  onChange={(e) => setEditCategoryId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    background: '#ffffff'
+                  }}
+                >
+                  {categories.length > 0 ? (
+                    categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="1">Main Dining</option>
+                      <option value="2">Window Seating</option>
+                      <option value="3">VIP Lounge</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Status */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '5px' }}>
+                  Table Status:
+                </label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    background: '#ffffff'
+                  }}
+                >
+                  <option value="available">Available</option>
+                  <option value="occupied">Occupied</option>
+                  <option value="cleaning">Needs Cleaning</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  disabled={isSubmittingEdit}
+                  style={{
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: isSubmittingEdit ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isSubmittingEdit ? 'Saving...' : '💾 Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────── */}
+      {/* ── MODAL 3: DELETE TABLE CONFIRMATION (DELETE) ── */}
+      {/* ─────────────────────────────────────────────── */}
+      {deleteModalOpen && deletingTable && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            width: '90%',
+            maxWidth: '430px',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+              <div style={{
+                background: '#fee2e2',
+                color: '#dc2626',
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '20px'
+              }}>
+                ⚠️
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: 'var(--text-primary)' }}>
+                  Remove Table #{deletingTable.table_number}?
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Capacity: {deletingTable.capacity} guests • {deletingTable.table_name || 'Standard Table'}
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '14px 0 20px' }}>
+              Are you sure you want to remove this table from the floor plan? Any associated active reservations or orders will be safely unlinked.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteModalOpen(false)}
+                disabled={isSubmittingDelete}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTable}
+                disabled={isSubmittingDelete}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: isSubmittingDelete ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isSubmittingDelete ? 'Removing...' : '🗑️ Remove Table'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SINGLE TABLE QR MODAL */}
       {singleTable && (
@@ -320,126 +1208,78 @@ export default function TablesPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: 19 }}>Table {singleTable.table_number} QR Code</h3>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cryptographically signed HMAC token for physical card</span>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                  Customer scan code for digital ordering & instant payment
+                </p>
               </div>
-              <button onClick={() => setSingleTable(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                <X size={20} />
+              <button 
+                className="btn btn-ghost" 
+                onClick={() => setSingleTable(null)}
+                style={{ padding: '6px', border: 'none' }}
+              >
+                <X size={18} />
               </button>
             </div>
 
             {singleLoading ? (
-              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
-                <p>Generating verified QR token...</p>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                <RefreshCw className="animate-spin" size={24} style={{ margin: '0 auto 12px' }} />
+                <p>Generating cryptographically signed table token...</p>
               </div>
             ) : singleQr ? (
-              <div>
-                {/* High-res QR Display Card */}
-                <div style={{
-                  background: '#ffffff',
-                  border: '2px dashed var(--border)',
-                  borderRadius: 16,
-                  padding: 24,
-                  textAlign: 'center',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.04)'
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ 
+                  background: '#ffffff', 
+                  padding: 24, 
+                  borderRadius: 16, 
+                  display: 'inline-block', 
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                  marginBottom: 16,
+                  border: '1px solid var(--border)'
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: 6 }}>
                     TableFlow Dine
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 2 }}>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', marginBottom: 12 }}>
                     TABLE {singleTable.table_number}
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
-                    Capacity: {singleTable.capacity} Guests
-                  </div>
-
-                  {/* SVG QR Code Container */}
                   <div 
-                    style={{ width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ width: 200, height: 200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     dangerouslySetInnerHTML={{ __html: singleQr.svg }} 
                   />
-
-                  <div style={{ marginTop: 14, fontSize: 12, fontWeight: 600, color: '#0f172a' }}>
-                    Scan to Order & Call Service
-                  </div>
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                    Point phone camera or TableFlow mobile app
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 10 }}>
+                    Capacity: {singleTable.capacity} Guests
                   </div>
                 </div>
 
-                {/* Deep Link Payload */}
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    QR Payload URI
-                  </div>
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 8, 
-                    background: 'var(--bg-surface)', 
-                    border: '1px solid var(--border)', 
-                    borderRadius: 8, 
-                    padding: '8px 12px' 
-                  }}>
-                    <input 
-                      readOnly 
-                      value={singleQr.qrData} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'transparent', 
-                        border: 'none', 
-                        fontSize: 12, 
-                        color: 'var(--text-secondary)', 
-                        fontFamily: 'monospace',
-                        outline: 'none' 
-                      }} 
-                    />
-                    <button 
-                      onClick={handleCopyPayload}
-                      style={{ 
-                        background: 'transparent', 
-                        border: 'none', 
-                        cursor: 'pointer', 
-                        color: copied ? 'var(--success)' : 'var(--text-secondary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        fontSize: 12
-                      }}
-                      title="Copy QR Payload"
-                    >
-                      {copied ? <Check size={16} /> : <Copy size={16} />}
-                      <span>{copied ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-                  <button 
-                    className="btn btn-ghost" 
-                    onClick={() => handleDownloadPng(singleQr.svg, singleTable.table_number)}
-                    style={{ flex: 1, justifyContent: 'center' }}
-                  >
-                    <Download size={15} />
-                    <span>Download PNG</span>
-                  </button>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
                   <button 
                     className="btn btn-primary" 
                     onClick={() => triggerPrint(true)}
-                    style={{ flex: 1, justifyContent: 'center' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '9px 18px' }}
                   >
                     <Printer size={15} />
-                    <span>Print Card</span>
+                    <span>Print Table Tent</span>
+                  </button>
+                  <button 
+                    className="btn btn-ghost" 
+                    onClick={() => handleDownloadPng(singleQr.svg, singleTable.table_number)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '9px 18px' }}
+                  >
+                    <Download size={15} />
+                    <span>Save PNG</span>
+                  </button>
+                  <button 
+                    className="btn btn-ghost" 
+                    onClick={handleCopyPayload}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '9px 18px' }}
+                  >
+                    {copied ? <Check size={15} color="var(--success)" /> : <Copy size={15} />}
+                    <span>{copied ? 'Copied URL!' : 'Copy Link'}</span>
                   </button>
                 </div>
               </div>
-            ) : (
-              <p style={{ color: 'var(--danger)', textAlign: 'center' }}>Failed to load QR token for this table.</p>
-            )}
+            ) : null}
           </div>
         </div>
       )}
@@ -450,53 +1290,58 @@ export default function TablesPage() {
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
           background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div className="full-data-card" style={{ width: 920, maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)' }}>
-            {/* Modal Header */}
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="full-data-card" style={{ 
+            width: 860, 
+            maxWidth: '94vw', 
+            maxHeight: '90vh', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            padding: 24, 
+            background: 'var(--bg-card)', 
+            border: '1px solid var(--border)', 
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)' 
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 19 }}>Batch Table QR Print Sheet</h3>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-                  Printable table tent cards formatted with TableFlow branding, capacity, and cryptographic HMAC tokens.
+                <h3 style={{ margin: 0, fontSize: 19 }}>Batch Table QR Print Preview</h3>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                  Select tables to print standard high-contrast 4x6 table tents.
                 </p>
               </div>
-              <button onClick={() => setBatchModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Selection Bar */}
-            <div style={{ padding: '12px 24px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <button 
-                  onClick={handleSelectAll}
-                  style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}
-                >
-                  {selectedIds.size === batchItems.length ? <CheckSquare size={16} color="var(--primary)" /> : <Square size={16} />}
-                  <span>Select All ({batchItems.length} Tables)</span>
-                </button>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {selectedIds.size} of {batchItems.length} selected for printing
-                </span>
-              </div>
-
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <button 
                   className="btn btn-primary" 
-                  disabled={selectedIds.size === 0}
+                  disabled={selectedIds.size === 0 || batchLoading}
                   onClick={() => triggerPrint(false)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 18px' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px' }}
                 >
-                  <Printer size={16} />
-                  <span>Print Selected Cards ({selectedIds.size})</span>
+                  <Printer size={15} />
+                  <span>Print Selected ({selectedIds.size})</span>
+                </button>
+                <button 
+                  className="btn btn-ghost" 
+                  onClick={() => setBatchModalOpen(false)}
+                  style={{ padding: '6px', border: 'none' }}
+                >
+                  <X size={18} />
                 </button>
               </div>
             </div>
 
-            {/* Scrollable Preview Grid */}
-            <div style={{ padding: 24, overflowY: 'auto', flex: 1, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-primary)' }} onClick={handleSelectAll}>
+                {selectedIds.size === batchItems.length ? <CheckSquare size={16} color="var(--primary)" /> : <Square size={16} />}
+                <span>Select All Tables</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {selectedIds.size} of {batchItems.length} tables selected
+              </div>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, padding: '16px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 16 }}>
               {batchLoading ? (
-                <div style={{ gridColumn: '1 / -1', padding: '60px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <RefreshCw size={28} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                  <RefreshCw className="animate-spin" size={24} style={{ margin: '0 auto 12px' }} />
                   <p>Generating high-resolution table QR codes...</p>
                 </div>
               ) : batchItems.map(item => {
@@ -594,7 +1439,6 @@ export default function TablesPage() {
                 boxSizing: 'border-box'
               }}
             >
-              {/* Header Branding */}
               <div>
                 <div style={{ 
                   fontSize: 11, 
@@ -625,7 +1469,6 @@ export default function TablesPage() {
                 </div>
               </div>
 
-              {/* High Contrast QR Code */}
               <div style={{ 
                 margin: '18px 0', 
                 padding: '10px', 
@@ -640,7 +1483,6 @@ export default function TablesPage() {
                 />
               </div>
 
-              {/* Instructions & Callout */}
               <div style={{ width: '100%', borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', letterSpacing: '0.5px' }}>
                   SCAN TO BROWSE MENU & ORDER

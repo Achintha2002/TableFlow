@@ -128,12 +128,14 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               }
             }
 
+            final customName = (t['table_name'] ?? t['table_categories']?['name'] ?? '').toString();
             return {
               'id': 'T${t['table_number']}',
               'dbId': tableId,
               'isAvailable': isAvailable,
               'seats': t['capacity'],
               'isVIP': t['table_categories']?['name'] == 'VIP Lounge',
+              'name': customName,
             };
           }).toList();
           
@@ -649,6 +651,20 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                           ],
                         ),
                       ),
+                      if ((table['name'] ?? '').toString().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            table['name'],
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: textColor.withValues(alpha: 0.75),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                     ],
                   ),
                 ),

@@ -24,10 +24,31 @@ class _RestaurantStatusScreenState extends State<RestaurantStatusScreen> {
     {'position': 4, 'party_size': 2, 'wait_mins': 40},
   ];
 
+  RealtimeChannel? _tablesChannel;
+
   @override
   void initState() {
     super.initState();
     _loadStatusData();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    try {
+      _tablesChannel = Supabase.instance.client.channel('public:restaurant_status_tables')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'restaurant_tables',
+          callback: (payload) => _loadStatusData(),
+        ).subscribe();
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _tablesChannel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _loadStatusData() async {

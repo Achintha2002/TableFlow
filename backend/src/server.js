@@ -1713,6 +1713,175 @@ function verifyTableToken(token) {
 }
 
 // ==========================================
+// Table Management (CRUD) Endpoints
+// ==========================================
+
+// 1. Get all tables (with categories)
+app.get('/api/tables', async (req, res) => {
+  try {
+    const { data: tables, error } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('*, table_categories(id, name, description)')
+      .order('table_number', { ascending: true });
+
+    if (error) throw error;
+    res.json(tables || []);
+  } catch (error) {
+    console.error('Error fetching tables:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Add new table (CREATE)
+app.post('/api/tables', async (req, res) => {
+  try {
+    let { table_number, capacity, status, category_id, table_name } = req.body;
+
+    if (!table_number) {
+      const { data: maxTable } = await supabaseAdmin
+        .from('restaurant_tables')
+        .select('table_number')
+        .order('table_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      table_number = (maxTable?.table_number || 0) + 1;
+    } else {
+      table_number = parseInt(table_number, 10);
+    }
+
+    const newRecord = {
+      table_number,
+      capacity: parseInt(capacity, 10) || 4,
+      status: status || 'available'
+    };
+
+    if (category_id) newRecord.category_id = parseInt(category_id, 10);
+
+    let created = null;
+    if (table_name && table_name.trim()) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('restaurant_tables')
+          .insert({ ...newRecord, table_name: table_name.trim() })
+          .select('*, table_categories(id, name, description)')
+          .single();
+
+        if (!error && data) created = data;
+      } catch (colErr) {
+        console.warn('table_name column insert fallback:', colErr.message);
+      }
+    }
+
+    if (!created) {
+      const { data, error: insertErr } = await supabaseAdmin
+        .from('restaurant_tables')
+        .insert(newRecord)
+        .select('*, table_categories(id, name, description)')
+        .single();
+
+      if (insertErr) throw insertErr;
+      created = data;
+    }
+
+    res.status(201).json({
+      message: `Table #${table_number} added successfully`,
+      table: created
+    });
+  } catch (error) {
+    console.error('Error creating table:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Edit existing table (UPDATE)
+app.put('/api/tables/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { table_number, capacity, status, category_id, table_name } = req.body;
+
+    const updates = {};
+    if (table_number !== undefined) updates.table_number = parseInt(table_number, 10);
+    if (capacity !== undefined) updates.capacity = parseInt(capacity, 10);
+    if (status !== undefined) updates.status = status;
+    if (category_id !== undefined) updates.category_id = category_id ? parseInt(category_id, 10) : null;
+
+    let updated = null;
+    if (table_name !== undefined) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ ...updates, table_name: table_name ? table_name.trim() : null })
+          .eq('id', id)
+          .select('*, table_categories(id, name, description)')
+          .single();
+
+        if (!error && data) updated = data;
+      } catch (colErr) {
+        console.warn('table_name column update fallback:', colErr.message);
+      }
+    }
+
+    if (!updated) {
+      const { data, error: updateErr } = await supabaseAdmin
+        .from('restaurant_tables')
+        .update(updates)
+        .eq('id', id)
+        .select('*, table_categories(id, name, description)')
+        .single();
+
+      if (updateErr) throw updateErr;
+      updated = data;
+    }
+
+    res.json({
+      message: 'Table updated successfully',
+      table: updated
+    });
+  } catch (error) {
+    console.error('Error updating table:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Delete table (DELETE)
+app.delete('/api/tables/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: table, error: findErr } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findErr || !table) {
+      return res.status(404).json({ error: 'Table not found' });
+    }
+
+    try {
+      await supabaseAdmin.from('orders').update({ table_id: null }).eq('table_id', id);
+      await supabaseAdmin.from('reservations').update({ table_id: null }).eq('table_id', id);
+    } catch (_) {}
+
+    const { error: delErr } = await supabaseAdmin
+      .from('restaurant_tables')
+      .delete()
+      .eq('id', id);
+
+    if (delErr) throw delErr;
+
+    res.json({
+      message: `Table #${table.table_number} deleted successfully`,
+      id
+    });
+  } catch (error) {
+    console.error('Error deleting table:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
 // Table Availability Check (Waitlist Gate)
 // GET /api/tables/availability?pax=N
 // Returns: { allOccupied: bool, availableCount: int, availableTables: [...] }
