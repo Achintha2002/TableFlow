@@ -1262,7 +1262,21 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
 
 // ==========================================
 // Waitlist (Queue) Endpoints
-// ==========================================
+// Get all queue entries for Admin / Host Desk
+app.get('/api/queue', async (req, res) => {
+  try {
+    const { data: entries, error } = await supabaseAdmin
+      .from('queue_entries')
+      .select('*, users(full_name, phone_number)')
+      .order('joined_at', { ascending: true });
+
+    if (error) throw error;
+    res.json(entries || []);
+  } catch (error) {
+    console.error('Error fetching admin queue entries:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Public queue aggregate status (privacy-safe: only returns count of waiting people)
 app.get('/api/queue/public-status', async (req, res) => {

@@ -86,19 +86,38 @@ export default function QueuePage() {
   async function fetchQueueAndTables(isManual = false) {
     if (isManual) setRefreshing(true);
     try {
-      const [queueRes, tablesRes] = await Promise.all([
-        supabase
-          .from('queue_entries')
-          .select('*, users(full_name, phone_number, email)')
-          .order('joined_at', { ascending: true }),
-        supabase
-          .from('restaurant_tables')
-          .select('*')
-          .order('table_number', { ascending: true })
-      ]);
+      let queueItems = null;
 
-      if (queueRes.data) setData(queueRes.data);
-      if (tablesRes.data) setTables(tablesRes.data);
+      // 1. Try Backend API first (bypasses RLS with supabaseAdmin)
+      try {
+        const res = await fetch(`${API_BASE}/api/queue`);
+        if (res.ok) {
+          queueItems = await res.json();
+        }
+      } catch (err) {
+        console.warn('Backend /api/queue failed, trying direct Supabase:', err);
+      }
+
+      // 2. Fallback to Supabase directly (without email column to avoid permission issues)
+      if (!queueItems) {
+        const { data: qData, error: qErr } = await supabase
+          .from('queue_entries')
+          .select('*, users(full_name, phone_number)')
+          .order('joined_at', { ascending: true });
+
+        if (qErr) console.error('Supabase queue fetch error:', qErr);
+        if (qData) queueItems = qData;
+      }
+
+      const { data: tData, error: tErr } = await supabase
+        .from('restaurant_tables')
+        .select('*')
+        .order('table_number', { ascending: true });
+
+      if (tErr) console.error('Supabase tables fetch error:', tErr);
+
+      if (queueItems) setData(queueItems);
+      if (tData) setTables(tData);
     } catch (e) {
       console.error('Error fetching queue or tables:', e);
     } finally {
@@ -108,31 +127,7 @@ export default function QueuePage() {
   }
 
   useEffect(() => {
-    let ignore = false;
-    async function load() {
-      try {
-        const [queueRes, tablesRes] = await Promise.all([
-          supabase
-            .from('queue_entries')
-            .select('*, users(full_name, phone_number, email)')
-            .order('joined_at', { ascending: true }),
-          supabase
-            .from('restaurant_tables')
-            .select('*')
-            .order('table_number', { ascending: true })
-        ]);
-
-        if (!ignore) {
-          if (queueRes.data) setData(queueRes.data);
-          if (tablesRes.data) setTables(tablesRes.data);
-          setLoading(false);
-        }
-      } catch (e) {
-        if (!ignore) setLoading(false);
-      }
-    }
-
-    load();
+    fetchQueueAndTables();
 
     const queueChannel = supabase.channel('admin_queue_realtime_full').on('postgres_changes',
       { event: '*', schema: 'public', table: 'queue_entries' },
@@ -145,7 +140,6 @@ export default function QueuePage() {
     ).subscribe();
 
     return () => {
-      ignore = true;
       supabase.removeChannel(queueChannel);
       supabase.removeChannel(tablesChannel);
     };
@@ -405,20 +399,22 @@ export default function QueuePage() {
     let totalWaitingPax = 0;
 
     data.forEach(q => {
-      if (q.status === 'waiting') {
+      const st = (q.status || '').toLowerCase().trim();
+      const numPax = parseInt(q.pax) || 2;
+      if (st === 'waiting') {
         waiting++;
-        totalWaitingPax += q.pax || 2;
-      } else if (q.status === 'notified') {
+        totalWaitingPax += numPax;
+      } else if (st === 'notified') {
         notified++;
-      } else if (q.status === 'seated') {
+      } else if (st === 'seated') {
         seated++;
-      } else if (q.status === 'cancelled' || q.status === 'no_show') {
+      } else if (st === 'cancelled' || st === 'no_show') {
         cancelled++;
       }
     });
 
     const estAvgWait = waiting > 0 ? Math.round((waiting * 6) + 5) : 0;
-    const availableTablesCount = tables.filter(t => t.status === 'available').length;
+    const availableTablesCount = tables.filter(t => (t.status || '').toLowerCase() === 'available').length;
     const totalTablesCount = tables.length || 24;
 
     return {
@@ -438,15 +434,19 @@ export default function QueuePage() {
     let list = [...data];
 
     // Status filter
-    if (statusFilter === 'WAITING') list = list.filter(q => q.status === 'waiting');
-    else if (statusFilter === 'NOTIFIED') list = list.filter(q => q.status === 'notified');
-    else if (statusFilter === 'SEATED') list = list.filter(q => q.status === 'seated');
-    else if (statusFilter === 'CLOSED') list = list.filter(q => q.status === 'cancelled' || q.status === 'no_show');
+    const activeFilter = (statusFilter || 'ALL').toUpperCase();
+    if (activeFilter === 'WAITING') list = list.filter(q => (q.status || '').toLowerCase() === 'waiting');
+    else if (activeFilter === 'NOTIFIED') list = list.filter(q => (q.status || '').toLowerCase() === 'notified');
+    else if (activeFilter === 'SEATED') list = list.filter(q => (q.status || '').toLowerCase() === 'seated');
+    else if (activeFilter === 'CLOSED') list = list.filter(q => {
+      const s = (q.status || '').toLowerCase();
+      return s === 'cancelled' || s === 'no_show';
+    });
 
     // Pax filter
-    if (paxFilter === '1-2') list = list.filter(q => q.pax <= 2);
-    else if (paxFilter === '3-4') list = list.filter(q => q.pax === 3 || q.pax === 4);
-    else if (paxFilter === '5+') list = list.filter(q => q.pax >= 5);
+    if (paxFilter === '1-2') list = list.filter(q => (parseInt(q.pax) || 2) <= 2);
+    else if (paxFilter === '3-4') list = list.filter(q => (parseInt(q.pax) || 2) === 3 || (parseInt(q.pax) || 2) === 4);
+    else if (paxFilter === '5+') list = list.filter(q => (parseInt(q.pax) || 2) >= 5);
 
     // Search query
     if (searchQuery.trim()) {
