@@ -1547,6 +1547,125 @@ app.post('/api/queue/:id/assign-table', async (req, res) => {
   }
 });
 
+// Update Queue Entry (Full CRUD Update)
+app.put('/api/queue/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { guest_name, phone_number, pax, estimated_wait_time_mins, status } = req.body;
+
+    // 1. Fetch current entry
+    const { data: currentEntry, error: fetchErr } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id, pax, estimated_wait_time_mins, status')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !currentEntry) {
+      return res.status(404).json({ error: 'Queue entry not found' });
+    }
+
+    const updates = {};
+    if (pax !== undefined) updates.pax = parseInt(pax) || currentEntry.pax;
+    if (estimated_wait_time_mins !== undefined) {
+      updates.estimated_wait_time_mins = parseInt(estimated_wait_time_mins) || currentEntry.estimated_wait_time_mins;
+    }
+    if (status !== undefined) updates.status = status;
+
+    // 2. Update queue_entries
+    const { error: updateErr } = await supabaseAdmin
+      .from('queue_entries')
+      .update(updates)
+      .eq('id', id);
+
+    if (updateErr) throw updateErr;
+
+    // 3. Update associated user if guest_name or phone_number changed
+    if (currentEntry.user_id && (guest_name !== undefined || phone_number !== undefined)) {
+      const userUpdates = {};
+      if (guest_name !== undefined) userUpdates.full_name = guest_name.trim();
+      if (phone_number !== undefined) userUpdates.phone_number = phone_number.trim() || null;
+
+      await supabaseAdmin
+        .from('users')
+        .update(userUpdates)
+        .eq('id', currentEntry.user_id);
+    } else if (!currentEntry.user_id && (guest_name || phone_number)) {
+      // Create user record if didn't exist
+      const guestEmail = `guest_${Date.now()}_${Math.floor(Math.random() * 1000)}@tableflow.local`;
+      const { data: newUser } = await supabaseAdmin
+        .from('users')
+        .insert({
+          email: guestEmail,
+          full_name: guest_name || 'Walk-In Guest',
+          phone_number: phone_number || null,
+          role: 'customer'
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (newUser?.id) {
+        await supabaseAdmin
+          .from('queue_entries')
+          .update({ user_id: newUser.id })
+          .eq('id', id);
+      }
+    }
+
+    // 4. Return refreshed entry
+    const { data: refreshed, error: refErr } = await supabaseAdmin
+      .from('queue_entries')
+      .select('*, users(full_name, phone_number)')
+      .eq('id', id)
+      .single();
+
+    if (refErr) throw refErr;
+
+    res.json({
+      message: 'Queue entry updated successfully',
+      entry: refreshed
+    });
+  } catch (error) {
+    console.error('Error updating queue entry:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete Queue Entry (Full CRUD Delete)
+app.delete('/api/queue/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if entry exists
+    const { data: existing, error: checkErr } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, user_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (checkErr) throw checkErr;
+    if (!existing) {
+      return res.status(404).json({ error: 'Queue entry not found' });
+    }
+
+    // Delete queue entry
+    const { error: deleteErr } = await supabaseAdmin
+      .from('queue_entries')
+      .delete()
+      .eq('id', id);
+
+    if (deleteErr) throw deleteErr;
+
+    res.json({
+      message: 'Queue entry deleted successfully',
+      id
+    });
+  } catch (error) {
+    console.error('Error deleting queue entry:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // ==========================================
 // Signed Table QR Code Endpoints
 // ==========================================
