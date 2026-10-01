@@ -9,6 +9,7 @@ import '../../utils/auth_guard.dart';
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/avatar_service.dart';
+import '../../widgets/app_avatar.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -82,13 +83,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
-            final ImageProvider? avatarProvider = removeAvatar
-                ? null
-                : AvatarService.getImageProvider(
-                    avatarUrl: _avatarUrl,
-                    localBytes: newAvatar?.bytes,
-                  );
-
             return AlertDialog(
               backgroundColor: AppTheme.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -140,23 +134,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ],
                             ),
-                            child: CircleAvatar(
+                            child: AppAvatar(
+                              avatarUrl: removeAvatar ? null : _avatarUrl,
+                              localBytes: newAvatar?.bytes,
+                              name: nameController.text.trim(),
                               radius: 42,
                               backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                              backgroundImage: avatarProvider,
-                              child: avatarProvider != null
-                                  ? null
-                                  : Text(
-                                      nameController.text.trim().isNotEmpty
-                                          ? nameController.text.trim()[0].toUpperCase()
-                                          : 'U',
-                                      style: const TextStyle(
-                                        fontSize: 32,
-                                        fontFamily: 'Playfair Display',
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.primary,
-                                      ),
-                                    ),
+                              textColor: AppTheme.primary,
+                              fontSize: 32,
                             ),
                           ),
                           Container(
@@ -326,7 +311,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     
     final isGuest = Supabase.instance.client.auth.currentUser == null;
-    final ImageProvider? headerAvatarProvider = AvatarService.getImageProvider(avatarUrl: _avatarUrl);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -390,22 +374,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.3), blurRadius: 20)
                                 ],
                               ),
-                              child: CircleAvatar(
+                              child: AppAvatar(
+                                avatarUrl: _avatarUrl,
+                                name: _fullName,
                                 radius: 50,
+                                isGuest: isGuest,
                                 backgroundColor: AppTheme.white.withValues(alpha: 0.9),
-                                backgroundImage: headerAvatarProvider,
-                                child: headerAvatarProvider != null
-                                    ? null
-                                    : isGuest
-                                        ? const Icon(Icons.person_outline_rounded, size: 48, color: AppTheme.primary)
-                                        : Text(
-                                            _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
-                                            style: const TextStyle(
-                                              fontSize: 40,
-                                              fontFamily: 'Playfair Display',
-                                              color: AppTheme.primary,
-                                            ),
-                                          ),
+                                textColor: AppTheme.primary,
+                                fontSize: 40,
                               ),
                             ),
                           ),

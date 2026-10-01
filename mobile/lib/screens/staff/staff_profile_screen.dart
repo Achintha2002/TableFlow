@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/supabase_service.dart';
-import '../../services/avatar_service.dart';
+import '../../widgets/app_avatar.dart';
 
 class StaffProfileScreen extends StatefulWidget {
   const StaffProfileScreen({super.key});
@@ -81,21 +81,13 @@ class _StaffProfileScreenState extends State<StaffProfileScreen> {
                 children: [
                   Stack(
                     children: [
-                      CircleAvatar(
+                      AppAvatar(
+                        avatarUrl: _avatarUrl,
+                        name: _staffName,
                         radius: 44,
                         backgroundColor: const Color(0xFFB87F5C).withValues(alpha: 0.15),
-                        backgroundImage: AvatarService.getImageProvider(avatarUrl: _avatarUrl),
-                        child: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
-                            ? null
-                            : Text(
-                                _staffName.isNotEmpty ? _staffName[0] : 'S',
-                                style: const TextStyle(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFB87F5C),
-                                  fontFamily: 'Playfair Display',
-                                ),
-                              ),
+                        textColor: const Color(0xFFB87F5C),
+                        fontSize: 36,
                       ),
                       Positioned(
                         bottom: 0,

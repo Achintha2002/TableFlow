@@ -59,7 +59,7 @@ class AppAvatar extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => fallback(),
+        errorBuilder: (context, error, stackTrace) => fallback(),
       );
     } else if (avatarUrl != null && avatarUrl!.isNotEmpty) {
       if (avatarUrl!.startsWith('data:image')) {
@@ -72,7 +72,7 @@ class AppAvatar extends StatelessWidget {
               width: size,
               height: size,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => fallback(),
+              errorBuilder: (context, error, stackTrace) => fallback(),
             );
           } catch (_) {
             content = fallback();
@@ -86,7 +86,7 @@ class AppAvatar extends StatelessWidget {
           width: size,
           height: size,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback(),
+          errorBuilder: (context, error, stackTrace) => fallback(),
         );
       }
     } else {

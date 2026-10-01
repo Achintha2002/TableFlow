@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 import '../../services/avatar_service.dart';
+import '../../widgets/app_avatar.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -316,19 +317,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   ),
                                 ],
                               ),
-                              child: CircleAvatar(
+                              child: AppAvatar(
+                                localBytes: _pickedAvatar?.bytes,
+                                name: _nameController.text.trim(),
                                 radius: 46,
                                 backgroundColor: AppTheme.white,
-                                backgroundImage: _pickedAvatar != null
-                                    ? MemoryImage(_pickedAvatar!.bytes)
-                                    : null,
-                                child: _pickedAvatar == null
-                                    ? const Icon(
-                                        Icons.person_add_alt_1_rounded,
-                                        size: 42,
-                                        color: AppTheme.primary,
-                                      )
-                                    : null,
+                                textColor: AppTheme.primary,
                               ),
                             ),
                             Container(
