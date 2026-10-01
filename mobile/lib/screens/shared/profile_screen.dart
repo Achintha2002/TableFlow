@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../widgets/safe_backdrop_filter.dart';
@@ -76,6 +77,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     PickedAvatar? newAvatar;
     bool removeAvatar = false;
     bool isSaving = false;
+    String? nameError;
+    String? phoneError;
 
     showDialog(
       context: context,
@@ -197,25 +200,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       controller: nameController,
                       decoration: InputDecoration(
                         labelText: 'Full Name',
+                        hintText: 'e.g. John Doe',
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        errorText: nameError,
                         filled: true,
                         fillColor: AppTheme.background,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red)),
                       ),
                       cursorColor: AppTheme.primary,
                       enabled: !isSaving,
+                      onChanged: (_) {
+                        if (nameError != null) setDialogState(() => nameError = null);
+                      },
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: phoneController,
                       decoration: InputDecoration(
                         labelText: 'Phone Number',
+                        hintText: 'e.g. 0712345678',
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        counterText: '${phoneController.text.replaceAll(RegExp(r'\D'), '').length}/10',
+                        counterStyle: TextStyle(
+                          fontSize: 11,
+                          color: phoneController.text.replaceAll(RegExp(r'\D'), '').length == 10
+                              ? Colors.green.shade700
+                              : Colors.grey.shade600,
+                          fontWeight: phoneController.text.replaceAll(RegExp(r'\D'), '').length == 10
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                        errorText: phoneError,
                         filled: true,
                         fillColor: AppTheme.background,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red)),
                       ),
                       keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
                       cursorColor: AppTheme.primary,
                       enabled: !isSaving,
+                      onChanged: (_) {
+                        setDialogState(() {
+                          if (phoneError != null) phoneError = null;
+                        });
+                      },
                     ),
                     if (isSaving) ...[
                       const SizedBox(height: 16),
@@ -249,6 +290,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: isSaving
                       ? null
                       : () async {
+                          final phoneDigits = phoneController.text.replaceAll(RegExp(r'\D'), '');
+                          final nameVal = nameController.text.trim();
+
+                          bool hasError = false;
+                          String? newNameErr;
+                          String? newPhoneErr;
+
+                          if (nameVal.isEmpty) {
+                            newNameErr = 'Full name is required';
+                            hasError = true;
+                          } else if (nameVal.length < 2) {
+                            newNameErr = 'Name must be at least 2 characters';
+                            hasError = true;
+                          }
+
+                          if (phoneDigits.isEmpty) {
+                            newPhoneErr = 'Phone number is required';
+                            hasError = true;
+                          } else if (phoneDigits.length != 10) {
+                            newPhoneErr = 'Phone number must be exactly 10 digits';
+                            hasError = true;
+                          }
+
+                          if (hasError) {
+                            setDialogState(() {
+                              nameError = newNameErr;
+                              phoneError = newPhoneErr;
+                            });
+                            return;
+                          }
+
                           setDialogState(() => isSaving = true);
                           try {
                             String? uploadedUrl = _avatarUrl;

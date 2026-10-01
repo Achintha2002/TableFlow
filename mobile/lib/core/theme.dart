@@ -113,6 +113,15 @@ class AppTheme {
           ),
         ),
       ),
+
+      // Input Decoration (Placeholders & Hints)
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: GoogleFonts.inter(
+          color: const Color(0xFFBDBDBD),
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+        ),
+      ),
     );
   }
 
