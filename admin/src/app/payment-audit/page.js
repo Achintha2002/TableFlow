@@ -51,6 +51,46 @@ export default function PaymentAuditPage() {
     setTimeout(() => setToast(null), 3500);
   }
 
+  // Live timer tick every 30s to keep elapsed time accurate in real-time
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  function formatOrderTime(timestamp) {
+    if (!timestamp) return { time: '—', ago: '—', full: '' };
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return { time: timestamp, ago: '', full: '' };
+
+    // Real-time clock format (e.g. 04:38 PM)
+    const time = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    // Accurate elapsed time from now
+    const elapsedMinutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+    let ago = 'Just now';
+    if (elapsedMinutes >= 60 * 24) {
+      ago = `${Math.floor(elapsedMinutes / (60 * 24))}d ago`;
+    } else if (elapsedMinutes >= 60) {
+      ago = `${Math.floor(elapsedMinutes / 60)}h ago`;
+    } else if (elapsedMinutes >= 1) {
+      ago = `${elapsedMinutes}m ago`;
+    }
+
+    return {
+      time,
+      ago,
+      full: date.toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'medium'
+      })
+    };
+  }
+
   function notifyOrdersUpdated() {
     try {
       if (typeof window !== 'undefined') {
@@ -769,7 +809,7 @@ export default function PaymentAuditPage() {
                 const isPending = isOrderPending(order);
                 const isRejected = isOrderRejected(order);
                 const isApproved = isOrderApproved(order);
-                const elapsedMin = Math.round(((order.payment_transaction?.created_at ? new Date(order.payment_transaction.created_at).getTime() : new Date().getTime()) - new Date(order.created_at).getTime()) / 60000);
+                const timing = formatOrderTime(order.created_at);
 
                 return (
                   <tr 
@@ -786,8 +826,18 @@ export default function PaymentAuditPage() {
                       >
                         #{String(order.id).length > 12 ? `${String(order.id).slice(0, 8)}...` : order.id}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                        <Clock size={11} /> {elapsedMin < 60 ? `${elapsedMin}m ago` : `${Math.floor(elapsedMin / 60)}h ago`}
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <span 
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600, color: '#0f172a' }}
+                          title={`Order Placed: ${timing.full} (${timing.ago})`}
+                        >
+                          <Clock size={11} style={{ color: '#b87f5c' }} />
+                          {timing.time}
+                        </span>
+                        <span style={{ color: '#cbd5e1' }}>•</span>
+                        <span style={{ color: '#64748b' }} title={timing.full}>
+                          {timing.ago}
+                        </span>
                         {order.restaurant_tables && (
                           <span style={{ marginLeft: '2px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', padding: '1px 5px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600 }}>
                             T-{order.restaurant_tables.table_number}
