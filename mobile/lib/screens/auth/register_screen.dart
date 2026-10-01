@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import '../../services/avatar_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -22,9 +23,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  // Profile photo
+  PickedAvatar? _pickedAvatar;
+
   // Password strength tracking
   int _passwordStrength = 0; // 0–4
   String _passwordStrengthLabel = '';
+
+  Future<void> _pickAvatar() async {
+    final picked = await AvatarService.showPhotoSourcePicker(
+      context,
+      hasExistingPhoto: _pickedAvatar != null,
+    );
+    if (picked != null) {
+      if (picked.fileName == '__remove__') {
+        setState(() => _pickedAvatar = null);
+      } else {
+        setState(() => _pickedAvatar = picked);
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -110,11 +128,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
     try {
+      String? avatarUrl;
+      if (_pickedAvatar != null && _pickedAvatar!.bytes.isNotEmpty) {
+        avatarUrl = await AvatarService.uploadAvatar(
+          bytes: _pickedAvatar!.bytes,
+          fileName: _pickedAvatar!.fileName,
+        );
+      }
+
       await SupabaseService.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
+        avatarUrl: avatarUrl,
       );
       // Navigate to Onboarding for new users
       if (mounted) context.go('/onboarding');
@@ -263,7 +290,99 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   'Join us for exclusive priority seating and premium dining rewards.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 24),
+
+                // ── Profile Photo Picker ─────────────────────────────────
+                Center(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _isLoading ? null : _pickAvatar,
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppTheme.primary.withValues(alpha: 0.3),
+                                  width: 3,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.secondary.withValues(alpha: 0.15),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 46,
+                                backgroundColor: AppTheme.white,
+                                backgroundImage: _pickedAvatar != null
+                                    ? MemoryImage(_pickedAvatar!.bytes)
+                                    : null,
+                                child: _pickedAvatar == null
+                                    ? const Icon(
+                                        Icons.person_add_alt_1_rounded,
+                                        size: 42,
+                                        color: AppTheme.primary,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppTheme.white, width: 2),
+                              ),
+                              child: const Icon(
+                                Icons.camera_alt_rounded,
+                                color: AppTheme.white,
+                                size: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _isLoading ? null : _pickAvatar,
+                        icon: Icon(
+                          _pickedAvatar != null ? Icons.check_circle_outline : Icons.add_a_photo_outlined,
+                          size: 15,
+                          color: _pickedAvatar != null ? Colors.green.shade700 : AppTheme.primary,
+                        ),
+                        label: Text(
+                          _pickedAvatar != null ? 'Change Profile Photo' : 'Add Profile Photo (Optional)',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _pickedAvatar != null ? Colors.green.shade700 : AppTheme.primary,
+                          ),
+                        ),
+                      ),
+                      if (_pickedAvatar != null)
+                        TextButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => setState(() => _pickedAvatar = null),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(50, 24),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text(
+                            'Remove Photo',
+                            style: TextStyle(fontSize: 11.5, color: Colors.red),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
 
                 // ── Full Name ──────────────────────────────────────────────
                 _buildLabel('Full Name'),

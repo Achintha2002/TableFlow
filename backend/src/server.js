@@ -59,6 +59,49 @@ app.post('/api/admin/upload-image', upload.single('image'), async (req, res) => 
   }
 });
 
+// User Avatar Upload
+app.post('/api/upload-avatar', upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No avatar file provided' });
+    }
+
+    const client = supabaseAdmin || supabase;
+    try {
+      const { data: buckets } = await client.storage.listBuckets();
+      if (!buckets || !buckets.some(b => b.name === 'avatars')) {
+        await client.storage.createBucket('avatars', { public: true });
+      }
+    } catch (bErr) {
+      console.warn('Storage bucket check warning:', bErr.message);
+    }
+
+    const fileBuffer = req.file.buffer;
+    const originalName = req.file.originalname || 'avatar.jpg';
+    const fileExt = originalName.split('.').pop() || 'jpg';
+    const fileName = `avatar_${Date.now()}_${Math.round(Math.random() * 1000)}.${fileExt}`;
+
+    const { data, error } = await client.storage
+      .from('avatars')
+      .upload(fileName, fileBuffer, {
+        contentType: req.file.mimetype || 'image/jpeg',
+        cacheControl: '3600',
+        upsert: true
+      });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = client.storage
+      .from('avatars')
+      .getPublicUrl(fileName);
+
+    res.json({ url: publicUrl });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Basic health check route
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'TableFlow API is running!' });

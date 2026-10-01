@@ -59,6 +59,7 @@ class SupabaseService {
     required String password,
     required String fullName,
     required String phone,
+    String? avatarUrl,
   }) async {
     // 1. Pre-flight check: Verify database connection is alive
     final isConnected = await isDatabaseConnected();
@@ -69,10 +70,18 @@ class SupabaseService {
     }
 
     // 2. Perform authentication signup
+    final dataMap = <String, dynamic>{
+      'full_name': fullName,
+      'phone': phone,
+    };
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      dataMap['avatar_url'] = avatarUrl;
+    }
+
     final response = await _client.auth.signUp(
       email: email,
       password: password,
-      data: {'full_name': fullName, 'phone': phone},
+      data: dataMap,
     );
 
     final user = response.user;
@@ -84,13 +93,24 @@ class SupabaseService {
 
     // 3. Verify and guarantee that the user record exists in public.users
     try {
-      await _client.from('users').upsert({
+      final userRecord = <String, dynamic>{
         'id': user.id,
         'email': email,
         'full_name': fullName,
         'phone_number': phone,
         'role': 'customer',
-      }).timeout(const Duration(seconds: 5));
+      };
+      if (avatarUrl != null && avatarUrl.isNotEmpty) {
+        userRecord['avatar_url'] = avatarUrl;
+      }
+
+      try {
+        await _client.from('users').upsert(userRecord).timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // If avatar_url column does not exist yet in public.users, upsert without it
+        userRecord.remove('avatar_url');
+        await _client.from('users').upsert(userRecord).timeout(const Duration(seconds: 5));
+      }
     } catch (dbError) {
       // If the database write/connect fails, roll back local session and abort
       await _client.auth.signOut();
@@ -259,12 +279,40 @@ class SupabaseService {
     final userId = currentUser?.id;
     if (userId == null) return null;
 
-    final response = await _client
-        .from('users')
-        .select()
-        .eq('id', userId)
-        .maybeSingle();
-    return response;
+    Map<String, dynamic>? response;
+    try {
+      response = await _client
+          .from('users')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+    } catch (e) {
+      debugPrint('getUserProfile query error: $e');
+    }
+
+    final metaAvatar = currentUser?.userMetadata?['avatar_url'] as String?;
+    final metaName = currentUser?.userMetadata?['full_name'] as String?;
+    final metaPhone = currentUser?.userMetadata?['phone'] as String?;
+
+    if (response != null) {
+      final mutable = Map<String, dynamic>.from(response);
+      if ((mutable['avatar_url'] == null || (mutable['avatar_url'] as String).isEmpty) &&
+          metaAvatar != null &&
+          metaAvatar.isNotEmpty) {
+        mutable['avatar_url'] = metaAvatar;
+      }
+      return mutable;
+    } else if (currentUser != null) {
+      return {
+        'id': userId,
+        'email': currentUser!.email ?? '',
+        'full_name': metaName ?? 'Member',
+        'phone_number': metaPhone ?? '',
+        'avatar_url': metaAvatar,
+        'loyalty_tier': 'Bronze',
+      };
+    }
+    return null;
   }
 
   /// Get accessibility settings
@@ -290,14 +338,49 @@ class SupabaseService {
   static Future<void> updateUserProfile({
     required String fullName,
     required String phone,
+    String? avatarUrl,
   }) async {
     final userId = currentUser?.id;
     if (userId == null) return;
 
-    await _client
-        .from('users')
-        .update({'full_name': fullName, 'phone_number': phone})
-        .eq('id', userId);
+    // 1. Update Auth metadata
+    final metadata = <String, dynamic>{
+      'full_name': fullName,
+      'phone': phone,
+    };
+    if (avatarUrl != null) {
+      metadata['avatar_url'] = avatarUrl;
+    }
+    try {
+      await _client.auth.updateUser(
+        UserAttributes(data: metadata),
+      );
+    } catch (e) {
+      debugPrint('Error updating auth metadata: $e');
+    }
+
+    // 2. Update public.users
+    final updateData = <String, dynamic>{
+      'full_name': fullName,
+      'phone_number': phone,
+    };
+    if (avatarUrl != null) {
+      updateData['avatar_url'] = avatarUrl;
+    }
+
+    try {
+      await _client.from('users').update(updateData).eq('id', userId);
+    } catch (e) {
+      // If avatar_url column doesn't exist in public.users yet, fallback
+      if (avatarUrl != null) {
+        try {
+          await _client
+              .from('users')
+              .update({'full_name': fullName, 'phone_number': phone})
+              .eq('id', userId);
+        } catch (_) {}
+      }
+    }
   }
 
   /// Update accessibility settings

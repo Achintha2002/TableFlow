@@ -8,6 +8,7 @@ import '../../utils/auth_guard.dart';
 
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/avatar_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -22,6 +23,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _email = '';
   String _phone = '';
   String _loyaltyTier = 'Bronze';
+  String? _avatarUrl;
   
   bool _promoEmails = true;
 
@@ -40,6 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _email = 'Browsing as Guest';
           _phone = '';
           _loyaltyTier = 'Guest';
+          _avatarUrl = null;
           _isLoading = false;
         });
       }
@@ -55,7 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _email = profile?['email'] ?? '';
           _phone = profile?['phone_number'] ?? '';
           _loyaltyTier = profile?['loyalty_tier'] ?? 'Bronze';
-          
+          _avatarUrl = profile?['avatar_url'] as String?;
           _isLoading = false;
         });
       }
@@ -69,77 +72,248 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showEditProfileDialog() {
     final nameController = TextEditingController(text: _fullName);
     final phoneController = TextEditingController(text: _phone);
-    
+    PickedAvatar? newAvatar;
+    bool removeAvatar = false;
+    bool isSaving = false;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text('Edit Profile', style: TextStyle(fontFamily: 'Playfair Display', fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Full Name',
-                  filled: true,
-                  fillColor: AppTheme.background,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-                cursorColor: AppTheme.primary,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: phoneController,
-                decoration: InputDecoration(
-                  labelText: 'Phone Number',
-                  filled: true,
-                  fillColor: AppTheme.background,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-                keyboardType: TextInputType.phone,
-                cursorColor: AppTheme.primary,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: AppTheme.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () async {
-                try {
-                  await SupabaseService.updateUserProfile(
-                    fullName: nameController.text,
-                    phone: phoneController.text,
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final ImageProvider? avatarProvider = removeAvatar
+                ? null
+                : AvatarService.getImageProvider(
+                    avatarUrl: _avatarUrl,
+                    localBytes: newAvatar?.bytes,
                   );
-                  if (context.mounted) {
-                    if (mounted) {
-                      setState(() {
-                        _fullName = nameController.text;
-                        _phone = phoneController.text;
-                      });
-                    }
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Profile updated successfully'), behavior: SnackBarBehavior.floating),
-                    );
-                  }
-                } catch (e) {
-                  debugPrint('Error updating profile: $e');
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
+
+            return AlertDialog(
+              backgroundColor: AppTheme.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: const Text(
+                'Edit Profile',
+                style: TextStyle(fontFamily: 'Playfair Display', fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Profile Photo Avatar with Edit Badge
+                    GestureDetector(
+                      onTap: isSaving
+                          ? null
+                          : () async {
+                              final picked = await AvatarService.showPhotoSourcePicker(
+                                dialogCtx,
+                                hasExistingPhoto: (!removeAvatar && (_avatarUrl != null && _avatarUrl!.isNotEmpty)) ||
+                                    (newAvatar != null && newAvatar!.bytes.isNotEmpty),
+                              );
+                              if (picked != null) {
+                                if (picked.fileName == '__remove__') {
+                                  setDialogState(() {
+                                    newAvatar = null;
+                                    removeAvatar = true;
+                                  });
+                                } else {
+                                  setDialogState(() {
+                                    newAvatar = picked;
+                                    removeAvatar = false;
+                                  });
+                                }
+                              }
+                            },
+                      child: Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 42,
+                              backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                              backgroundImage: avatarProvider,
+                              child: avatarProvider != null
+                                  ? null
+                                  : Text(
+                                      nameController.text.trim().isNotEmpty
+                                          ? nameController.text.trim()[0].toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                        fontSize: 32,
+                                        fontFamily: 'Playfair Display',
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppTheme.white, width: 2),
+                            ),
+                            child: const Icon(Icons.camera_alt_rounded, color: AppTheme.white, size: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final picked = await AvatarService.showPhotoSourcePicker(
+                                dialogCtx,
+                                hasExistingPhoto: (!removeAvatar && (_avatarUrl != null && _avatarUrl!.isNotEmpty)) ||
+                                    (newAvatar != null && newAvatar!.bytes.isNotEmpty),
+                              );
+                              if (picked != null) {
+                                if (picked.fileName == '__remove__') {
+                                  setDialogState(() {
+                                    newAvatar = null;
+                                    removeAvatar = true;
+                                  });
+                                } else {
+                                  setDialogState(() {
+                                    newAvatar = picked;
+                                    removeAvatar = false;
+                                  });
+                                }
+                              }
+                            },
+                      icon: const Icon(Icons.photo_camera, size: 15, color: AppTheme.primary),
+                      label: Text(
+                        (newAvatar != null || (_avatarUrl != null && _avatarUrl!.isNotEmpty && !removeAvatar))
+                            ? 'Change Photo'
+                            : 'Upload Photo',
+                        style: const TextStyle(
+                          color: AppTheme.primary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        filled: true,
+                        fillColor: AppTheme.background,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      cursorColor: AppTheme.primary,
+                      enabled: !isSaving,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: phoneController,
+                      decoration: InputDecoration(
+                        labelText: 'Phone Number',
+                        filled: true,
+                        fillColor: AppTheme.background,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      ),
+                      keyboardType: TextInputType.phone,
+                      cursorColor: AppTheme.primary,
+                      enabled: !isSaving,
+                    ),
+                    if (isSaving) ...[
+                      const SizedBox(height: 16),
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+                          ),
+                          SizedBox(width: 10),
+                          Text('Saving profile...', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.secondary)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          setDialogState(() => isSaving = true);
+                          try {
+                            String? uploadedUrl = _avatarUrl;
+                            if (removeAvatar) {
+                              uploadedUrl = '';
+                            } else if (newAvatar != null && newAvatar!.bytes.isNotEmpty) {
+                              uploadedUrl = await AvatarService.uploadAvatar(
+                                bytes: newAvatar!.bytes,
+                                fileName: newAvatar!.fileName,
+                                userId: Supabase.instance.client.auth.currentUser?.id,
+                              );
+                            }
+
+                            await SupabaseService.updateUserProfile(
+                              fullName: nameController.text.trim(),
+                              phone: phoneController.text.trim(),
+                              avatarUrl: uploadedUrl,
+                            );
+
+                            if (context.mounted) {
+                              if (mounted) {
+                                setState(() {
+                                  _fullName = nameController.text.trim();
+                                  _phone = phoneController.text.trim();
+                                  _avatarUrl = uploadedUrl;
+                                });
+                              }
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Profile updated successfully'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            debugPrint('Error updating profile: $e');
+                            setDialogState(() => isSaving = false);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to update: $e')),
+                              );
+                            }
+                          }
+                        },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -152,6 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     
     final isGuest = Supabase.instance.client.auth.currentUser == null;
+    final ImageProvider? headerAvatarProvider = AvatarService.getImageProvider(avatarUrl: _avatarUrl);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -194,27 +369,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Stack(
                         alignment: Alignment.bottomRight,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: AppTheme.white.withValues(alpha: 0.5), width: 3),
-                              boxShadow: [
-                                BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.3), blurRadius: 20)
-                              ],
-                            ),
-                            child: CircleAvatar(
-                              radius: 50,
-                              backgroundColor: AppTheme.white.withValues(alpha: 0.9),
-                              child: isGuest
-                                  ? const Icon(Icons.person_outline_rounded, size: 48, color: AppTheme.primary)
-                                  : Text(
-                                      _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
-                                      style: const TextStyle(
-                                        fontSize: 40,
-                                        fontFamily: 'Playfair Display',
-                                        color: AppTheme.primary,
-                                      ),
-                                    ),
+                          GestureDetector(
+                            onTap: () {
+                              if (isGuest) {
+                                AuthGuard.requireAuth(
+                                  context,
+                                  actionTitle: 'Edit Profile',
+                                  actionSubtitle: 'Sign in to customize your TableFlow member profile.',
+                                  onAuthenticated: _fetchProfileData,
+                                );
+                              } else {
+                                _showEditProfileDialog();
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: AppTheme.white.withValues(alpha: 0.5), width: 3),
+                                boxShadow: [
+                                  BoxShadow(color: AppTheme.secondary.withValues(alpha: 0.3), blurRadius: 20)
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 50,
+                                backgroundColor: AppTheme.white.withValues(alpha: 0.9),
+                                backgroundImage: headerAvatarProvider,
+                                child: headerAvatarProvider != null
+                                    ? null
+                                    : isGuest
+                                        ? const Icon(Icons.person_outline_rounded, size: 48, color: AppTheme.primary)
+                                        : Text(
+                                            _fullName.isNotEmpty ? _fullName[0].toUpperCase() : 'U',
+                                            style: const TextStyle(
+                                              fontSize: 40,
+                                              fontFamily: 'Playfair Display',
+                                              color: AppTheme.primary,
+                                            ),
+                                          ),
+                              ),
                             ),
                           ),
                           Container(

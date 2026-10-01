@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/supabase_service.dart';
+import '../../services/avatar_service.dart';
 
 class StaffProfileScreen extends StatefulWidget {
   const StaffProfileScreen({super.key});
@@ -14,6 +15,7 @@ class _StaffProfileScreenState extends State<StaffProfileScreen> {
   String _staffName = 'Kasun Perera';
   final String _employeeId = 'EMP-104';
   String _role = 'Senior Floor Captain';
+  String? _avatarUrl;
   final String _shift = 'Afternoon Shift: 2:00 PM - 10:30 PM';
   final String _section = 'Main Dining Room & Patio';
 
@@ -34,6 +36,7 @@ class _StaffProfileScreenState extends State<StaffProfileScreen> {
           if (profile['role'] != null) {
             _role = profile['role'].toString().toUpperCase();
           }
+          _avatarUrl = profile['avatar_url'] as String?;
         });
       }
     } catch (_) {}
@@ -81,15 +84,18 @@ class _StaffProfileScreenState extends State<StaffProfileScreen> {
                       CircleAvatar(
                         radius: 44,
                         backgroundColor: const Color(0xFFB87F5C).withValues(alpha: 0.15),
-                        child: Text(
-                          _staffName.isNotEmpty ? _staffName[0] : 'S',
-                          style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFB87F5C),
-                            fontFamily: 'Playfair Display',
-                          ),
-                        ),
+                        backgroundImage: AvatarService.getImageProvider(avatarUrl: _avatarUrl),
+                        child: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                            ? null
+                            : Text(
+                                _staffName.isNotEmpty ? _staffName[0] : 'S',
+                                style: const TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFB87F5C),
+                                  fontFamily: 'Playfair Display',
+                                ),
+                              ),
                       ),
                       Positioned(
                         bottom: 0,
