@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 import 'package:provider/provider.dart';
@@ -22,15 +23,39 @@ class _MenuScreenState extends State<MenuScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  RealtimeChannel? _menuChannel;
 
   @override
   void initState() {
     super.initState();
     _fetchMenu();
+    _subscribeToMenuChanges();
+  }
+
+  void _subscribeToMenuChanges() {
+    try {
+      _menuChannel = SupabaseService.client
+          .channel('public:menu_items_mobile_realtime')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'menu_items',
+            callback: (payload) {
+              debugPrint('⚡ [Realtime] Menu item change received: ${payload.eventType}');
+              _fetchMenu();
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('Error subscribing to menu realtime: $e');
+    }
   }
 
   @override
   void dispose() {
+    try {
+      _menuChannel?.unsubscribe();
+    } catch (_) {}
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -595,7 +620,10 @@ class _MenuScreenState extends State<MenuScreen> {
     final id = item['id'].toString();
     final title = item['name'] ?? '';
     final description = item['description'] ?? '';
-    final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+    final rawPrice = (item['price'] as num?)?.toDouble() ?? 0.0;
+    final discountPercent = (item['discount_percent'] as num?)?.toDouble() ?? 0.0;
+    final effectivePrice = discountPercent > 0 ? rawPrice * (1 - discountPercent / 100) : rawPrice;
+    final isAvailable = item['is_available'] != false;
     final imageUrl = item['image_url'] ??
         'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=1000&auto=format&fit=crop';
     final hasCustomizations = item['customizations'] != null;
@@ -614,6 +642,9 @@ class _MenuScreenState extends State<MenuScreen> {
         image: DecorationImage(
           image: NetworkImage(imageUrl),
           fit: BoxFit.cover,
+          colorFilter: !isAvailable
+              ? ColorFilter.mode(Colors.black.withValues(alpha: 0.65), BlendMode.darken)
+              : null,
         ),
       ),
       child: Container(
@@ -624,7 +655,7 @@ class _MenuScreenState extends State<MenuScreen> {
             end: Alignment.bottomCenter,
             colors: [
               Colors.transparent,
-              AppTheme.secondary.withValues(alpha: 0.92),
+              AppTheme.secondary.withValues(alpha: isAvailable ? 0.92 : 0.96),
             ],
             stops: const [0.35, 1.0],
           ),
@@ -635,7 +666,74 @@ class _MenuScreenState extends State<MenuScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (hasCustomizations) ...[
+            // Top Badges: SOLD OUT or PROMO DISCOUNT or CUSTOMIZATIONS
+            if (!isAvailable) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.block_flipped, size: 13, color: Colors.white),
+                    SizedBox(width: 5),
+                    Text(
+                      'SOLD OUT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (discountPercent > 0) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFF43F5E)],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.local_fire_department, size: 13, color: Colors.white),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${discountPercent.toInt()}% OFF SPECIAL',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (hasCustomizations) ...[
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding:
@@ -680,7 +778,7 @@ class _MenuScreenState extends State<MenuScreen> {
                               fontFamily: 'Playfair Display',
                               fontSize: 23,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.white,
+                              color: isAvailable ? AppTheme.white : Colors.white70,
                             ),
                       ),
                       const SizedBox(height: 6),
@@ -692,7 +790,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             .textTheme
                             .bodyMedium
                             ?.copyWith(
-                              color: AppTheme.white.withValues(alpha: 0.8),
+                              color: AppTheme.white.withValues(alpha: isAvailable ? 0.8 : 0.6),
                               height: 1.35,
                               fontSize: 13,
                             ),
@@ -715,15 +813,30 @@ class _MenuScreenState extends State<MenuScreen> {
                         border: Border.all(
                             color: AppTheme.white.withValues(alpha: 0.3)),
                       ),
-                      child: Text(
-                        hasCustomizations
-                            ? 'From LKR ${price.toStringAsFixed(0)}'
-                            : 'LKR ${price.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          color: AppTheme.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            hasCustomizations
+                                ? 'From LKR ${effectivePrice.toStringAsFixed(0)}'
+                                : 'LKR ${effectivePrice.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: AppTheme.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          if (discountPercent > 0)
+                            Text(
+                              'LKR ${rawPrice.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                decoration: TextDecoration.lineThrough,
+                                fontSize: 11,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -734,30 +847,34 @@ class _MenuScreenState extends State<MenuScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  if (hasCustomizations) {
-                    ItemCustomizationSheet.show(context, menuItem: item);
-                  } else {
-                    context.read<CartProvider>().addItem(
-                        id, title, price, imageUrl);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('$title added to cart'),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        action: SnackBarAction(
-                          label: 'View Cart',
-                          textColor: AppTheme.tertiary,
-                          onPressed: () => context.push('/cart'),
-                        ),
-                      ),
-                    );
-                  }
-                },
+                onPressed: !isAvailable
+                    ? null
+                    : () {
+                        if (hasCustomizations) {
+                          ItemCustomizationSheet.show(context, menuItem: item);
+                        } else {
+                          context.read<CartProvider>().addItem(
+                              id, title, effectivePrice, imageUrl);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('$title added to cart'),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              action: SnackBarAction(
+                                label: 'View Cart',
+                                textColor: AppTheme.tertiary,
+                                onPressed: () => context.push('/cart'),
+                              ),
+                            ),
+                          );
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
+                  backgroundColor: !isAvailable ? Colors.grey.shade800 : AppTheme.primary,
                   foregroundColor: AppTheme.white,
+                  disabledBackgroundColor: Colors.black.withValues(alpha: 0.5),
+                  disabledForegroundColor: Colors.white54,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -767,7 +884,13 @@ class _MenuScreenState extends State<MenuScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (hasCustomizations) ...[
+                    if (!isAvailable) ...[
+                      const Icon(Icons.block, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Currently Sold Out',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                    ] else if (hasCustomizations) ...[
                       const Icon(Icons.tune, size: 18),
                       const SizedBox(width: 8),
                       const Text('Customize & Order',

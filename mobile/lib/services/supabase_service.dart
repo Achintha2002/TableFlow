@@ -833,13 +833,12 @@ class SupabaseService {
     },
   ];
 
-  /// Get all available menu items
+  /// Get all menu items (both available and sold-out with real-time sync)
   static Future<List<Map<String, dynamic>>> getMenuItems() async {
     try {
       final response = await _client
           .from('menu_items')
           .select()
-          .eq('is_available', true)
           .order('category');
 
       final items = List<Map<String, dynamic>>.from(response);
@@ -848,6 +847,18 @@ class SupabaseService {
         if (item['customizations'] == null && id != null && fallbackCustomizations.containsKey(id)) {
           item['customizations'] = fallbackCustomizations[id];
         }
+
+        // Extract promo discount if present
+        double discountPercent = (item['discount_percent'] as num?)?.toDouble() ?? 0.0;
+        String desc = item['description'] as String? ?? '';
+        if (discountPercent <= 0 && desc.contains('[PROMO:')) {
+          final match = RegExp(r'\[PROMO:(\d+(?:\.\d+)?)%\]', caseSensitive: false).firstMatch(desc);
+          if (match != null) {
+            discountPercent = double.tryParse(match.group(1) ?? '0') ?? 0.0;
+            item['description'] = desc.replaceAll(RegExp(r'\[PROMO:\d+(?:\.\d+)?%\]\s*', caseSensitive: false), '').trim();
+          }
+        }
+        item['discount_percent'] = discountPercent;
       }
 
       // If DB has fewer than 15 items, supplement with rich luxury menu items
