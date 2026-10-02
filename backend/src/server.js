@@ -1725,7 +1725,41 @@ app.get('/api/tables', async (req, res) => {
       .order('table_number', { ascending: true });
 
     if (error) throw error;
-    res.json(tables || []);
+
+    // Fetch today's active reservations (confirmed or pending)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const { data: reservations, error: resErr } = await supabaseAdmin
+      .from('reservations')
+      .select('id, table_id, reservation_date, reservation_time, pax, status, special_requests, users(full_name, phone_number, email)')
+      .eq('reservation_date', todayStr)
+      .in('status', ['confirmed', 'pending'])
+      .order('reservation_time', { ascending: true });
+
+    if (resErr) {
+      console.warn('Could not fetch active reservations for tables:', resErr.message);
+    }
+
+    const activeResMap = {};
+    if (reservations) {
+      for (const r of reservations) {
+        if (!activeResMap[r.table_id]) {
+          activeResMap[r.table_id] = r;
+        }
+      }
+    }
+
+    const enrichedTables = (tables || []).map(t => {
+      const activeRes = activeResMap[t.id] || null;
+      const isBooked = !!activeRes;
+      return {
+        ...t,
+        current_reservation: activeRes,
+        is_booked: isBooked,
+        display_status: (t.status === 'available' && isBooked) ? 'booked' : t.status
+      };
+    });
+
+    res.json(enrichedTables);
   } catch (error) {
     console.error('Error fetching tables:', error);
     res.status(500).json({ error: error.message });

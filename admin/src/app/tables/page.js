@@ -81,7 +81,38 @@ export default function TablesPage() {
         if (!error && data) tableList = data;
       }
 
-      if (tableList) setTables(tableList);
+      // 3. Fetch active reservations for today to guarantee instant real-time sync
+      const todayStr = new Date().toISOString().split('T')[0];
+      const { data: resData } = await supabase
+        .from('reservations')
+        .select('*, users(full_name, phone_number, email)')
+        .eq('reservation_date', todayStr)
+        .in('status', ['confirmed', 'pending'])
+        .order('reservation_time', { ascending: true });
+
+      const activeResMap = {};
+      if (resData) {
+        for (const r of resData) {
+          if (!activeResMap[r.table_id]) {
+            activeResMap[r.table_id] = r;
+          }
+        }
+      }
+
+      if (tableList) {
+        const enriched = tableList.map(t => {
+          const res = t.current_reservation || activeResMap[t.id] || null;
+          const isBooked = !!res;
+          const displayStatus = (t.status === 'available' && isBooked) ? 'booked' : t.status;
+          return {
+            ...t,
+            current_reservation: res,
+            is_booked: isBooked,
+            display_status: displayStatus,
+          };
+        });
+        setTables(enriched);
+      }
 
       // Fetch Categories
       const { data: catData } = await supabase
@@ -105,14 +136,25 @@ export default function TablesPage() {
       fetchTables();
     }, 4000);
 
-    const channel = supabase.channel('admin_tables_realtime_full').on('postgres_changes', 
+    // Realtime channel for table status/edits
+    const tablesChannel = supabase.channel('admin_tables_realtime_full').on('postgres_changes', 
       { event: '*', schema: 'public', table: 'restaurant_tables' }, 
       () => { fetchTables(); }
     ).subscribe();
 
+    // Realtime channel for customer reservations (instant notification when user books via app)
+    const reservationsChannel = supabase.channel('admin_tables_res_realtime_full').on('postgres_changes', 
+      { event: '*', schema: 'public', table: 'reservations' }, 
+      (payload) => { 
+        console.log('Realtime reservation change received on tables page:', payload);
+        fetchTables(); 
+      }
+    ).subscribe();
+
     return () => {
       clearInterval(pollInterval);
-      supabase.removeChannel(channel);
+      supabase.removeChannel(tablesChannel);
+      supabase.removeChannel(reservationsChannel);
     };
   }, []);
 
@@ -127,6 +169,41 @@ export default function TablesPage() {
     } catch {
       await supabase.from('restaurant_tables').update({ status: newStatus }).eq('id', id);
       fetchTables();
+    }
+  }
+
+  async function handleSeatReservedGuests(t) {
+    try {
+      await updateStatus(t.id, 'occupied');
+      if (t.current_reservation?.id) {
+        await supabase
+          .from('reservations')
+          .update({ status: 'completed' })
+          .eq('id', t.current_reservation.id);
+      }
+      showToast(`Guests seated at Table ${t.table_number}! Status updated to OCCUPIED.`);
+      fetchTables();
+    } catch (err) {
+      console.error('Error seating guests:', err);
+      showToast('Error seating guests: ' + err.message);
+    }
+  }
+
+  async function handleReleaseReservation(t) {
+    if (!t.current_reservation?.id) return;
+    if (!confirm(`Cancel and release reservation for Table ${t.table_number}?`)) return;
+
+    try {
+      await supabase
+        .from('reservations')
+        .update({ status: 'cancelled' })
+        .eq('id', t.current_reservation.id);
+
+      showToast(`Reservation for Table ${t.table_number} cancelled. Table is now AVAILABLE.`);
+      fetchTables();
+    } catch (err) {
+      console.error('Error releasing reservation:', err);
+      showToast('Error releasing reservation: ' + err.message);
     }
   }
 
@@ -358,7 +435,8 @@ export default function TablesPage() {
   }
 
   const totalCount = tables.length;
-  const availableCount = tables.filter(t => t.status === 'available').length;
+  const bookedCount = tables.filter(t => t.display_status === 'booked' || t.is_booked).length;
+  const availableCount = tables.filter(t => t.display_status === 'available' && !t.is_booked).length;
   const occupiedCount = tables.filter(t => t.status === 'occupied').length;
   const cleaningCount = tables.filter(t => t.status === 'cleaning').length;
 
@@ -497,7 +575,7 @@ export default function TablesPage() {
           borderBottom: '1px solid var(--border)', 
           background: 'var(--bg-surface)', 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
           gap: 16 
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -512,6 +590,13 @@ export default function TablesPage() {
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Available</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--success)' }}>{availableCount}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#6366f1' }} />
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Booked</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#6366f1' }}>{bookedCount}</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -535,14 +620,21 @@ export default function TablesPage() {
           {tables.map(t => {
             const catName = t.table_categories?.name || 'Main Dining';
             const hasCustomName = Boolean(t.table_name && t.table_name.trim());
+            const isBooked = t.display_status === 'booked' || t.is_booked;
 
             return (
               <div key={t.id} style={{ 
-                border: '1px solid var(--border)', 
+                border: isBooked ? '1.5px solid rgba(99, 102, 241, 0.45)' : '1px solid var(--border)', 
                 borderRadius: '14px', 
                 padding: '18px',
-                background: t.status === 'occupied' ? 'rgba(184, 127, 92, 0.05)' : '#ffffff',
-                boxShadow: '0 2px 5px rgba(0,0,0,0.03)',
+                background: isBooked 
+                  ? 'rgba(99, 102, 241, 0.03)' 
+                  : t.status === 'occupied' 
+                    ? 'rgba(184, 127, 92, 0.05)' 
+                    : '#ffffff',
+                boxShadow: isBooked 
+                  ? '0 4px 14px rgba(99, 102, 241, 0.09)' 
+                  : '0 2px 5px rgba(0,0,0,0.03)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -606,7 +698,24 @@ export default function TablesPage() {
 
                   {/* Status & Zone Badges */}
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
-                    {badge(t.status === 'available' ? 'success' : t.status === 'occupied' ? 'warning' : 'info', t.status.toUpperCase())}
+                    {isBooked ? (
+                      <span className="badge" style={{
+                        background: 'rgba(99, 102, 241, 0.16)',
+                        color: '#4f46e5',
+                        border: '1px solid rgba(99, 102, 241, 0.35)',
+                        fontWeight: '800',
+                        letterSpacing: '0.4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '3px 8px',
+                        borderRadius: '6px'
+                      }}>
+                        <span style={{ fontSize: '11px' }}>📅</span> BOOKED
+                      </span>
+                    ) : (
+                      badge(t.status === 'available' ? 'success' : t.status === 'occupied' ? 'warning' : 'info', t.status.toUpperCase())
+                    )}
                     <span style={{
                       fontSize: '11px',
                       padding: '3px 8px',
@@ -618,6 +727,36 @@ export default function TablesPage() {
                       📍 {catName}
                     </span>
                   </div>
+
+                  {/* Booking Details Banner if Booked */}
+                  {isBooked && t.current_reservation && (
+                    <div style={{
+                      margin: '0 0 12px 0',
+                      padding: '9px 11px',
+                      background: 'rgba(99, 102, 241, 0.08)',
+                      border: '1px solid rgba(99, 102, 241, 0.22)',
+                      borderRadius: '8px',
+                      fontSize: '12px'
+                    }}>
+                      <div style={{ fontWeight: '700', color: '#3730a3', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>⏰ {t.current_reservation.reservation_time ? t.current_reservation.reservation_time.substring(0, 5) : 'Upcoming'}</span>
+                        <span style={{ fontSize: '11px', background: 'rgba(99, 102, 241, 0.15)', padding: '1px 6px', borderRadius: '4px', color: '#4338ca', fontWeight: '700' }}>
+                          {t.current_reservation.pax} Guests
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#4f46e5', marginTop: '4px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>👤</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {t.current_reservation.users?.full_name || t.current_reservation.customer_name || 'App Reservation'}
+                        </span>
+                      </div>
+                      {t.current_reservation.special_requests && (
+                        <div style={{ fontSize: '10px', color: '#6366f1', marginTop: '3px', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          &ldquo;{t.current_reservation.special_requests}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Capacity */}
                   <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -647,23 +786,44 @@ export default function TablesPage() {
                   </button>
 
                   {/* Status Toggle Actions */}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {t.status === 'available' && (
-                      <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'occupied')}>
-                        Occupy
+                  {isBooked ? (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ flex: 1, padding: '7px 8px', fontSize: '12px', background: '#4f46e5', borderColor: '#4f46e5' }} 
+                        onClick={() => handleSeatReservedGuests(t)}
+                        title="Seat reserved guests at this table"
+                      >
+                        Seat Guests
                       </button>
-                    )}
-                    {t.status === 'occupied' && (
-                      <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'cleaning')}>
-                        Clean
+                      <button 
+                        className="btn btn-ghost" 
+                        style={{ padding: '7px 10px', fontSize: '12px', color: '#e11d48', borderColor: 'rgba(225, 29, 72, 0.3)' }} 
+                        onClick={() => handleReleaseReservation(t)}
+                        title="Release booking"
+                      >
+                        Release
                       </button>
-                    )}
-                    {t.status === 'cleaning' && (
-                      <button className="btn btn-primary" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'available')}>
-                        Ready
-                      </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {t.status === 'available' && (
+                        <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'occupied')}>
+                          Occupy
+                        </button>
+                      )}
+                      {t.status === 'occupied' && (
+                        <button className="btn btn-ghost" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'cleaning')}>
+                          Clean
+                        </button>
+                      )}
+                      {t.status === 'cleaning' && (
+                        <button className="btn btn-primary" style={{ flex: 1, padding: '6px', fontSize: '12px' }} onClick={() => updateStatus(t.id, 'available')}>
+                          Ready
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
