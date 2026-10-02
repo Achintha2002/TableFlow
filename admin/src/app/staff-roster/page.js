@@ -803,7 +803,7 @@ export default function StaffRosterAndBroadcastPage() {
                 }}
               >
                 <Plus size={16} />
-                + Add Shift Assignment
+                Add Shift Assignment
               </button>
             </div>
           </div>
