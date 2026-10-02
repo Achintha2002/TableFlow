@@ -154,105 +154,118 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         ),
         child: SafeArea(
           bottom: false,
-          child: FadeTransition(
-            opacity: _entryFade,
-            child: SlideTransition(
-              position: _entrySlide,
-              child: Column(
-                children: [
-                  // ── Top Brand Header (Clean, balanced & centered) ─────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Centered Logo & Title
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: const LinearGradient(
-                                  colors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFD4AF37).withValues(alpha: 0.40),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.dinner_dining_rounded,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'TableFlow',
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 21,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                                color: const Color(0xFF2B1B12),
-                              ),
-                            ),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
-                              child: Text(
-                                currentSlide.brandSubtitle,
-                                key: ValueKey(currentSlide.brandSubtitle),
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.8,
-                                  color: const Color(0xFF7A4526),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxHeight <= 100 || constraints.maxWidth <= 100) {
+                return const SizedBox.shrink();
+              }
+              final isCompact = constraints.maxHeight < 680;
+              final isLastPage = _currentPage == _slides.length - 1;
+              final baseCardHeight = isLastPage ? 335.0 : 310.0;
+              final double waveCardHeight = (constraints.maxHeight * 0.44)
+                  .clamp(isCompact ? 260.0 : 290.0, baseCardHeight);
 
-                        // Skip button in top right
-                        Align(
-                          alignment: Alignment.topRight,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(18),
-                            child: SafeBackdropFilter(
-                              sigmaX: 8,
-                              sigmaY: 8,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.45),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.70),
-                                    width: 1,
+              return FadeTransition(
+                opacity: _entryFade,
+                child: SlideTransition(
+                  position: _entrySlide,
+                  child: Column(
+                    children: [
+                      // ── Top Brand Header (Clean, balanced & centered) ─────────
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(20, isCompact ? 3 : 6, 20, isCompact ? 2 : 4),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Centered Logo & Title
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: isCompact ? 32 : 38,
+                                  height: isCompact ? 32 : 38,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFD4AF37), Color(0xFFB87F5C)],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFD4AF37).withValues(alpha: 0.40),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.dinner_dining_rounded,
+                                      color: Colors.white,
+                                      size: isCompact ? 17 : 20,
+                                    ),
                                   ),
                                 ),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(18),
-                                    onTap: () => _markSeenAndNavigate(context),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 13,
-                                        vertical: 5,
+                                SizedBox(height: isCompact ? 2 : 4),
+                                Text(
+                                  'TableFlow',
+                                  style: GoogleFonts.playfairDisplay(
+                                    fontSize: isCompact ? 18 : 21,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                    color: const Color(0xFF2B1B12),
+                                  ),
+                                ),
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 250),
+                                  child: Text(
+                                    currentSlide.brandSubtitle,
+                                    key: ValueKey(currentSlide.brandSubtitle),
+                                    style: GoogleFonts.inter(
+                                      fontSize: isCompact ? 10 : 11,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.8,
+                                      color: const Color(0xFF7A4526),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // Skip button in top right
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: SafeBackdropFilter(
+                                  sigmaX: 8,
+                                  sigmaY: 8,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.45),
+                                      borderRadius: BorderRadius.circular(18),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: 0.70),
+                                        width: 1,
                                       ),
-                                      child: Text(
-                                        'Skip',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: const Color(0xFF2B1B12),
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(18),
+                                        onTap: () => _markSeenAndNavigate(context),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 13,
+                                            vertical: 5,
+                                          ),
+                                          child: Text(
+                                            'Skip',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF2B1B12),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -260,59 +273,61 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  // ── PageView with Authentic Photograph ────────────────────
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      physics: const BouncingScrollPhysics(),
-                      onPageChanged: (i) => setState(() => _currentPage = i),
-                      itemCount: _slides.length,
-                      itemBuilder: (context, index) {
-                        final slide = _slides[index];
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(28),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.18),
-                                  blurRadius: 24,
-                                  offset: const Offset(0, 10),
+                      // ── PageView with Authentic Photograph ────────────────────
+                      Expanded(
+                        child: PageView.builder(
+                          controller: _pageController,
+                          physics: const BouncingScrollPhysics(),
+                          onPageChanged: (i) => setState(() => _currentPage = i),
+                          itemCount: _slides.length,
+                          itemBuilder: (context, index) {
+                            final slide = _slides[index];
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(28),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.18),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(28),
-                              child: Image.asset(
-                                slide.imagePath,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(28),
+                                  child: Image.asset(
+                                    slide.imagePath,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                            );
+                          },
+                        ),
+                      ),
 
-                  // ── Bottom Wave Overlay with Typography & Navigation ──────
-                  _BottomWaveCard(
-                    slide: currentSlide,
-                    currentPage: _currentPage,
-                    pageCount: _slides.length,
-                    onNext: _nextPage,
-                    onSignIn: _onSignInTapped,
+                      // ── Bottom Wave Overlay with Typography & Navigation ──────
+                      _BottomWaveCard(
+                        slide: currentSlide,
+                        currentPage: _currentPage,
+                        pageCount: _slides.length,
+                        cardHeight: waveCardHeight,
+                        isCompact: isCompact,
+                        onNext: _nextPage,
+                        onSignIn: _onSignInTapped,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -327,6 +342,8 @@ class _BottomWaveCard extends StatelessWidget {
   final _OnboardingSlide slide;
   final int currentPage;
   final int pageCount;
+  final double cardHeight;
+  final bool isCompact;
   final VoidCallback onNext;
   final VoidCallback onSignIn;
 
@@ -334,6 +351,8 @@ class _BottomWaveCard extends StatelessWidget {
     required this.slide,
     required this.currentPage,
     required this.pageCount,
+    required this.cardHeight,
+    required this.isCompact,
     required this.onNext,
     required this.onSignIn,
   });
@@ -344,7 +363,7 @@ class _BottomWaveCard extends StatelessWidget {
 
     return SizedBox(
       width: double.infinity,
-      height: isLastPage ? 335 : 310,
+      height: cardHeight,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -358,7 +377,12 @@ class _BottomWaveCard extends StatelessWidget {
 
           // ── Layer 2: Foreground Typography & Controls ──────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(28, 40, 28, 16),
+            padding: EdgeInsets.fromLTRB(
+              28,
+              isCompact ? 26 : 40,
+              28,
+              isCompact ? 10 : 16,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -370,7 +394,7 @@ class _BottomWaveCard extends StatelessWidget {
                     Text(
                       '${slide.headline1}\n${slide.headline2}\n${slide.headline3}',
                       style: GoogleFonts.outfit(
-                        fontSize: 27,
+                        fontSize: isCompact ? 22 : 27,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                         height: 1.15,
@@ -384,16 +408,16 @@ class _BottomWaveCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: isCompact ? 4 : 8),
                     Text(
                       slide.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
-                        fontSize: 13,
+                        fontSize: isCompact ? 11.5 : 13,
                         fontWeight: FontWeight.w400,
                         color: Colors.white.withValues(alpha: 0.90),
-                        height: 1.45,
+                        height: 1.35,
                       ),
                     ),
                   ],
@@ -401,6 +425,7 @@ class _BottomWaveCard extends StatelessWidget {
 
                 // ── Bottom Controls: Segmented Progress & CTA Button ────
                 Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // Segmented Story/Bar Indicator (like reference design)
                     _SegmentedProgressBar(
@@ -408,20 +433,21 @@ class _BottomWaveCard extends StatelessWidget {
                       current: currentPage,
                     ),
 
-                    const SizedBox(height: 14),
+                    SizedBox(height: isCompact ? 10 : 14),
 
                     // Primary Glow CTA Button
                     _GlowingCTAButton(
                       label: isLastPage ? 'Explore as Guest' : 'Continue',
                       gradient: slide.buttonGradient,
                       isLast: isLastPage,
+                      height: isCompact ? 46 : 52,
                       onTap: onNext,
                     ),
 
                     // Sign In prompt on the last slide
                     if (isLastPage)
                       Padding(
-                        padding: const EdgeInsets.only(top: 10),
+                        padding: EdgeInsets.only(top: isCompact ? 6 : 10),
                         child: GestureDetector(
                           onTap: onSignIn,
                           behavior: HitTestBehavior.opaque,
@@ -429,14 +455,14 @@ class _BottomWaveCard extends StatelessWidget {
                             TextSpan(
                               text: 'Already a member? ',
                               style: GoogleFonts.inter(
-                                fontSize: 13,
+                                fontSize: isCompact ? 12 : 13,
                                 color: Colors.white.withValues(alpha: 0.9),
                               ),
                               children: [
                                 TextSpan(
                                   text: 'Sign In',
                                   style: GoogleFonts.inter(
-                                    fontSize: 13,
+                                    fontSize: isCompact ? 12 : 13,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     decoration: TextDecoration.underline,
@@ -588,12 +614,14 @@ class _GlowingCTAButton extends StatefulWidget {
   final String label;
   final List<Color> gradient;
   final bool isLast;
+  final double height;
   final VoidCallback onTap;
 
   const _GlowingCTAButton({
     required this.label,
     required this.gradient,
     required this.isLast,
+    this.height = 52,
     required this.onTap,
   });
 
@@ -640,7 +668,7 @@ class _GlowingCTAButtonState extends State<_GlowingCTAButton>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 350),
           width: double.infinity,
-          height: 52,
+          height: widget.height,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(

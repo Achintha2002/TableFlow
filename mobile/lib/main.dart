@@ -38,9 +38,14 @@ class TableFlowApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: settings.isHighContrast ? AppTheme.highContrastTheme : AppTheme.lightTheme,
             builder: (context, child) {
+              if (child == null) return const SizedBox.shrink();
+              final mq = MediaQuery.of(context);
+              if (mq.size.width <= 10 || mq.size.height <= 10) {
+                return const SizedBox.shrink();
+              }
               final scale = settings.isLargeFont ? 1.3 : 1.0;
               return MediaQuery(
-                data: MediaQuery.of(context).copyWith(
+                data: mq.copyWith(
                   textScaler: TextScaler.linear(scale),
                 ),
                 child: ColoredBox(
@@ -49,7 +54,7 @@ class TableFlowApp extends StatelessWidget {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 500),
                       child: ClipRect(
-                        child: NotificationWrapper(child: child!),
+                        child: NotificationWrapper(child: child),
                       ),
                     ),
                   ),
