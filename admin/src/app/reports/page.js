@@ -763,7 +763,8 @@ export default function ReportsPage() {
           left: 0,
           width: '100vw',
           height: '100vh',
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -771,128 +772,198 @@ export default function ReportsPage() {
           padding: '20px'
         }}>
           <div 
-            id="print-shift-report"
             style={{
               background: '#ffffff',
-              borderRadius: '16px',
-              maxWidth: '520px',
+              borderRadius: '20px',
+              maxWidth: '540px',
               width: '100%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: '28px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
               border: '1px solid #e2e8f0',
-              fontFamily: 'var(--font-body)'
+              fontFamily: 'var(--font-body)',
+              overflow: 'hidden'
             }}
           >
-            {/* Modal Header Actions (Hidden on Print) */}
-            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Shift Closing Audit (Z-Report)
-              </span>
+            {/* 1. STICKY MODAL HEADER (Never scrolls away) */}
+            <div className="no-print" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '18px 24px',
+              borderBottom: '1px solid #e2e8f0',
+              background: '#fafbfc'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={16} color="var(--primary)" />
+                <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                  Shift Closing Audit (Z-Report)
+                </span>
+                <span style={{
+                  padding: '2px 7px',
+                  borderRadius: '10px',
+                  background: 'rgba(184, 127, 92, 0.12)',
+                  color: 'var(--primary)',
+                  fontSize: '10px',
+                  fontWeight: 800
+                }}>
+                  Official
+                </span>
+              </div>
               <button 
                 onClick={() => setShowShiftModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: '4px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* Printable Receipt Body */}
-            <div style={{ textAlign: 'center', borderBottom: '2px dashed #e2e8f0', paddingBottom: '16px', marginBottom: '16px' }}>
-              <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '22px', color: '#0f172a', fontWeight: '700', marginBottom: '4px' }}>
-                TABLEFLOW BOUTIQUE
-              </h2>
-              <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Daily Register Closing & Reconciliation
-              </p>
-              <div style={{ marginTop: '10px', fontSize: '12px', color: '#334155' }}>
-                <div>Period: <strong>{new Date(data.shiftSummary.periodStart).toLocaleDateString()} — {new Date(data.shiftSummary.periodEnd).toLocaleDateString()}</strong></div>
-                <div>Generated: <strong>{new Date(data.shiftSummary.generatedAt).toLocaleString()}</strong></div>
-              </div>
-            </div>
-
-            {/* Revenue Metrics Summary */}
-            <div style={{ marginBottom: '16px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
-                <span style={{ color: '#64748b' }}>Gross Sales Volume</span>
-                <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.grossSales.toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9', color: '#dc2626' }}>
-                <span>Discounts Authorized (-)</span>
-                <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.discounts.toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '2px solid #0f172a', fontWeight: '700', fontSize: '15px' }}>
-                <span>Net Sales Revenue</span>
-                <span>LKR {data.shiftSummary.netSales.toLocaleString()}</span>
-              </div>
-            </div>
-
-            {/* Cash Drawer & Payment Reconciliation */}
-            <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
-                Drawer Tender Breakdown
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
-                <span style={{ color: '#475569' }}>💵 Cash In Drawer</span>
-                <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.cashReceived.toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
-                <span style={{ color: '#475569' }}>💳 Card Slips (POS)</span>
-                <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.cardReceived.toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
-                <span style={{ color: '#475569' }}>🌐 Online Card Settlements</span>
-                <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.onlineReceived.toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0', color: '#d97706' }}>
-                <span>⚠️ Unsettled Open Checks</span>
-                <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.unsettledAmount.toLocaleString()}</span>
-              </div>
-            </div>
-
-            {/* Order Count Audit */}
-            <div style={{ marginBottom: '20px', fontSize: '12px', color: '#64748b' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-                <span>Total Checks Punched:</span>
-                <strong style={{ color: '#0f172a' }}>{data.shiftSummary.totalOrders}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-                <span>Settled Checks:</span>
-                <strong style={{ color: '#0f172a' }}>{data.shiftSummary.paidOrdersCount}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-                <span>Pending Open Checks:</span>
-                <strong style={{ color: '#0f172a' }}>{data.shiftSummary.unsettledOrdersCount}</strong>
-              </div>
-            </div>
-
-            {/* Verification Signature Section */}
-            <div style={{ borderTop: '2px dashed #e2e8f0', paddingTop: '16px', fontSize: '12px', color: '#64748b' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '24px' }}>
-                <div style={{ borderTop: '1px solid #94a3b8', width: '45%', paddingTop: '6px', textAlign: 'center' }}>
-                  Manager Signature
-                </div>
-                <div style={{ borderTop: '1px solid #94a3b8', width: '45%', paddingTop: '6px', textAlign: 'center' }}>
-                  Cashier / Server
+            {/* 2. SCROLLABLE RECEIPT BODY WITH LUXURY SLIM SCROLLBAR */}
+            <div 
+              id="print-shift-report"
+              className="luxury-scrollbar"
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '24px 28px',
+                scrollBehavior: 'smooth'
+              }}
+            >
+              {/* Printable Receipt Body */}
+              <div style={{ textAlign: 'center', borderBottom: '2px dashed #e2e8f0', paddingBottom: '16px', marginBottom: '16px' }}>
+                <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '22px', color: '#0f172a', fontWeight: '700', marginBottom: '4px' }}>
+                  TABLEFLOW BOUTIQUE
+                </h2>
+                <p style={{ fontSize: '12px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  Daily Register Closing & Reconciliation
+                </p>
+                <div style={{ marginTop: '10px', fontSize: '12px', color: '#334155' }}>
+                  <div>Period: <strong>{new Date(data.shiftSummary.periodStart).toLocaleDateString()} — {new Date(data.shiftSummary.periodEnd).toLocaleDateString()}</strong></div>
+                  <div>Generated: <strong>{new Date(data.shiftSummary.generatedAt).toLocaleString()}</strong></div>
                 </div>
               </div>
+
+              {/* Revenue Metrics Summary */}
+              <div style={{ marginBottom: '16px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#64748b' }}>Gross Sales Volume</span>
+                  <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.grossSales.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9', color: '#dc2626' }}>
+                  <span>Discounts Authorized (-)</span>
+                  <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.discounts.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '2px solid #0f172a', fontWeight: '700', fontSize: '15px' }}>
+                  <span>Net Sales Revenue</span>
+                  <span>LKR {data.shiftSummary.netSales.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Cash Drawer & Payment Reconciliation */}
+              <div style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
+                  Drawer Tender Breakdown
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
+                  <span style={{ color: '#475569' }}>💵 Cash In Drawer</span>
+                  <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.cashReceived.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
+                  <span style={{ color: '#475569' }}>💳 Card Slips (POS)</span>
+                  <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.cardReceived.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
+                  <span style={{ color: '#475569' }}>🌐 Online Card Settlements</span>
+                  <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.onlineReceived.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0', color: '#d97706' }}>
+                  <span>⚠️ Unsettled Open Checks</span>
+                  <span style={{ fontWeight: '600' }}>LKR {data.shiftSummary.unsettledAmount.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Order Count Audit */}
+              <div style={{ marginBottom: '20px', fontSize: '12px', color: '#64748b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                  <span>Total Checks Punched:</span>
+                  <strong style={{ color: '#0f172a' }}>{data.shiftSummary.totalOrders}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                  <span>Settled Checks:</span>
+                  <strong style={{ color: '#0f172a' }}>{data.shiftSummary.paidOrdersCount}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                  <span>Pending Open Checks:</span>
+                  <strong style={{ color: '#0f172a' }}>{data.shiftSummary.unsettledOrdersCount}</strong>
+                </div>
+              </div>
+
+              {/* Verification Signature Section */}
+              <div style={{ borderTop: '2px dashed #e2e8f0', paddingTop: '16px', fontSize: '12px', color: '#64748b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '24px' }}>
+                  <div style={{ borderTop: '1px solid #94a3b8', width: '45%', paddingTop: '6px', textAlign: 'center' }}>
+                    Manager Signature
+                  </div>
+                  <div style={{ borderTop: '1px solid #94a3b8', width: '45%', paddingTop: '6px', textAlign: 'center' }}>
+                    Cashier / Server
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Bottom Modal Actions (Hidden on Print) */}
-            <div className="no-print" style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+            {/* 3. STICKY MODAL FOOTER (Never scrolls away - Always visible) */}
+            <div className="no-print" style={{
+              display: 'flex',
+              gap: '10px',
+              padding: '16px 24px',
+              borderTop: '1px solid #e2e8f0',
+              background: '#fafbfc'
+            }}>
               <button 
                 onClick={handlePrintShiftSummary}
                 className="btn btn-primary"
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '11px',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
               >
                 <Printer size={16} />
                 <span>Print Z-Report</span>
               </button>
               <button 
                 onClick={() => setShowShiftModal(false)}
-                className="btn btn-secondary"
-                style={{ padding: '12px 18px' }}
+                style={{
+                  padding: '11px 20px',
+                  borderRadius: '10px',
+                  background: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
               >
                 Close
               </button>
@@ -900,6 +971,30 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {/* Scoped CSS for Ultra-Luxury Scrollbars */}
+      <style jsx global>{`
+        .luxury-scrollbar {
+          scrollbar-width: thin !important;
+          scrollbar-color: rgba(184, 127, 92, 0.35) transparent !important;
+          scroll-behavior: smooth !important;
+        }
+        .luxury-scrollbar::-webkit-scrollbar {
+          width: 5px !important;
+          height: 5px !important;
+        }
+        .luxury-scrollbar::-webkit-scrollbar-track {
+          background: transparent !important;
+          margin: 6px 0 !important;
+        }
+        .luxury-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(184, 127, 92, 0.32) !important;
+          border-radius: 99px !important;
+        }
+        .luxury-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(184, 127, 92, 0.75) !important;
+        }
+      `}</style>
     </div>
   );
 }

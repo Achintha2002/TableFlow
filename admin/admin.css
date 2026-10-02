@@ -441,28 +441,35 @@ a {
 
 /* ───────── SCROLLBAR ───────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(184, 127, 92, 0.28); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(184, 127, 92, 0.6); }
 
-/* Luxury Minimal POS Modal Scrollbar */
-.pos-modal-scroll {
+/* Luxury Minimal Modal Scrollbar */
+.pos-modal-scroll,
+.luxury-scrollbar {
   scrollbar-width: thin !important;
-  scrollbar-color: rgba(184, 127, 92, 0.3) transparent !important;
+  scrollbar-color: rgba(184, 127, 92, 0.35) transparent !important;
+  scroll-behavior: smooth !important;
 }
-.pos-modal-scroll::-webkit-scrollbar {
+.pos-modal-scroll::-webkit-scrollbar,
+.luxury-scrollbar::-webkit-scrollbar {
   width: 5px !important;
   height: 5px !important;
 }
-.pos-modal-scroll::-webkit-scrollbar-track {
+.pos-modal-scroll::-webkit-scrollbar-track,
+.luxury-scrollbar::-webkit-scrollbar-track {
   background: transparent !important;
   margin: 6px 0 !important;
 }
-.pos-modal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(184, 127, 92, 0.28) !important;
+.pos-modal-scroll::-webkit-scrollbar-thumb,
+.luxury-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(184, 127, 92, 0.32) !important;
   border-radius: 99px !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
 }
-.pos-modal-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(184, 127, 92, 0.6) !important;
+.pos-modal-scroll::-webkit-scrollbar-thumb:hover,
+.luxury-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 127, 92, 0.7) !important;
 }
 
