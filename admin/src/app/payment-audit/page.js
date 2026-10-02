@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 import { 
   FileCheck, 
@@ -18,7 +18,14 @@ import {
   Search,
   ExternalLink,
   ShieldCheck,
-  Ban
+  Ban,
+  Download,
+  Calendar,
+  Filter,
+  FileText,
+  Printer,
+  TrendingUp,
+  X
 } from 'lucide-react';
 
 const CANNED_REASONS = [
@@ -34,7 +41,8 @@ export default function PaymentAuditPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('pending'); // 'pending', 'all', 'rejected'
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+  const [dateRange, setDateRange] = useState('all'); // 'all', 'today', '7d', '14d', '30d'
   const [activeModalOrder, setActiveModalOrder] = useState(null); // for slip preview lightbox
   const [rejectingOrder, setRejectingOrder] = useState(null); // for reject reason modal
   const [rejectionReason, setRejectionReason] = useState('');
@@ -58,19 +66,23 @@ export default function PaymentAuditPage() {
     return () => clearInterval(timer);
   }, []);
 
-  function formatOrderTime(timestamp) {
-    if (!timestamp) return { time: '—', ago: '—', full: '' };
+  function formatAuditTime(timestamp) {
+    if (!timestamp) return { date: '—', time: '—', full: '—', ago: '—' };
     const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return { time: timestamp, ago: '', full: '' };
+    if (isNaN(date.getTime())) return { date: timestamp, time: '', full: timestamp, ago: '' };
 
-    // Real-time clock format (e.g. 04:38 PM)
-    const time = date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
+    const dateStr = date.toLocaleDateString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
     });
 
-    // Accurate elapsed time from now
+    const timeStr = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
     const elapsedMinutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
     let ago = 'Just now';
     if (elapsedMinutes >= 60 * 24) {
@@ -82,13 +94,34 @@ export default function PaymentAuditPage() {
     }
 
     return {
-      time,
-      ago,
-      full: date.toLocaleString('en-US', {
-        dateStyle: 'medium',
-        timeStyle: 'medium'
-      })
+      date: dateStr,
+      time: timeStr,
+      full: `${dateStr}, ${timeStr}`,
+      ago
     };
+  }
+
+  function isWithinDateRange(timestamp, range) {
+    if (range === 'all' || !timestamp) return true;
+    const itemDate = new Date(timestamp).getTime();
+    if (isNaN(itemDate)) return true;
+    const now = Date.now();
+
+    if (range === 'today') {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      return itemDate >= todayStart.getTime();
+    }
+    if (range === '7d') {
+      return itemDate >= now - (7 * 24 * 60 * 60 * 1000);
+    }
+    if (range === '14d') {
+      return itemDate >= now - (14 * 24 * 60 * 60 * 1000);
+    }
+    if (range === '30d') {
+      return itemDate >= now - (30 * 24 * 60 * 60 * 1000);
+    }
+    return true;
   }
 
   function notifyOrdersUpdated() {
@@ -104,26 +137,45 @@ export default function PaymentAuditPage() {
     } catch (_) {}
   }
 
-  async function enrichOrdersWithSlips(ordersList) {
+  async function enrichOrdersWithSlips(ordersList, transactionsList = []) {
     const userFilesCache = new Map();
+    const txMap = new Map();
+    (transactionsList || []).forEach(t => {
+      if (t.order_id) txMap.set(String(t.order_id), t);
+    });
 
     return Promise.all((ordersList || []).map(async (order) => {
-      let trans = order.payment_transaction || null;
+      let trans = order.payment_transaction || txMap.get(String(order.id)) || null;
       let slipUrl = trans?.slip_url || null;
       let slipPath = trans?.slip_path || null;
 
-      const refMatch = order.special_notes?.match(/\[Bank Transfer Ref:\s*([^\]|]+)/i) ||
-                       order.special_notes?.match(/Ref(?:erence)?[:\s#]+([A-Za-z0-9_-]+)/i);
-      const slipMatch = order.special_notes?.match(/Slip:\s*([^\s\]]+)/i);
+      const notes = (order.special_notes || '');
+      const notesLower = notes.toLowerCase();
+
+      const refMatch = notes.match(/\[Bank Transfer Ref:\s*([^\]|]+)/i) ||
+                       notes.match(/Ref(?:erence)?[:\s#]+([A-Za-z0-9_-]+)/i);
+      const slipMatch = notes.match(/Slip:\s*([^\s\]]+)/i);
+      const rejectMatch = notes.match(/\[Rejected:\s*([^\]]+)\]/i) ||
+                          notes.match(/\[Payment Rejected:\s*([^\]]+)\]/i) ||
+                          notes.match(/\[Reason:\s*([^\]]+)\]/i);
 
       if (!slipPath && slipMatch) {
         slipPath = slipMatch[1].trim();
       }
 
+      const isBankTransfer = (order.payment_method === 'bank_transfer') ||
+                             (trans?.payment_method === 'bank_transfer') ||
+                             Boolean(refMatch) ||
+                             Boolean(slipMatch) ||
+                             notesLower.includes('bank transfer') ||
+                             notesLower.includes('slip') ||
+                             order.status === 'payment_pending' ||
+                             order.status === 'payment_rejected';
+
       const userId = order.users?.id || order.user_id;
 
-      // If still no slipPath or slipUrl, query Supabase storage for the user's uploaded slips
-      if (!slipUrl && !slipPath && userId) {
+      // Only search Supabase storage for bank transfer orders needing slip resolution
+      if (isBankTransfer && !slipUrl && !slipPath && userId) {
         try {
           if (!userFilesCache.has(userId)) {
             const { data: userFiles, error: listErr } = await supabase.storage
@@ -163,27 +215,61 @@ export default function PaymentAuditPage() {
         }
       }
 
+      // Accurately determine payment method from notes, transactions or status
+      let paymentMethodName = order.payment_method || trans?.payment_method || null;
+      if (!paymentMethodName) {
+        if (notesLower.includes('[settled: card') || notesLower.includes('[table settled: card') || notesLower.includes('card')) {
+          paymentMethodName = 'card';
+        } else if (isBankTransfer) {
+          paymentMethodName = 'bank_transfer';
+        } else if (notesLower.includes('online')) {
+          paymentMethodName = 'online';
+        } else {
+          paymentMethodName = 'cash';
+        }
+      }
+
       const transactionRef = trans?.transaction_reference || 
-                             (refMatch ? refMatch[1].trim() : `BT-${order.id.slice(0, 8).toUpperCase()}`);
+                             (refMatch ? refMatch[1].trim() : `${paymentMethodName.toUpperCase()}-${String(order.id).slice(0, 8).toUpperCase()}`);
+
+      const rejectionReasonVal = trans?.rejection_reason || 
+                                (rejectMatch ? rejectMatch[1].trim() : (order.payment_status === 'failed' || order.status === 'cancelled' || order.status === 'payment_rejected' ? 'Payment rejected or order cancelled by desk' : null));
+
+      let determinedStatus = 'pending_verification';
+      if (order.payment_status === 'failed' || order.status === 'cancelled' || order.status === 'payment_rejected' || trans?.status === 'rejected' || rejectMatch) {
+        determinedStatus = 'rejected';
+      } else if (order.payment_status === 'paid' || ['completed', 'served', 'preparing', 'ready', 'confirmed'].includes(order.status) || trans?.status === 'approved') {
+        determinedStatus = 'approved';
+      }
+
+      const channelName = trans?.bank_name || 
+                          (notes.match(/Bank:\s*([^\s\]|]+)/i)?.[1]?.trim()) ||
+                          (paymentMethodName === 'cash' ? 'Cash Tender (POS)' : 
+                           paymentMethodName === 'card' ? 'Card Terminal (POS)' : 
+                           paymentMethodName === 'online' ? 'Online Payment' : 
+                           'Direct Transfer');
 
       const enrichedTrans = {
         id: trans?.id || `pt_${order.id}`,
         order_id: order.id,
         user_id: userId,
-        payment_method: 'bank_transfer',
+        payment_method: paymentMethodName,
         transaction_reference: transactionRef,
-        bank_name: trans?.bank_name || (order.special_notes?.match(/Bank:\s*([^\s\]|]+)/i)?.[1]?.trim() || null),
-        amount_paid: order.total_amount,
-        status: order.payment_status === 'failed' ? 'rejected' : (order.payment_status === 'paid' ? 'approved' : 'pending_verification'),
+        bank_name: channelName,
+        amount_paid: Number(order.total_amount) || 0,
+        status: determinedStatus,
         slip_path: slipPath,
         slip_url: slipUrl,
-        rejection_reason: trans?.rejection_reason || (order.special_notes?.match(/\[Rejected:\s*([^\]]+)\]/i)?.[1]?.trim() || null),
+        rejection_reason: rejectionReasonVal,
+        reviewed_at: trans?.reviewed_at || trans?.updated_at || order.created_at,
+        reviewed_by: trans?.reviewed_by || null,
         created_at: trans?.created_at || order.created_at,
         updated_at: trans?.updated_at || order.created_at
       };
 
       return {
         ...order,
+        payment_method: paymentMethodName,
         payment_transaction: enrichedTrans
       };
     }));
@@ -192,40 +278,24 @@ export default function PaymentAuditPage() {
   async function fetchVerificationQueue() {
     try {
       setRefreshing(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
 
-      let queueOrders = null;
-
-      // 1. Try fetching from backend endpoint if session token exists
-      if (token) {
-        try {
-          const res = await fetch('http://localhost:3000/api/admin/orders/pending-verification', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            queueOrders = data.orders || [];
-          } else {
-            const errData = await res.json().catch(() => null);
-            console.warn('Backend verification API notice:', errData?.error || res.statusText);
-          }
-        } catch (fetchErr) {
-          console.warn('Backend fetch notice:', fetchErr.message);
-        }
+      // 1. Fetch payment_transactions
+      let txList = [];
+      try {
+        const { data: txData } = await supabase
+          .from('payment_transactions')
+          .select('*')
+          .order('created_at', { ascending: false });
+        txList = txData || [];
+      } catch (e) {
+        console.warn('payment_transactions query notice:', e.message);
       }
 
-      // 2. If backend succeeded, enrich and update orders
-      if (queueOrders !== null) {
-        const fullyEnriched = await enrichOrdersWithSlips(queueOrders);
-        setOrders(fullyEnriched);
-        return;
-      }
+      // 2. Fetch all orders with multi-tier fallback so schema variations never blank the ledger
+      let auditOrders = [];
 
-      // 3. Resilient Direct Supabase Fallback (Identical to Orders page)
-      const { data: dbOrders, error: dbErr } = await supabase
+      // Primary fetch: queries standard columns on orders (no updated_at / payment_method column dependency)
+      const { data: primaryOrders, error: primaryErr } = await supabase
         .from('orders')
         .select(`
           id,
@@ -245,30 +315,43 @@ export default function PaymentAuditPage() {
         `)
         .order('created_at', { ascending: false });
 
-      if (dbErr) {
-        console.warn('Direct DB fetch notice:', dbErr.message);
-        showToast(dbErr.message, true);
-        return;
+      if (primaryErr) {
+        console.warn('Primary DB fetch notice, trying standard schema:', primaryErr.message);
+        const { data: stdOrders, error: stdErr } = await supabase
+          .from('orders')
+          .select(`
+            id,
+            total_amount,
+            status,
+            payment_status,
+            special_notes,
+            created_at,
+            users (full_name),
+            restaurant_tables (table_number),
+            order_items (
+              id,
+              quantity,
+              unit_price,
+              menu_items (name)
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (stdErr) {
+          console.warn('Standard schema fetch notice, trying basic orders:', stdErr.message);
+          const { data: bareOrders } = await supabase
+            .from('orders')
+            .select('*')
+            .order('created_at', { ascending: false });
+          auditOrders = bareOrders || [];
+        } else {
+          auditOrders = stdOrders || [];
+        }
+      } else {
+        auditOrders = primaryOrders || [];
       }
 
-      // Filter bank transfer orders needing verification or rejected
-      const bankOrders = (dbOrders || []).filter(o => {
-        const notes = (o.special_notes || '').toLowerCase();
-        const isBankTransfer = (o.payment_method === 'bank_transfer') || 
-          o.status === 'payment_pending' || 
-          o.status === 'payment_rejected' ||
-          notes.includes('bank transfer') ||
-          notes.includes('[bank transfer ref:') ||
-          notes.includes('[rejected:');
-        if (!isBankTransfer) return false;
-        if (['served', 'completed'].includes(o.status)) return false;
-        if (o.status === 'cancelled') {
-          return notes.includes('[rejected:') || notes.includes('reject');
-        }
-        return o.payment_status !== 'paid';
-      });
-
-      const enriched = await enrichOrdersWithSlips(bankOrders);
+      const enriched = await enrichOrdersWithSlips(auditOrders, txList);
       setOrders(enriched);
     } catch (err) {
       console.warn('Fetch queue notice:', err.message);
@@ -468,17 +551,17 @@ export default function PaymentAuditPage() {
     if (order.status === 'payment_rejected') return true;
     if (order.payment_transaction?.status === 'rejected') return true;
     if (order.payment_status === 'failed') return true;
-    if (order.status === 'cancelled' && (
-      (order.special_notes && order.special_notes.toLowerCase().includes('reject')) ||
-      order.payment_transaction?.status === 'rejected'
-    )) return true;
-    if (order.special_notes && order.special_notes.toLowerCase().includes('[rejected:')) return true;
+    if (order.status === 'cancelled') return true;
+    const notesLower = (order.special_notes || '').toLowerCase();
+    if (notesLower.includes('[rejected:') || notesLower.includes('[payment rejected:') || notesLower.includes('reject')) return true;
     return false;
   }
 
   function isOrderApproved(order) {
-    if (order.payment_status === 'paid') return true;
+    if (isOrderRejected(order)) return false;
     if (order.payment_transaction?.status === 'approved') return true;
+    if (order.payment_status === 'paid') return true;
+    if (['completed', 'served', 'preparing', 'ready', 'confirmed'].includes(order.status) && order.payment_status !== 'failed') return true;
     return false;
   }
 
@@ -488,31 +571,298 @@ export default function PaymentAuditPage() {
     return true;
   }
 
-  // Filters
-  const filteredOrders = orders.filter(order => {
-    // Status filter
-    if (filterStatus === 'pending' && !isOrderPending(order)) return false;
-    if (filterStatus === 'rejected' && !isOrderRejected(order)) return false;
+  // Filtered orders by Date Range, Status & Search Query
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order => {
+      // 1. Date Range Filter
+      if (!isWithinDateRange(order.created_at, dateRange)) return false;
 
-    // Search filter
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const orderId = String(order.id);
-    const ref = (order.payment_transaction?.transaction_reference || order.special_notes || '').toLowerCase();
-    const custName = (order.users?.full_name || '').toLowerCase();
-    const phone = (order.users?.phone_number || '').toLowerCase();
-    return orderId.includes(q) || ref.includes(q) || custName.includes(q) || phone.includes(q);
-  });
+      // 2. Status Filter
+      if (filterStatus === 'pending' && !isOrderPending(order)) return false;
+      if (filterStatus === 'approved' && !isOrderApproved(order)) return false;
+      if (filterStatus === 'rejected' && !isOrderRejected(order)) return false;
 
-  const pendingCount = orders.filter(isOrderPending).length;
-  const rejectedCount = orders.filter(isOrderRejected).length;
-  const totalPendingValue = orders
-    .filter(isOrderPending)
-    .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+      // 3. Search Query
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const orderId = String(order.id);
+      const ref = (order.payment_transaction?.transaction_reference || order.special_notes || '').toLowerCase();
+      const custName = (order.users?.full_name || '').toLowerCase();
+      const phone = (order.users?.phone_number || '').toLowerCase();
+      const reason = (order.payment_transaction?.rejection_reason || '').toLowerCase();
+      const bank = (order.payment_transaction?.bank_name || '').toLowerCase();
+      return orderId.includes(q) || ref.includes(q) || custName.includes(q) || phone.includes(q) || reason.includes(q) || bank.includes(q);
+    });
+  }, [orders, dateRange, filterStatus, searchQuery]);
+
+  // Counts in current Date Range
+  const ordersInDateRange = useMemo(() => {
+    return orders.filter(o => isWithinDateRange(o.created_at, dateRange));
+  }, [orders, dateRange]);
+
+  const pendingCount = ordersInDateRange.filter(isOrderPending).length;
+  const approvedCount = ordersInDateRange.filter(isOrderApproved).length;
+  const rejectedCount = ordersInDateRange.filter(isOrderRejected).length;
+  const allCount = ordersInDateRange.length;
+
+  const totalAuditedVolume = ordersInDateRange.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  const approvedVolume = ordersInDateRange.filter(isOrderApproved).reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  const rejectedVolume = ordersInDateRange.filter(isOrderRejected).reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  const pendingVolume = ordersInDateRange.filter(isOrderPending).reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+
+  // ── EXECUTIVE PDF EXPORT ENGINE ──
+  function handleExportPDF() {
+    const existingIframe = document.getElementById('tableflow-audit-print-frame');
+    if (existingIframe) existingIframe.remove();
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'tableflow-audit-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const rangeLabel = dateRange === 'today' ? 'Today' 
+                     : dateRange === '7d' ? 'Last 7 Days' 
+                     : dateRange === '14d' ? 'Last 2 Weeks (14 Days)' 
+                     : dateRange === '30d' ? 'Last 30 Days' 
+                     : 'All Time History';
+
+    const statusLabel = filterStatus === 'approved' ? 'Approved & Settled Transactions'
+                      : filterStatus === 'rejected' ? 'Rejected / Disputed Payment Audit'
+                      : filterStatus === 'pending' ? 'Pending Verifications'
+                      : 'Consolidated Payment Audit Ledger (All Records)';
+
+    const rowsHtml = filteredOrders.map((o, idx) => {
+      const trans = o.payment_transaction;
+      const timing = formatAuditTime(o.created_at);
+      const isApp = isOrderApproved(o);
+      const isRej = isOrderRejected(o);
+      const statusText = isApp ? 'APPROVED' : isRej ? 'REJECTED' : 'PENDING';
+      const statusColor = isApp ? '#059669' : isRej ? '#dc2626' : '#d97706';
+      const statusBg = isApp ? '#ecfdf5' : isRej ? '#fef2f2' : '#fffbeb';
+      const reason = trans?.rejection_reason || 'Verification rejected by auditor';
+
+      return `
+        <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
+          <td style="padding: 7px 6px; font-weight: bold; color: #1e293b;">#${idx + 1}</td>
+          <td style="padding: 7px 6px; white-space: nowrap;">
+            <strong>${timing.date}</strong><br/>
+            <span style="color: #64748b; font-size: 10px;">${timing.time}</span>
+          </td>
+          <td style="padding: 7px 6px;">
+            <strong>#${String(o.id).slice(0, 8)}</strong>
+            ${o.restaurant_tables?.table_number ? `<br/><span style="color: #3b82f6; font-size: 10px;">Table #${o.restaurant_tables.table_number}</span>` : ''}
+          </td>
+          <td style="padding: 7px 6px;">
+            <strong>${o.users?.full_name || 'Guest User'}</strong><br/>
+            <span style="color: #64748b; font-size: 10px;">${o.users?.phone_number || o.users?.email || '—'}</span>
+          </td>
+          <td style="padding: 7px 6px; font-family: monospace; font-size: 10px;">
+            ${trans?.transaction_reference || '—'}<br/>
+            <span style="color: #64748b;">${trans?.bank_name || 'Bank Transfer'}</span>
+          </td>
+          <td style="padding: 7px 6px; text-align: right; font-weight: bold; white-space: nowrap;">
+            LKR ${Number(o.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </td>
+          <td style="padding: 7px 6px; text-align: center;">
+            <span style="background: ${statusBg}; color: ${statusColor}; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; display: inline-block;">
+              ${statusText}
+            </span>
+          </td>
+          <td style="padding: 7px 6px; font-size: 10px;">
+            ${isRej ? `<div style="background: #fef2f2; color: #991b1b; padding: 4px 6px; border-radius: 4px; border: 1px solid #fecaca; font-weight: 600;">⚠️ REASON: ${reason}</div>` 
+                    : isApp ? `<span style="color: #059669; font-weight: 600;">✓ Verified & Released to Kitchen</span>` 
+                    : `<span style="color: #d97706; font-weight: 600;">⏳ Awaiting Slip Inspection</span>`}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    const nowFormatted = new Date().toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    const doc = iframe.contentWindow || iframe.contentDocument;
+    const iframeDoc = doc.document || doc;
+
+    iframeDoc.open();
+    iframeDoc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>TableFlow Payment Audit Report</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 12mm 10mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              color: #0f172a;
+              margin: 0;
+              padding: 0;
+              font-size: 12px;
+              line-height: 1.4;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              border-bottom: 2px solid #b87f5c;
+              padding-bottom: 12px;
+              margin-bottom: 14px;
+            }
+            .brand-title {
+              font-size: 20px;
+              font-weight: 800;
+              letter-spacing: 0.5px;
+              color: #b87f5c;
+              margin: 0;
+            }
+            .brand-sub {
+              font-size: 11px;
+              color: #64748b;
+              margin: 2px 0 0 0;
+            }
+            .summary-grid {
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 10px;
+              margin-bottom: 16px;
+            }
+            .summary-box {
+              padding: 10px 12px;
+              border-radius: 8px;
+              border: 1px solid #e2e8f0;
+              background: #f8fafc;
+            }
+            .summary-label {
+              font-size: 10px;
+              text-transform: uppercase;
+              font-weight: 700;
+              color: #64748b;
+            }
+            .summary-val {
+              font-size: 16px;
+              font-weight: 800;
+              margin-top: 3px;
+              color: #0f172a;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 6px;
+            }
+            th {
+              background: #f1f5f9;
+              padding: 8px 6px;
+              text-align: left;
+              font-size: 10px;
+              font-weight: 700;
+              color: #475569;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              border-bottom: 1px solid #cbd5e1;
+            }
+            .footer-sign {
+              margin-top: 26px;
+              display: flex;
+              justify-content: space-between;
+              padding-top: 14px;
+              border-top: 1px dashed #cbd5e1;
+              font-size: 11px;
+              color: #64748b;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="brand-title">TABLEFLOW BOUTIQUE</h1>
+              <p class="brand-sub">Official Financial & Payment Verification Audit Report</p>
+              <p style="font-size: 10px; color: #94a3b8; margin: 2px 0 0 0;">123 Galle Road, Colombo 03 • Tel: +94 11 234 5678</p>
+            </div>
+            <div style="text-align: right; font-size: 11px;">
+              <div><strong>Period:</strong> ${rangeLabel}</div>
+              <div><strong>Report:</strong> ${statusLabel}</div>
+              <div><strong>Generated:</strong> ${nowFormatted}</div>
+              <div><strong>Total Records:</strong> ${filteredOrders.length}</div>
+            </div>
+          </div>
+
+          <div class="summary-grid">
+            <div class="summary-box">
+              <div class="summary-label">Total Audited Volume</div>
+              <div class="summary-val">LKR ${totalAuditedVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div class="summary-box" style="border-left: 3px solid #10b981;">
+              <div class="summary-label">Approved Settlements</div>
+              <div class="summary-val" style="color: #059669;">LKR ${approvedVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${approvedCount} orders verified</div>
+            </div>
+            <div class="summary-box" style="border-left: 3px solid #ef4444;">
+              <div class="summary-label">Rejected / Disputed</div>
+              <div class="summary-val" style="color: #dc2626;">LKR ${rejectedVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${rejectedCount} orders rejected</div>
+            </div>
+            <div class="summary-box" style="border-left: 3px solid #f59e0b;">
+              <div class="summary-label">Pending Verification</div>
+              <div class="summary-val" style="color: #d97706;">LKR ${pendingVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${pendingCount} orders awaiting check</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 25px;">#</th>
+                <th style="width: 90px;">Date & Time</th>
+                <th style="width: 75px;">Order ID</th>
+                <th style="width: 120px;">Customer</th>
+                <th style="width: 110px;">Bank Ref</th>
+                <th style="width: 95px; text-align: right;">Amount</th>
+                <th style="width: 75px; text-align: center;">Status</th>
+                <th>Audit Notes & Rejection Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="8" style="text-align: center; padding: 24px; color: #94a3b8;">No payment audit records found for the selected criteria.</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="footer-sign">
+            <div>
+              Certified By TableFlow Cashier Desk<br/>
+              Authorized Signature: _______________________
+            </div>
+            <div style="text-align: right;">
+              System Generated Audit Ledger • Confidential<br/>
+              Powered by TableFlow POS Engine
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+    iframeDoc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (err) {
+        console.error('PDF print error:', err);
+      }
+    }, 250);
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: '100%', minWidth: 0, paddingBottom: '32px' }}>
-      {/* Toast */}
+      {/* Toast Notification */}
       {toast && (
         <div style={{
           position: 'fixed',
@@ -522,8 +872,8 @@ export default function PaymentAuditPage() {
           background: toast.isError ? '#ef4444' : '#10b981',
           color: '#fff',
           padding: '12px 20px',
-          borderRadius: '8px',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+          borderRadius: '12px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
           fontWeight: 600,
           display: 'flex',
           alignItems: 'center',
@@ -534,104 +884,379 @@ export default function PaymentAuditPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      {/* ── TOP HEADER & ACTIONS TOOLBAR ── */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '16px',
+        marginBottom: '22px',
+        padding: '18px 22px',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%)',
+        backdropFilter: 'blur(10px)',
+        border: '1px solid var(--border)',
+        borderRadius: '16px',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.02)'
+      }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <FileCheck size={28} color="#f59e0b" />
-            Payment Audit Desk
-          </h1>
-          <p style={{ margin: '4px 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Review manual direct bank transfer slips, verify transaction references, and release orders to the kitchen.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, rgba(184, 127, 92, 0.16) 0%, rgba(212, 175, 55, 0.16) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--primary)'
+            }}>
+              <FileCheck size={22} />
+            </div>
+            <div>
+              <h1 style={{ fontSize: '1.45rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)', fontFamily: 'var(--font-serif)' }}>
+                Payment Audit Desk
+              </h1>
+              <p style={{ margin: '2px 0 0 0', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                Bank transfer slip verification, approval history & rejection dispute logs
+              </p>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={fetchVerificationQueue}
-          disabled={refreshing}
-          className="btn btn-secondary"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
-        >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Refreshing...' : 'Refresh Queue'}
-        </button>
+
+        {/* Top Action Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Download PDF Button */}
+          <button
+            onClick={handleExportPDF}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '9px 16px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-primary)',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+            title="Download or Print Executive Audit PDF Report"
+          >
+            <Download size={15} color="var(--primary)" />
+            <span>Download PDF Report</span>
+          </button>
+
+          {/* Refresh Queue Button */}
+          <button
+            onClick={fetchVerificationQueue}
+            disabled={refreshing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              borderRadius: '10px',
+              background: '#ffffff',
+              border: '1px solid var(--border)',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+            }}
+          >
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} color="var(--primary)" />
+            <span>{refreshing ? 'Syncing...' : 'Refresh'}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid #f59e0b' }}>
-          <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '12px', borderRadius: '10px', color: '#f59e0b' }}>
-            <Clock size={24} />
+      {/* ── 4 LUXURY EXECUTIVE METRIC CARDS ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '22px' }}>
+        {/* Card 1: Total Audited Volume */}
+        <div style={{
+          padding: '18px 20px',
+          borderRadius: '16px',
+          background: 'linear-gradient(135deg, #ffffff 0%, #faf8f5 100%)',
+          border: '1px solid rgba(184, 127, 92, 0.22)',
+          boxShadow: '0 6px 18px -4px rgba(184, 127, 92, 0.08)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                Total Audited Volume
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                LKR {totalAuditedVolume.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+            </div>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'rgba(184, 127, 92, 0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--primary)'
+            }}>
+              <TrendingUp size={18} />
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Awaiting Verification</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>{pendingCount}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+            {allCount} transactions in {dateRange === 'today' ? 'Today' : dateRange === '7d' ? 'Last 7 Days' : dateRange === '14d' ? 'Last 2 Weeks' : dateRange === '30d' ? 'Last 30 Days' : 'All Time'}
           </div>
         </div>
 
-        <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid #10b981' }}>
-          <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '10px', color: '#10b981' }}>
-            <ShieldCheck size={24} />
+        {/* Card 2: Approved Settlements */}
+        <div style={{
+          padding: '18px 20px',
+          borderRadius: '16px',
+          background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+          border: '1px solid rgba(16, 185, 129, 0.25)',
+          boxShadow: '0 6px 18px -4px rgba(16, 185, 129, 0.08)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                Approved Settlements
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#047857', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                LKR {approvedVolume.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+            </div>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'rgba(16, 185, 129, 0.14)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#059669'
+            }}>
+              <ShieldCheck size={20} />
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Pending Revenue Hold</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>LKR {totalPendingValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+          <div style={{ fontSize: '12px', color: '#059669', marginTop: '8px', fontWeight: 600 }}>
+            ✓ {approvedCount} payments verified & released
           </div>
         </div>
 
-        <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid #ef4444' }}>
-          <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '10px', color: '#ef4444' }}>
-            <Ban size={24} />
+        {/* Card 3: Rejected / Disputed */}
+        <div style={{
+          padding: '18px 20px',
+          borderRadius: '16px',
+          background: 'linear-gradient(135deg, #ffffff 0%, #fef2f2 100%)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          boxShadow: '0 6px 18px -4px rgba(239, 68, 68, 0.08)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                Rejected / Disputed
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#b91c1c', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                {rejectedCount}
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#ef4444', marginLeft: '6px' }}>
+                  ({rejectedVolume > 0 ? `LKR ${rejectedVolume.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '0.00'})
+                </span>
+              </div>
+            </div>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'rgba(239, 68, 68, 0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#dc2626'
+            }}>
+              <Ban size={18} />
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Rejected / Disputed</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)' }}>{rejectedCount}</div>
+          <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '8px', fontWeight: 600 }}>
+            ⚠️ Issues noted & customers notified
+          </div>
+        </div>
+
+        {/* Card 4: Awaiting Verification */}
+        <div style={{
+          padding: '18px 20px',
+          borderRadius: '16px',
+          background: 'linear-gradient(135deg, #ffffff 0%, #fffbeb 100%)',
+          border: '1px solid rgba(245, 158, 11, 0.25)',
+          boxShadow: '0 6px 18px -4px rgba(245, 158, 11, 0.08)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                Awaiting Verification
+              </div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: '#b45309', marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                {pendingCount}
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#d97706', marginLeft: '6px' }}>
+                  ({pendingVolume > 0 ? `LKR ${pendingVolume.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : 'LKR 0.00'})
+                </span>
+              </div>
+            </div>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: 'rgba(245, 158, 11, 0.14)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#d97706'
+            }}>
+              <Clock size={18} />
+            </div>
+          </div>
+          <div style={{ fontSize: '12px', color: pendingCount > 0 ? '#b45309' : '#059669', marginTop: '8px', fontWeight: 600 }}>
+            {pendingCount > 0 ? '⏳ Action required for order release' : '✨ All slips verified'}
           </div>
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
+      {/* ── DATE RANGE SELECTOR BAR ── */}
+      <div style={{
+        marginBottom: '16px',
+        padding: '10px 16px',
+        background: '#ffffff',
+        border: '1px solid var(--border)',
+        borderRadius: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '12px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Calendar size={16} color="var(--primary)" />
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Audit Time Horizon:
+          </span>
+        </div>
+
+        {/* Date Range Selector Pills */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'today', label: 'Today' },
+            { id: '7d', label: 'Last 7 Days' },
+            { id: '14d', label: 'Last 2 Weeks' },
+            { id: '30d', label: 'Last 30 Days' },
+            { id: 'all', label: 'All History' }
+          ].map(r => {
+            const isSel = dateRange === r.id;
+            return (
+              <button
+                key={r.id}
+                onClick={() => setDateRange(r.id)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: isSel ? 700 : 500,
+                  border: isSel ? '1px solid var(--primary)' : '1px solid var(--border)',
+                  background: isSel ? 'linear-gradient(135deg, var(--primary) 0%, #9c6848 100%)' : '#ffffff',
+                  color: isSel ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  boxShadow: isSel ? '0 2px 6px rgba(184, 127, 92, 0.25)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── FILTER TABS & SEARCH BAR ── */}
       <div style={{ 
         background: '#ffffff',
         border: '1px solid #e2e8f0',
-        borderRadius: '12px',
+        borderRadius: '14px',
         padding: '12px 18px', 
         marginBottom: '20px', 
         display: 'flex', 
         flexWrap: 'wrap', 
-        gap: '12px', 
+        gap: '14px', 
         alignItems: 'center', 
         justifyContent: 'space-between',
         boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
       }}>
-        {/* Segmented Filter Pills */}
+        {/* Status Filter Tabs */}
         <div style={{ 
           display: 'inline-flex', 
           background: '#f1f5f9', 
-          padding: '3px', 
-          borderRadius: '9px',
-          gap: '3px'
+          padding: '4px', 
+          borderRadius: '10px',
+          gap: '4px',
+          flexWrap: 'wrap'
         }}>
+          {/* All Submissions */}
           <button
-            onClick={() => setFilterStatus('pending')}
+            onClick={() => setFilterStatus('all')}
             style={{
-              padding: '6px 14px',
+              padding: '7px 14px',
               fontSize: '0.82rem',
-              fontWeight: filterStatus === 'pending' ? 600 : 500,
-              background: filterStatus === 'pending' ? '#ffffff' : 'transparent',
-              color: filterStatus === 'pending' ? '#0f172a' : '#64748b',
+              fontWeight: filterStatus === 'all' ? 700 : 500,
+              background: filterStatus === 'all' ? '#ffffff' : 'transparent',
+              color: filterStatus === 'all' ? '#0f172a' : '#64748b',
               border: 'none',
-              borderRadius: '7px',
+              borderRadius: '8px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: filterStatus === 'pending' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              boxShadow: filterStatus === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               transition: 'all 0.15s ease'
             }}
           >
-            Pending Verification
+            <span>All Audits</span>
             <span style={{
-              background: filterStatus === 'pending' ? 'rgba(245, 158, 11, 0.18)' : '#e2e8f0',
+              background: '#e2e8f0',
+              color: '#475569',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '0.72rem',
+              fontWeight: 700
+            }}>
+              {allCount}
+            </span>
+          </button>
+
+          {/* Pending Verification */}
+          <button
+            onClick={() => setFilterStatus('pending')}
+            style={{
+              padding: '7px 14px',
+              fontSize: '0.82rem',
+              fontWeight: filterStatus === 'pending' ? 700 : 500,
+              background: filterStatus === 'pending' ? '#ffffff' : 'transparent',
+              color: filterStatus === 'pending' ? '#b45309' : '#64748b',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: filterStatus === 'pending' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#f59e0b' }} />
+            <span>Pending Verification</span>
+            <span style={{
+              background: filterStatus === 'pending' ? 'rgba(245, 158, 11, 0.20)' : '#e2e8f0',
               color: filterStatus === 'pending' ? '#b45309' : '#64748b',
               padding: '1px 6px',
               borderRadius: '10px',
@@ -642,28 +1267,63 @@ export default function PaymentAuditPage() {
             </span>
           </button>
 
+          {/* Approved & Settled */}
           <button
-            onClick={() => setFilterStatus('rejected')}
+            onClick={() => setFilterStatus('approved')}
             style={{
-              padding: '6px 14px',
+              padding: '7px 14px',
               fontSize: '0.82rem',
-              fontWeight: filterStatus === 'rejected' ? 600 : 500,
-              background: filterStatus === 'rejected' ? '#ffffff' : 'transparent',
-              color: filterStatus === 'rejected' ? '#0f172a' : '#64748b',
+              fontWeight: filterStatus === 'approved' ? 700 : 500,
+              background: filterStatus === 'approved' ? '#ffffff' : 'transparent',
+              color: filterStatus === 'approved' ? '#047857' : '#64748b',
               border: 'none',
-              borderRadius: '7px',
+              borderRadius: '8px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              boxShadow: filterStatus === 'rejected' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              boxShadow: filterStatus === 'approved' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
               transition: 'all 0.15s ease'
             }}
           >
-            Rejected
+            <CheckCircle2 size={13} color="#10b981" />
+            <span>Approved & Settled</span>
             <span style={{
-              background: filterStatus === 'rejected' ? 'rgba(239, 68, 68, 0.18)' : '#e2e8f0',
-              color: filterStatus === 'rejected' ? '#ef4444' : '#64748b',
+              background: filterStatus === 'approved' ? 'rgba(16, 185, 129, 0.20)' : '#e2e8f0',
+              color: filterStatus === 'approved' ? '#047857' : '#64748b',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              fontSize: '0.72rem',
+              fontWeight: 700
+            }}>
+              {approvedCount}
+            </span>
+          </button>
+
+          {/* Rejected / Disputed */}
+          <button
+            onClick={() => setFilterStatus('rejected')}
+            style={{
+              padding: '7px 14px',
+              fontSize: '0.82rem',
+              fontWeight: filterStatus === 'rejected' ? 700 : 500,
+              background: filterStatus === 'rejected' ? '#ffffff' : 'transparent',
+              color: filterStatus === 'rejected' ? '#b91c1c' : '#64748b',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: filterStatus === 'rejected' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <XCircle size={13} color="#ef4444" />
+            <span>Rejected / Disputed</span>
+            <span style={{
+              background: filterStatus === 'rejected' ? 'rgba(239, 68, 68, 0.20)' : '#e2e8f0',
+              color: filterStatus === 'rejected' ? '#b91c1c' : '#64748b',
               padding: '1px 6px',
               borderRadius: '10px',
               fontSize: '0.72rem',
@@ -672,41 +1332,10 @@ export default function PaymentAuditPage() {
               {rejectedCount}
             </span>
           </button>
-
-          <button
-            onClick={() => setFilterStatus('all')}
-            style={{
-              padding: '6px 14px',
-              fontSize: '0.82rem',
-              fontWeight: filterStatus === 'all' ? 600 : 500,
-              background: filterStatus === 'all' ? '#ffffff' : 'transparent',
-              color: filterStatus === 'all' ? '#0f172a' : '#64748b',
-              border: 'none',
-              borderRadius: '7px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              boxShadow: filterStatus === 'all' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            All Submissions
-            <span style={{
-              background: '#e2e8f0',
-              color: '#64748b',
-              padding: '1px 6px',
-              borderRadius: '10px',
-              fontSize: '0.72rem',
-              fontWeight: 700
-            }}>
-              {orders.length}
-            </span>
-          </button>
         </div>
 
-        {/* Modern Clean Search Bar (White background, luxury border & focus) */}
-        <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
+        {/* Clean Search Input */}
+        <div style={{ position: 'relative', width: '280px', maxWidth: '100%' }}>
           <Search 
             size={15} 
             style={{ 
@@ -720,7 +1349,7 @@ export default function PaymentAuditPage() {
           />
           <input
             type="text"
-            placeholder="Search Order #, Ref #, Customer..."
+            placeholder="Filter Order #, Ref, Customer, Reason..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ 
@@ -733,13 +1362,13 @@ export default function PaymentAuditPage() {
               background: '#ffffff',
               color: '#0f172a',
               border: '1px solid #e2e8f0',
-              borderRadius: '8px',
+              borderRadius: '10px',
               outline: 'none',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
               transition: 'all 0.2s ease'
             }}
             onFocus={(e) => {
-              e.target.style.borderColor = '#B87F5C';
+              e.target.style.borderColor = 'var(--primary)';
               e.target.style.boxShadow = '0 0 0 3px rgba(184, 127, 92, 0.15)';
             }}
             onBlur={(e) => {
@@ -770,37 +1399,56 @@ export default function PaymentAuditPage() {
         </div>
       </div>
 
-      {/* Verification Queue Table (Single page, NO horizontal scroll) */}
+      {/* ── COMPREHENSIVE PAYMENT AUDIT TABLE ── */}
       <div style={{ 
         background: '#ffffff',
         border: '1px solid #e2e8f0',
-        borderRadius: '12px',
+        borderRadius: '16px',
         overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        boxShadow: '0 4px 20px -4px rgba(0,0,0,0.04)'
       }}>
         {loading ? (
-          <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
-            <RefreshCw size={28} className="animate-spin" style={{ margin: '0 auto 12px auto', display: 'block', color: '#f59e0b' }} />
-            Loading verification queue...
+          <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
+            <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 12px auto', display: 'block', color: 'var(--primary)' }} />
+            <h4 style={{ margin: 0, color: '#0f172a', fontSize: '15px' }}>Loading Financial Audit History...</h4>
+            <p style={{ margin: '6px 0 0 0', fontSize: '13px' }}>Synchronizing bank transfer slips, approvals & dispute reasons</p>
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div style={{ padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
-            <CheckCircle2 size={36} style={{ margin: '0 auto 12px auto', display: 'block', color: '#10b981' }} />
-            <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.1rem' }}>All Caught Up!</h3>
-            <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem' }}>No pending bank transfer payments waiting for verification.</p>
+          <div style={{ padding: '60px', textAlign: 'center', color: '#94a3b8' }}>
+            <CheckCircle2 size={40} style={{ margin: '0 auto 12px auto', display: 'block', color: '#10b981' }} />
+            <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.15rem', fontFamily: 'var(--font-serif)' }}>No Records in this Filter</h3>
+            <p style={{ margin: '6px 0 0 0', fontSize: '0.85rem' }}>
+              No transactions match the selected date range ({dateRange}) and status ({filterStatus}).
+            </p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Order</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Customer</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Bank Reference</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Items</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Amount</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Slip</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600 }}>Status</th>
-                <th style={{ padding: '12px 14px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#64748b', fontWeight: 600, textAlign: 'right' }}>Actions</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Date & Real Time
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Order & Table
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Customer
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Bank Reference
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Amount
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Bank Slip
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                  Audit Status & Notes
+                </th>
+                <th style={{ padding: '14px 16px', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700, textAlign: 'right' }}>
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -809,71 +1457,81 @@ export default function PaymentAuditPage() {
                 const isPending = isOrderPending(order);
                 const isRejected = isOrderRejected(order);
                 const isApproved = isOrderApproved(order);
-                const timing = formatOrderTime(order.created_at);
+                const timing = formatAuditTime(order.created_at);
 
                 return (
                   <tr 
                     key={order.id} 
-                    style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    style={{ 
+                      borderBottom: '1px solid #f1f5f9', 
+                      background: isPending ? 'rgba(254, 243, 199, 0.15)' : 'transparent',
+                      transition: 'background 0.15s' 
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = isPending ? 'rgba(254, 243, 199, 0.28)' : '#f8fafc'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = isPending ? 'rgba(254, 243, 199, 0.15)' : 'transparent'}
                   >
-                    {/* Order Info */}
-                    <td style={{ padding: '12px 14px' }}>
-                      <div 
-                        style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.88rem', letterSpacing: '0.5px' }}
-                        title={`Full Order ID: #${order.id}`}
-                      >
-                        #{String(order.id).length > 12 ? `${String(order.id).slice(0, 8)}...` : order.id}
+                    {/* 1. Date & Real Time Column */}
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.86rem' }}>
+                        {timing.date}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', flexWrap: 'wrap' }}>
-                        <span 
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600, color: '#0f172a' }}
-                          title={`Order Placed: ${timing.full} (${timing.ago})`}
-                        >
-                          <Clock size={11} style={{ color: '#b87f5c' }} />
-                          {timing.time}
-                        </span>
+                      <div style={{ fontSize: '0.76rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <Clock size={11} style={{ color: 'var(--primary)' }} />
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{timing.time}</span>
                         <span style={{ color: '#cbd5e1' }}>•</span>
-                        <span style={{ color: '#64748b' }} title={timing.full}>
-                          {timing.ago}
-                        </span>
-                        {order.restaurant_tables && (
-                          <span style={{ marginLeft: '2px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', padding: '1px 5px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600 }}>
-                            T-{order.restaurant_tables.table_number}
+                        <span style={{ color: '#94a3b8' }}>{timing.ago}</span>
+                      </div>
+                    </td>
+
+                    {/* 2. Order & Table Column */}
+                    <td style={{ padding: '14px 16px' }}>
+                      <div 
+                        style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.88rem', letterSpacing: '0.4px' }}
+                        title={`Order ID: #${order.id}`}
+                      >
+                        #{String(order.id).length > 10 ? `${String(order.id).slice(0, 8)}...` : order.id}
+                      </div>
+                      <div style={{ marginTop: '3px' }}>
+                        {order.restaurant_tables?.table_number ? (
+                          <span style={{ background: 'rgba(59, 130, 246, 0.10)', color: '#2563eb', padding: '2px 7px', borderRadius: '5px', fontSize: '0.72rem', fontWeight: 700 }}>
+                            Table #{order.restaurant_tables.table_number}
+                          </span>
+                        ) : (
+                          <span style={{ background: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: '4px', fontSize: '0.70rem', fontWeight: 600 }}>
+                            Direct / Takeaway
                           </span>
                         )}
                       </div>
                     </td>
 
-                    {/* Customer Info */}
-                    <td style={{ padding: '12px 14px' }}>
-                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '130px' }}>
+                    {/* 3. Customer Column */}
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
                         {order.users?.full_name || 'Guest User'}
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '130px' }}>
-                        {order.users?.phone_number || order.users?.email || 'No contact'}
+                      <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: '2px' }}>
+                        {order.users?.phone_number || order.users?.email || 'No phone recorded'}
                       </div>
                     </td>
 
-                    {/* Bank Ref Number */}
-                    <td style={{ padding: '12px 14px' }}>
+                    {/* 4. Bank Reference Column */}
+                    <td style={{ padding: '14px 16px' }}>
                       {trans?.transaction_reference ? (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           <code style={{ 
-                            background: 'rgba(184, 127, 92, 0.1)', 
+                            background: 'rgba(184, 127, 92, 0.10)', 
                             color: '#9c6848',
-                            padding: '2px 6px', 
-                            borderRadius: '4px', 
-                            fontSize: '0.76rem', 
+                            padding: '2px 7px', 
+                            borderRadius: '5px', 
+                            fontSize: '0.78rem', 
                             fontWeight: 700, 
-                            letterSpacing: '0.5px' 
+                            letterSpacing: '0.4px' 
                           }}>
                             {trans.transaction_reference}
                           </code>
                           <button
                             onClick={() => copyToClipboard(trans.transaction_reference)}
-                            title="Copy Reference"
+                            title="Copy Reference Code"
                             style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
                           >
                             {copiedRef === trans.transaction_reference ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
@@ -883,36 +1541,24 @@ export default function PaymentAuditPage() {
                         <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>—</span>
                       )}
                       {trans?.bank_name && (
-                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px', fontWeight: 500 }}>
                           {trans.bank_name}
                         </div>
                       )}
                     </td>
 
-                    {/* Items */}
-                    <td style={{ padding: '12px 14px', maxWidth: '160px' }}>
-                      <div 
-                        style={{ fontSize: '0.8rem', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                        title={(order.order_items || []).map(i => `${i.quantity}x ${i.menu_items?.name || 'Item'}`).join(', ')}
-                      >
-                        {(order.order_items || []).length > 0 
-                          ? (order.order_items || []).map(i => `${i.quantity}x ${i.menu_items?.name || 'Item'}`).join(', ') 
-                          : 'Direct Dine-in'}
+                    {/* 5. Amount Column */}
+                    <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.94rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                        LKR {Number(order.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '1px' }}>
-                        {(order.order_items || []).reduce((sum, i) => sum + (Number(i.quantity) || 1), 0)} items total
+                      <div style={{ fontSize: '0.70rem', color: '#94a3b8', marginTop: '1px' }}>
+                        {(order.order_items || []).reduce((sum, i) => sum + (Number(i.quantity) || 1), 0)} items
                       </div>
                     </td>
 
-                    {/* Total Amount */}
-                    <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#0f172a' }}>
-                        LKR {Number(order.total_amount).toFixed(2)}
-                      </div>
-                    </td>
-
-                    {/* Slip Preview Thumbnail */}
-                    <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                    {/* 6. Slip Preview Trigger */}
+                    <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                       <button
                         onClick={() => {
                           setActiveModalOrder(order);
@@ -920,51 +1566,97 @@ export default function PaymentAuditPage() {
                           setRotation(0);
                         }}
                         style={{
-                          padding: '5px 11px',
+                          padding: '5px 12px',
                           fontSize: '0.76rem',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '5px',
-                          background: trans?.slip_url ? 'rgba(245, 158, 11, 0.12)' : 'rgba(100, 116, 139, 0.1)',
-                          color: trans?.slip_url ? '#d97706' : '#64748b',
-                          border: trans?.slip_url ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(100, 116, 139, 0.25)',
-                          borderRadius: '6px',
-                          fontWeight: 600,
-                          cursor: 'pointer'
+                          background: trans?.slip_url ? 'rgba(184, 127, 92, 0.12)' : 'rgba(100, 116, 139, 0.08)',
+                          color: trans?.slip_url ? 'var(--primary)' : '#64748b',
+                          border: trans?.slip_url ? '1px solid rgba(184, 127, 92, 0.3)' : '1px solid rgba(100, 116, 139, 0.20)',
+                          borderRadius: '7px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
                         }}
                       >
-                        <Eye size={12} /> {trans?.slip_url ? 'View Slip' : 'Inspect'}
+                        <Eye size={13} /> {trans?.slip_url ? 'View Slip' : 'Inspect'}
                       </button>
                     </td>
 
-                    {/* Status */}
-                    <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                    {/* 7. Audit Status & Reason Column */}
+                    <td style={{ padding: '14px 16px', maxWidth: '240px' }}>
                       {isPending && (
-                        <span style={{ background: 'rgba(245, 158, 11, 0.12)', color: '#d97706', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px' }}>
-                          PENDING
-                        </span>
-                      )}
-                      {isRejected && (
-                        <div>
-                          <span style={{ background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px' }}>
-                            REJECTED
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ 
+                            background: 'rgba(245, 158, 11, 0.15)', 
+                            color: '#b45309', 
+                            padding: '3px 9px', 
+                            borderRadius: '5px', 
+                            fontSize: '0.74rem', 
+                            fontWeight: 800, 
+                            letterSpacing: '0.5px' 
+                          }}>
+                            PENDING REVIEW
                           </span>
-                          {trans?.rejection_reason && (
-                            <div style={{ fontSize: '0.68rem', color: '#ef4444', marginTop: '2px', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={trans.rejection_reason}>
-                              {trans.rejection_reason}
-                            </div>
-                          )}
                         </div>
                       )}
+
                       {isApproved && (
-                        <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.5px' }}>
-                          APPROVED
-                        </span>
+                        <div>
+                          <span style={{ 
+                            background: 'rgba(16, 185, 129, 0.14)', 
+                            color: '#047857', 
+                            padding: '3px 9px', 
+                            borderRadius: '5px', 
+                            fontSize: '0.74rem', 
+                            fontWeight: 800, 
+                            letterSpacing: '0.5px' 
+                          }}>
+                            ✓ VERIFIED & SETTLED
+                          </span>
+                          <div style={{ fontSize: '0.70rem', color: '#059669', marginTop: '3px' }}>
+                            Order dispatched to Kitchen
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PROMINENT REJECTION REASON DISPLAY */}
+                      {isRejected && (
+                        <div>
+                          <div style={{ display: 'inline-block' }}>
+                            <span style={{ 
+                              background: 'rgba(239, 68, 68, 0.14)', 
+                              color: '#b91c1c', 
+                              padding: '3px 9px', 
+                              borderRadius: '5px', 
+                              fontSize: '0.74rem', 
+                              fontWeight: 800, 
+                              letterSpacing: '0.5px' 
+                            }}>
+                              ✕ REJECTED
+                            </span>
+                          </div>
+
+                          {/* REASON CALLOUT BOX */}
+                          <div style={{
+                            marginTop: '5px',
+                            background: '#fef2f2',
+                            border: '1px solid #fecaca',
+                            borderRadius: '6px',
+                            padding: '5px 8px',
+                            fontSize: '0.73rem',
+                            color: '#991b1b',
+                            lineHeight: 1.35
+                          }}>
+                            <strong>Reason:</strong> {trans?.rejection_reason || 'Bank reference invalid or verification failed'}
+                          </div>
+                        </div>
                       )}
                     </td>
 
-                    {/* Actions */}
-                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {/* 8. Action Column */}
+                    <td style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {isPending ? (
                         <div style={{ display: 'inline-flex', gap: '6px' }}>
                           <button
@@ -975,18 +1667,18 @@ export default function PaymentAuditPage() {
                               background: '#10b981',
                               color: '#fff',
                               border: 'none',
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              fontWeight: 600,
+                              padding: '6px 12px',
+                              borderRadius: '7px',
+                              fontWeight: 700,
                               fontSize: '0.76rem',
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              boxShadow: '0 1px 2px rgba(16, 185, 129, 0.2)'
+                              boxShadow: '0 2px 4px rgba(16, 185, 129, 0.25)'
                             }}
                           >
-                            <CheckCircle2 size={12} /> Approve
+                            <CheckCircle2 size={13} /> Approve
                           </button>
                           <button
                             onClick={() => {
@@ -999,9 +1691,9 @@ export default function PaymentAuditPage() {
                               background: 'transparent',
                               color: '#ef4444',
                               border: '1px solid rgba(239, 68, 68, 0.35)',
-                              padding: '5px 8px',
-                              borderRadius: '6px',
-                              fontWeight: 600,
+                              padding: '6px 10px',
+                              borderRadius: '7px',
+                              fontWeight: 700,
                               fontSize: '0.76rem',
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -1009,13 +1701,13 @@ export default function PaymentAuditPage() {
                               gap: '4px'
                             }}
                           >
-                            <XCircle size={12} /> Reject
+                            <XCircle size={13} /> Reject
                           </button>
                         </div>
                       ) : (
-                        <span style={{ fontSize: '0.76rem', color: isApproved ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                          {isApproved ? 'Verified ✓' : 'Rejected ✕'}
-                        </span>
+                        <div style={{ fontSize: '0.76rem', color: isApproved ? '#059669' : '#dc2626', fontWeight: 700 }}>
+                          {isApproved ? 'Audited ✓' : 'Disputed ✕'}
+                        </div>
                       )}
                     </td>
                   </tr>
