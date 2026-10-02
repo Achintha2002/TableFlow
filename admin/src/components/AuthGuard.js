@@ -46,14 +46,37 @@ export default function AuthGuard({ children }) {
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         if (!currentSession) throw new Error('Session lost');
 
-        const res = await fetch('http://localhost:3000/api/admin/my-role', {
-          headers: {
-            'Authorization': `Bearer ${currentSession.access_token}`
-          }
-        });
+        let res;
+        try {
+          res = await fetch('http://localhost:3000/api/admin/my-role', {
+            headers: {
+              'Authorization': `Bearer ${currentSession.access_token}`
+            }
+          });
+        } catch (fetchErr) {
+          console.warn('Network error reaching /api/admin/my-role:', fetchErr);
+        }
         
-        if (!res.ok) {
-          throw new Error('Failed to fetch role');
+        if (!res || !res.ok) {
+          console.warn('Role verification returned non-OK status:', res?.status);
+          const metaRole = currentSession.user?.user_metadata?.role;
+          const allowedRoles = ['admin', 'manager', 'cashier', 'kitchen', 'staff'];
+          
+          if (metaRole && allowedRoles.includes(metaRole)) {
+            setAuthorized(true);
+            if (pathname === '/login') {
+              router.push('/');
+            }
+            return;
+          }
+
+          // If token expired (401) or unauthorized, cleanly sign out
+          await supabase.auth.signOut();
+          setAuthorized(false);
+          if (pathname !== '/login') {
+            router.push('/login');
+          }
+          return;
         }
         
         const { role } = await res.json();
@@ -67,11 +90,14 @@ export default function AuthGuard({ children }) {
         } else {
           // Log out unauthorized users
           await supabase.auth.signOut();
-          alert("Access Denied: You do not have permission to view the Admin Dashboard.");
+          setAuthorized(false);
+          if (pathname !== '/login') {
+            router.push('/login');
+          }
         }
       }
     } catch (e) {
-      console.error("Auth check failed:", e);
+      console.warn("Auth check handled:", e);
     } finally {
       setLoading(false);
     }

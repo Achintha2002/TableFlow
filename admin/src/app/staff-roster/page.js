@@ -21,7 +21,12 @@ import {
   Sunset,
   Moon,
   ShieldAlert,
-  BellRing
+  BellRing,
+  Edit3,
+  Download,
+  Printer,
+  FileText,
+  X
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:3000';
@@ -48,6 +53,28 @@ export default function StaffRosterAndBroadcastPage() {
     notes: ''
   });
   const [isSubmittingShift, setIsSubmittingShift] = useState(false);
+
+  // Edit shift modal
+  const [isEditShiftOpen, setIsEditShiftOpen] = useState(false);
+  const [editingShiftId, setEditingShiftId] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    shift_type: 'morning',
+    staff_name: '',
+    staff_role: 'Floor Waiter',
+    assigned_section: 'Main Dining Hall',
+    status: 'scheduled',
+    phone: '',
+    notes: ''
+  });
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
+  // Delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [shiftToDelete, setShiftToDelete] = useState(null);
+  const [isDeletingShift, setIsDeletingShift] = useState(false);
+
+  // Report Modal state
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Broadcast state
   const [broadcastTarget, setBroadcastTarget] = useState('all_users');
@@ -216,20 +243,127 @@ export default function StaffRosterAndBroadcastPage() {
     }
   }
 
-  // Delete shift
-  async function handleDeleteShift(id, name) {
-    if (!confirm(`Are you sure you want to remove ${name} from this shift?`)) return;
+  // Quick 1-click update shift type (morning / evening / night)
+  async function handleUpdateShiftType(id, newShiftType) {
     try {
       const res = await fetch(`${API_BASE}/api/admin/shifts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shift_type: newShiftType })
+      });
+      if (res.ok) {
+        setShifts(prev => prev.map(s => s.id === id ? { ...s, shift_type: newShiftType } : s));
+        showToast(`Shift window updated to ${newShiftType.toUpperCase()}!`);
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to update shift type', 'error');
+      }
+    } catch {
+      showToast('Network error updating shift type', 'error');
+    }
+  }
+
+  // Open Edit Shift Modal
+  function openEditShiftModal(shift) {
+    setEditingShiftId(shift.id);
+    setEditFormData({
+      shift_type: shift.shift_type || 'morning',
+      staff_name: shift.staff_name || '',
+      staff_role: shift.staff_role || 'Floor Waiter',
+      assigned_section: shift.assigned_section || 'Main Dining Hall',
+      status: shift.status || 'scheduled',
+      phone: shift.phone || '',
+      notes: shift.notes || ''
+    });
+    setIsEditShiftOpen(true);
+  }
+
+  // Submit Edited Shift
+  async function handleSaveEditedShift(e) {
+    e.preventDefault();
+    if (!editFormData.staff_name.trim()) {
+      showToast('Staff member name is required', 'error');
+      return;
+    }
+    setIsSubmittingEdit(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/shifts/${editingShiftId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData)
+      });
+      if (res.ok) {
+        setShifts(prev => prev.map(s => s.id === editingShiftId ? { ...s, ...editFormData } : s));
+        showToast(`Shift updated for ${editFormData.staff_name}!`);
+        setIsEditShiftOpen(false);
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Failed to update shift', 'error');
+      }
+    } catch {
+      showToast('Network error saving shift', 'error');
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  }
+
+  // Open Danger Delete Confirmation Modal
+  function openDeleteModal(shift) {
+    setShiftToDelete(shift);
+    setIsDeleteModalOpen(true);
+  }
+
+  // Confirm delete shift
+  async function handleConfirmDeleteShift() {
+    if (!shiftToDelete) return;
+    setIsDeletingShift(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/shifts/${shiftToDelete.id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
-        setShifts(prev => prev.filter(s => s.id !== id));
-        showToast('Shift assignment removed');
+        setShifts(prev => prev.filter(s => s.id !== shiftToDelete.id));
+        showToast(`Removed shift assignment for ${shiftToDelete.staff_name}`);
+        setIsDeleteModalOpen(false);
+        setShiftToDelete(null);
+      } else {
+        showToast('Failed to remove shift', 'error');
       }
     } catch {
-      showToast('Failed to remove shift', 'error');
+      showToast('Network error removing shift', 'error');
+    } finally {
+      setIsDeletingShift(false);
     }
+  }
+
+  // Export Roster to CSV
+  function handleExportRosterCsv() {
+    if (shifts.length === 0) {
+      showToast('No shift roster data to export for this date', 'error');
+      return;
+    }
+
+    const headers = ['Staff Name', 'Shift Window', 'Role / Position', 'Assigned Section', 'Duty Status', 'Contact Phone', 'Notes', 'Date'];
+    const rows = shifts.map(s => [
+      `"${(s.staff_name || '').replace(/"/g, '""')}"`,
+      `"${s.shift_type || ''}"`,
+      `"${(s.staff_role || '').replace(/"/g, '""')}"`,
+      `"${(s.assigned_section || '').replace(/"/g, '""')}"`,
+      `"${s.status || ''}"`,
+      `"${(s.phone || '').replace(/"/g, '""')}"`,
+      `"${(s.notes || '').replace(/"/g, '""')}"`,
+      `"${selectedDate}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `tableflow_staff_roster_${selectedDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Staff roster exported to CSV successfully!');
   }
 
   // Send broadcast notification
@@ -575,7 +709,59 @@ export default function StaffRosterAndBroadcastPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setIsReportModalOpen(true)}
+                title="View and print official staff shift roster PDF"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.color = '#2563eb'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.color = '#0f172a'; }}
+              >
+                <FileText size={15} color="#2563eb" />
+                Shift Roster (PDF)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportRosterCsv}
+                title="Download CSV report of shift roster"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.color = '#059669'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.color = '#0f172a'; }}
+              >
+                <Download size={15} color="#059669" />
+                Export CSV
+              </button>
+
               <button
                 type="button"
                 onClick={() => fetchShifts(selectedDate)}
@@ -638,17 +824,16 @@ export default function StaffRosterAndBroadcastPage() {
                 </p>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <div style={{ width: '100%', overflowX: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', tableLayout: 'fixed' }}>
                   <thead>
                     <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: '600', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      <th style={{ padding: '14px 20px' }}>Staff Member</th>
-                      <th style={{ padding: '14px 16px' }}>Shift Window</th>
-                      <th style={{ padding: '14px 16px' }}>Role / Duty</th>
-                      <th style={{ padding: '14px 16px' }}>Assigned Section</th>
-                      <th style={{ padding: '14px 16px' }}>Duty Status</th>
-                      <th style={{ padding: '14px 16px' }}>Notes</th>
-                      <th style={{ padding: '14px 20px', textAlign: 'right' }}>Actions</th>
+                      <th style={{ width: '23%', padding: '14px 18px' }}>Staff Member</th>
+                      <th style={{ width: '22%', padding: '14px 12px' }}>Shift Window</th>
+                      <th style={{ width: '16%', padding: '14px 12px' }}>Role / Duty</th>
+                      <th style={{ width: '14%', padding: '14px 12px' }}>Assigned Section</th>
+                      <th style={{ width: '13%', padding: '14px 12px' }}>Duty Status</th>
+                      <th style={{ width: '12%', padding: '14px 18px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -657,26 +842,28 @@ export default function StaffRosterAndBroadcastPage() {
                       const isEvening = shift.shift_type === 'evening';
                       return (
                         <tr key={shift.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '14px 20px' }}>
+                          <td style={{ padding: '14px 18px', overflow: 'hidden' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <div style={{
                                 width: '34px',
                                 height: '34px',
+                                minWidth: '34px',
                                 borderRadius: '50%',
                                 background: isMorning ? '#fef3c7' : isEvening ? '#ffedd5' : '#e0e7ff',
                                 color: isMorning ? '#b45309' : isEvening ? '#c2410c' : '#4338ca',
                                 display: 'flex',
                                 alignItems: 'center',
+                                justifySelf: 'center',
                                 justifyContent: 'center',
                                 fontWeight: '700',
                                 fontSize: '13px'
                               }}>
                                 {shift.staff_name.charAt(0).toUpperCase()}
                               </div>
-                              <div>
-                                <div style={{ fontWeight: '700', color: '#0f172a' }}>{shift.staff_name}</div>
+                              <div style={{ overflow: 'hidden' }}>
+                                <div style={{ fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{shift.staff_name}</div>
                                 {shift.phone && (
-                                  <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                                  <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', whiteSpace: 'nowrap' }}>
                                     <Phone size={10} />
                                     {shift.phone}
                                   </div>
@@ -685,40 +872,63 @@ export default function StaffRosterAndBroadcastPage() {
                             </div>
                           </td>
 
-                          <td style={{ padding: '14px 16px' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '4px 10px',
-                              borderRadius: '20px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              background: isMorning ? '#fffbeb' : isEvening ? '#fff7ed' : '#eef2ff',
-                              color: isMorning ? '#b45309' : isEvening ? '#c2410c' : '#4338ca'
-                            }}>
-                              {isMorning ? <Sun size={12} /> : isEvening ? <Sunset size={12} /> : <Moon size={12} />}
-                              {isMorning ? 'Morning (08:00 - 16:00)' : isEvening ? 'Evening (16:00 - 00:00)' : 'Night (00:00 - 08:00)'}
-                            </span>
-                          </td>
-
-                          <td style={{ padding: '14px 16px', fontWeight: '600', color: '#334155' }}>
-                            {shift.staff_role}
-                          </td>
-
-                          <td style={{ padding: '14px 16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#475569' }}>
-                              <MapPin size={13} color="#94a3b8" />
-                              <span>{shift.assigned_section || 'Unassigned'}</span>
+                          <td style={{ padding: '14px 12px' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', width: '100%', maxWidth: '175px' }}>
+                              <select
+                                value={shift.shift_type}
+                                onChange={(e) => handleUpdateShiftType(shift.id, e.target.value)}
+                                title="Click to quickly switch shift window"
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 8px 5px 24px',
+                                  borderRadius: '20px',
+                                  fontSize: '11px',
+                                  fontWeight: '700',
+                                  border: isMorning ? '1px solid #fde68a' : isEvening ? '1px solid #fed7aa' : '1px solid #c7d2fe',
+                                  background: isMorning ? '#fffbeb' : isEvening ? '#fff7ed' : '#eef2ff',
+                                  color: isMorning ? '#b45309' : isEvening ? '#c2410c' : '#4338ca',
+                                  cursor: 'pointer',
+                                  outline: 'none',
+                                  appearance: 'none',
+                                  WebkitAppearance: 'none'
+                                }}
+                              >
+                                <option value="morning">Morning (08-16)</option>
+                                <option value="evening">Evening (16-00)</option>
+                                <option value="night">Night (00-08)</option>
+                              </select>
+                              <div style={{ position: 'absolute', left: '7px', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+                                {isMorning ? <Sun size={12} color="#b45309" /> : isEvening ? <Sunset size={12} color="#c2410c" /> : <Moon size={12} color="#4338ca" />}
+                              </div>
                             </div>
                           </td>
 
-                          <td style={{ padding: '14px 16px' }}>
+                          <td style={{ padding: '14px 12px', overflow: 'hidden' }}>
+                            <div style={{ fontWeight: '600', color: '#334155', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                              {shift.staff_role}
+                            </div>
+                            {shift.notes && (
+                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={shift.notes}>
+                                📝 {shift.notes}
+                              </div>
+                            )}
+                          </td>
+
+                          <td style={{ padding: '14px 12px', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#475569', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                              <MapPin size={13} color="#94a3b8" style={{ minWidth: '13px' }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shift.assigned_section || 'Unassigned'}</span>
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '14px 12px' }}>
                             <select
                               value={shift.status}
                               onChange={(e) => handleUpdateShiftStatus(shift.id, e.target.value)}
                               style={{
-                                padding: '5px 10px',
+                                width: '100%',
+                                maxWidth: '120px',
+                                padding: '5px 8px',
                                 borderRadius: '6px',
                                 fontSize: '12px',
                                 fontWeight: '700',
@@ -742,31 +952,58 @@ export default function StaffRosterAndBroadcastPage() {
                             </select>
                           </td>
 
-                          <td style={{ padding: '14px 16px', color: '#64748b', fontSize: '12px', maxWidth: '200px' }}>
-                            {shift.notes || '—'}
-                          </td>
+                          <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => openEditShiftModal(shift)}
+                                title="Edit Shift Assignment"
+                                style={{
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#334155',
+                                  cursor: 'pointer',
+                                  padding: '5px 8px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseOver={(e) => { e.currentTarget.style.color = '#2563eb'; e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#eff6ff'; }}
+                                onMouseOut={(e) => { e.currentTarget.style.color = '#334155'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#ffffff'; }}
+                              >
+                                <Edit3 size={12} />
+                                Edit
+                              </button>
 
-                          <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteShift(shift.id, shift.staff_name)}
-                              title="Delete shift"
-                              style={{
-                                border: 'none',
-                                background: 'transparent',
-                                color: '#94a3b8',
-                                cursor: 'pointer',
-                                padding: '6px',
-                                borderRadius: '6px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                              onMouseOver={(e) => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2'; }}
-                              onMouseOut={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => openDeleteModal(shift)}
+                                title="Remove Shift Assignment"
+                                style={{
+                                  border: '1px solid #fee2e2',
+                                  background: '#fff5f5',
+                                  color: '#ef4444',
+                                  cursor: 'pointer',
+                                  padding: '5px 8px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseOver={(e) => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+                                onMouseOut={(e) => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.borderColor = '#fee2e2'; }}
+                              >
+                                <Trash2 size={12} />
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1525,6 +1762,621 @@ export default function StaffRosterAndBroadcastPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Shift Modal */}
+      {isEditShiftOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '520px',
+            width: '100%',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #e2e8f0',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#f8fafc'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Edit3 size={18} color="#2563eb" />
+                  Edit Shift Assignment
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>
+                  Update duty window, assigned zone, or operational notes
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditShiftOpen(false)}
+                style={{ border: 'none', background: 'transparent', fontSize: '20px', cursor: 'pointer', color: '#94a3b8' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedShift} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Shift Time Window *
+                </label>
+                <select
+                  value={editFormData.shift_type}
+                  onChange={(e) => setEditFormData({ ...editFormData, shift_type: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
+                >
+                  <option value="morning">🌅 Morning Shift (08:00 AM – 04:00 PM)</option>
+                  <option value="evening">🌇 Evening Shift (04:00 PM – 12:00 Midnight)</option>
+                  <option value="night">🌙 Night Shift (12:00 Midnight – 08:00 AM)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Staff Member Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kamal Perera"
+                  value={editFormData.staff_name}
+                  onChange={(e) => setEditFormData({ ...editFormData, staff_name: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Role / Position
+                  </label>
+                  <select
+                    value={editFormData.staff_role}
+                    onChange={(e) => setEditFormData({ ...editFormData, staff_role: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
+                  >
+                    <option value="Head Captain">Head Captain</option>
+                    <option value="Floor Waiter">Floor Waiter</option>
+                    <option value="Senior Waiter">Senior Waiter</option>
+                    <option value="Cashier / POS Host">Cashier / POS Host</option>
+                    <option value="Bartender">Bartender</option>
+                    <option value="Kitchen Line Cook">Kitchen Line Cook</option>
+                    <option value="Night Supervisor">Night Supervisor</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Assigned Section
+                  </label>
+                  <select
+                    value={editFormData.assigned_section}
+                    onChange={(e) => setEditFormData({ ...editFormData, assigned_section: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
+                  >
+                    <option value="Main Dining Hall">Main Dining Hall</option>
+                    <option value="Window & Terrace">Window &amp; Terrace</option>
+                    <option value="VIP Area & Dining">VIP Area &amp; Dining</option>
+                    <option value="Front Desk & POS">Front Desk &amp; POS</option>
+                    <option value="Bar & Lounge">Bar &amp; Lounge</option>
+                    <option value="All Restaurant Areas">All Restaurant Areas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Duty Status
+                  </label>
+                  <select
+                    value={editFormData.status}
+                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }}
+                  >
+                    <option value="scheduled">🔵 Scheduled</option>
+                    <option value="on_duty">🟢 On Duty</option>
+                    <option value="completed">⚪ Completed</option>
+                    <option value="absent">🔴 Absent</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Contact Phone (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="+94 77 123 4567"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Shift Notes / Responsibilities
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. VIP section evening lead"
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditShiftOpen(false)}
+                  style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: isSubmittingEdit ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isSubmittingEdit ? 'Saving...' : 'Save Shift Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Danger Delete Confirmation Modal */}
+      {isDeleteModalOpen && shiftToDelete && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '440px',
+            width: '100%',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #fee2e2',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <div style={{ padding: '24px 24px 16px 24px', textAlign: 'center' }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '50%',
+                background: '#fef2f2',
+                color: '#ef4444',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px'
+              }}>
+                <Trash2 size={26} />
+              </div>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
+                Remove Shift Assignment?
+              </h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+                Are you sure you want to remove <strong style={{ color: '#0f172a' }}>{shiftToDelete.staff_name}</strong> ({shiftToDelete.staff_role}) from the <span style={{ textTransform: 'capitalize', fontWeight: '600' }}>{shiftToDelete.shift_type}</span> shift on {selectedDate}?
+              </p>
+            </div>
+
+            <div style={{
+              padding: '16px 24px',
+              background: '#f8fafc',
+              borderTop: '1px solid #f1f5f9',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => { setIsDeleteModalOpen(false); setShiftToDelete(null); }}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#475569',
+                  cursor: 'pointer'
+                }}
+              >
+                Keep Assignment
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingShift}
+                onClick={handleConfirmDeleteShift}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: isDeletingShift ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isDeletingShift ? 'Removing...' : 'Yes, Remove Shift'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Official Printable / PDF Shift Roster Modal */}
+      {isReportModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '850px',
+            width: '100%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            border: '1px solid #cbd5e1',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '18px 24px',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#f8fafc'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>
+                    Official Daily Staff Shift Roster
+                  </h3>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                    Document date: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#059669',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(5,150,105,0.2)'
+                  }}
+                >
+                  <Printer size={15} />
+                  Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(false)}
+                  style={{ border: 'none', background: 'transparent', fontSize: '20px', cursor: 'pointer', color: '#94a3b8' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Printable Content */}
+            <div
+              className="luxury-scrollbar"
+              style={{
+                padding: '30px',
+                overflowY: 'auto',
+                flex: 1,
+                background: '#ffffff',
+                color: '#0f172a'
+              }}
+            >
+              <div id="printable-staff-roster">
+                {/* Print Styles */}
+                <style>{`
+                  @media print {
+                    body * {
+                      visibility: hidden !important;
+                    }
+                    #printable-staff-roster, #printable-staff-roster * {
+                      visibility: visible !important;
+                    }
+                    #printable-staff-roster {
+                      position: absolute !important;
+                      left: 0 !important;
+                      top: 0 !important;
+                      width: 100% !important;
+                      padding: 20px !important;
+                      margin: 0 !important;
+                    }
+                  }
+                `}</style>
+
+                {/* Document Letterhead */}
+                <div style={{ borderBottom: '2px solid #0f172a', paddingBottom: '16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '900', letterSpacing: '-0.02em', color: '#0f172a' }}>
+                      TABLEFLOW RESTAURANT &amp; BAR
+                    </h2>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
+                      Operational Staff Deployment &amp; Duty Roster Sheet
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ROSTER DATE</div>
+                    <div style={{ fontSize: '16px', fontWeight: '800', color: '#0f172a', marginTop: '2px' }}>
+                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metric Summary Strip */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '12px',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  marginBottom: '24px'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>Total Roster</div>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a' }}>{shifts.length} Staff</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#10b981', fontWeight: '600' }}>Active On Duty</div>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#059669' }}>{onDutyCount}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#b45309', fontWeight: '600' }}>Morning Shift</div>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#b45309' }}>{morningShifts.length}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#c2410c', fontWeight: '600' }}>Evening Shift</div>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#c2410c' }}>{eveningShifts.length}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#4338ca', fontWeight: '600' }}>Night Shift</div>
+                    <div style={{ fontSize: '20px', fontWeight: '800', color: '#4338ca' }}>{nightShifts.length}</div>
+                  </div>
+                </div>
+
+                {/* Section Helper Function */}
+                {[
+                  { title: '🌅 Morning Shift (08:00 AM – 04:00 PM)', list: morningShifts, accent: '#b45309', bg: '#fffbeb' },
+                  { title: '🌇 Evening Shift (04:00 PM – 12:00 Midnight)', list: eveningShifts, accent: '#c2410c', bg: '#fff7ed' },
+                  { title: '🌙 Night Shift (12:00 Midnight – 08:00 AM)', list: nightShifts, accent: '#4338ca', bg: '#eef2ff' }
+                ].map(sec => (
+                  <div key={sec.title} style={{ marginBottom: '24px' }}>
+                    <div style={{
+                      background: sec.bg,
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: '800',
+                      color: sec.accent,
+                      marginBottom: '8px',
+                      border: `1px solid ${sec.accent}20`
+                    }}>
+                      {sec.title} — {sec.list.length} Staff Assigned
+                    </div>
+
+                    {sec.list.length === 0 ? (
+                      <div style={{ padding: '12px', fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', background: '#fafafa', borderRadius: '6px' }}>
+                        No staff scheduled for this shift.
+                      </div>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', marginBottom: '8px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1.5px solid #cbd5e1', color: '#475569', fontWeight: '700' }}>
+                            <th style={{ padding: '8px 10px', width: '25%' }}>Staff Member</th>
+                            <th style={{ padding: '8px 10px', width: '20%' }}>Position / Role</th>
+                            <th style={{ padding: '8px 10px', width: '20%' }}>Assigned Section</th>
+                            <th style={{ padding: '8px 10px', width: '15%' }}>Duty Status</th>
+                            <th style={{ padding: '8px 10px', width: '20%' }}>Contact / Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sec.list.map(s => (
+                            <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '8px 10px', fontWeight: '700', color: '#0f172a' }}>{s.staff_name}</td>
+                              <td style={{ padding: '8px 10px', color: '#334155' }}>{s.staff_role}</td>
+                              <td style={{ padding: '8px 10px', color: '#475569' }}>{s.assigned_section || 'Unassigned'}</td>
+                              <td style={{ padding: '8px 10px', textTransform: 'capitalize', fontWeight: '600' }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  background: s.status === 'on_duty' ? '#dcfce7' : s.status === 'scheduled' ? '#dbeafe' : '#f1f5f9',
+                                  color: s.status === 'on_duty' ? '#15803d' : s.status === 'scheduled' ? '#1d4ed8' : '#475569'
+                                }}>
+                                  {s.status.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td style={{ padding: '8px 10px', color: '#64748b' }}>
+                                {s.phone && <div>📞 {s.phone}</div>}
+                                {s.notes && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{s.notes}</div>}
+                                {!s.phone && !s.notes && '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                ))}
+
+                {/* Official Sign-Off Block */}
+                <div style={{
+                  marginTop: '36px',
+                  paddingTop: '20px',
+                  borderTop: '2px dashed #cbd5e1',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: '20px',
+                  pageBreakInside: 'avoid'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '40px' }}>
+                      Duty Manager Verification
+                    </div>
+                    <div style={{ borderBottom: '1px solid #94a3b8', width: '85%' }}></div>
+                    <div style={{ fontSize: '12px', color: '#475569', marginTop: '6px' }}>Signature &amp; Date</div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '40px' }}>
+                      Head Captain / Supervisor
+                    </div>
+                    <div style={{ borderBottom: '1px solid #94a3b8', width: '85%' }}></div>
+                    <div style={{ fontSize: '12px', color: '#475569', marginTop: '6px' }}>Signature &amp; Date</div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '10px' }}>
+                      Restaurant Seal / Stamp
+                    </div>
+                    <div style={{
+                      border: '1.5px dashed #cbd5e1',
+                      borderRadius: '8px',
+                      height: '60px',
+                      width: '85%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#cbd5e1',
+                      fontSize: '11px'
+                    }}>
+                      Official Seal
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '20px', fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>
+                  Document generated via TableFlow System on {new Date().toLocaleString()} • Confidential Internal Roster
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '14px 24px',
+              borderTop: '1px solid #e2e8f0',
+              background: '#f8fafc',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                Use &quot;Print / Save PDF&quot; or browser print dialog (Ctrl+P / Cmd+P) to print or export PDF.
+              </span>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={handleExportRosterCsv}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📥 Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsReportModalOpen(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: '#475569',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

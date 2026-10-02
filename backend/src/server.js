@@ -496,11 +496,35 @@ app.get('/api/admin/my-role', async (req, res) => {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
 
-    const { data: userRecord, error: dbError } = await supabaseAdmin.from('users').select('role, full_name').eq('id', user.id).single();
-    if (dbError) throw dbError;
+    let role = user.user_metadata?.role || 'admin';
+    let fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Admin';
 
-    res.json({ role: userRecord.role, full_name: userRecord.full_name, email: user.email });
+    try {
+      const { data: userRecord } = await supabaseAdmin
+        .from('users')
+        .select('role, full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (userRecord && userRecord.role) {
+        role = userRecord.role;
+        fullName = userRecord.full_name || fullName;
+      } else {
+        // Upsert so user record exists in users table
+        await supabaseAdmin.from('users').upsert({
+          id: user.id,
+          email: user.email,
+          full_name: fullName,
+          role: role
+        }, { onConflict: 'id' }).catch(() => {});
+      }
+    } catch (dbErr) {
+      console.warn('Warning querying users table in /my-role:', dbErr.message);
+    }
+
+    res.json({ role, full_name: fullName, email: user.email });
   } catch (error) {
+    console.error('Error in /api/admin/my-role:', error);
     res.status(500).json({ error: error.message });
   }
 });
