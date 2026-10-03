@@ -2143,6 +2143,208 @@ app.post('/api/coupons/validate', async (req, res) => {
 });
 
 // ==========================================
+// Admin Coupons & Promotions CRUD Endpoints
+// ==========================================
+
+// GET /api/admin/coupons - List all coupons with redemption metrics
+app.get('/api/admin/coupons', async (req, res) => {
+  try {
+    const { data: coupons, error } = await supabaseAdmin
+      .from('coupons')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Fetch redemptions count for all coupons
+    const { data: redemptions, error: redErr } = await supabaseAdmin
+      .from('coupon_redemptions')
+      .select('coupon_id');
+
+    const counts = {};
+    if (!redErr && redemptions) {
+      redemptions.forEach(r => {
+        counts[r.coupon_id] = (counts[r.coupon_id] || 0) + 1;
+      });
+    }
+
+    const enriched = (coupons || []).map(c => ({
+      ...c,
+      redemptions_count: counts[c.id] || 0,
+      is_expired: c.valid_until ? new Date(c.valid_until) < new Date() : false
+    }));
+
+    res.json({ success: true, coupons: enriched });
+  } catch (error) {
+    console.error('Error fetching admin coupons:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/admin/coupons - Create a new coupon
+app.post('/api/admin/coupons', async (req, res) => {
+  try {
+    const {
+      code,
+      description,
+      discount_percent,
+      discount_amount,
+      min_order_amount,
+      max_uses_per_user,
+      is_active = true,
+      valid_until
+    } = req.body;
+
+    if (!code || !code.trim()) {
+      return res.status(400).json({ error: 'Coupon code is required.' });
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const percent = Math.max(0, Math.min(100, parseInt(discount_percent, 10) || 0));
+    const flatAmount = Math.max(0, parseFloat(discount_amount) || 0);
+
+    if (percent <= 0 && flatAmount <= 0) {
+      return res.status(400).json({ error: 'Please provide either a valid discount percentage or a flat discount amount.' });
+    }
+
+    // Check duplicate code
+    const { data: existing } = await supabaseAdmin
+      .from('coupons')
+      .select('id')
+      .eq('code', cleanCode)
+      .maybeSingle();
+
+    if (existing) {
+      return res.status(400).json({ error: `Coupon code "${cleanCode}" already exists.` });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('coupons')
+      .insert([{
+        code: cleanCode,
+        description: description?.trim() || null,
+        discount_percent: percent,
+        discount_amount: flatAmount,
+        min_order_amount: Math.max(0, parseFloat(min_order_amount) || 0),
+        max_uses_per_user: Math.max(1, parseInt(max_uses_per_user, 10) || 1),
+        is_active: is_active !== false,
+        valid_until: valid_until ? new Date(valid_until).toISOString() : null
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ success: true, coupon: { ...data, redemptions_count: 0 } });
+  } catch (error) {
+    console.error('Error creating coupon:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/admin/coupons/:id - Update an existing coupon
+app.put('/api/admin/coupons/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      code,
+      description,
+      discount_percent,
+      discount_amount,
+      min_order_amount,
+      max_uses_per_user,
+      is_active,
+      valid_until
+    } = req.body;
+
+    const updates = {};
+    if (code) updates.code = code.trim().toUpperCase();
+    if (description !== undefined) updates.description = description ? description.trim() : null;
+    if (discount_percent !== undefined) updates.discount_percent = Math.max(0, Math.min(100, parseInt(discount_percent, 10) || 0));
+    if (discount_amount !== undefined) updates.discount_amount = Math.max(0, parseFloat(discount_amount) || 0);
+    if (min_order_amount !== undefined) updates.min_order_amount = Math.max(0, parseFloat(min_order_amount) || 0);
+    if (max_uses_per_user !== undefined) updates.max_uses_per_user = Math.max(1, parseInt(max_uses_per_user, 10) || 1);
+    if (is_active !== undefined) updates.is_active = Boolean(is_active);
+    if (valid_until !== undefined) updates.valid_until = valid_until ? new Date(valid_until).toISOString() : null;
+
+    const { data, error } = await supabaseAdmin
+      .from('coupons')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, coupon: data });
+  } catch (error) {
+    console.error('Error updating coupon:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /api/admin/coupons/:id/toggle - Toggle active status
+app.patch('/api/admin/coupons/:id/toggle', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    const { data, error } = await supabaseAdmin
+      .from('coupons')
+      .update({ is_active: Boolean(is_active) })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, coupon: data });
+  } catch (error) {
+    console.error('Error toggling coupon status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/admin/coupons/:id - Delete or archive a coupon
+app.delete('/api/admin/coupons/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if there are redemptions
+    const { count, error: countErr } = await supabaseAdmin
+      .from('coupon_redemptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('coupon_id', id);
+
+    if (!countErr && count > 0) {
+      // If redemptions exist, soft-deactivate instead of breaking historical order relations
+      await supabaseAdmin
+        .from('coupons')
+        .update({ is_active: false })
+        .eq('id', id);
+
+      return res.json({
+        success: true,
+        archived: true,
+        message: `Coupon has ${count} existing redemption records. It was deactivated to preserve order history.`
+      });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('coupons')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    res.json({ success: true, deleted: true, message: 'Coupon deleted successfully.' });
+  } catch (error) {
+    console.error('Error deleting coupon:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
 // Service Requests (Call Waiter / Water / Bill)
 // ==========================================
 app.post('/api/service-requests', async (req, res) => {

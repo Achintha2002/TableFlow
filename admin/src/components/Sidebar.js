@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck, Share2, Clock } from 'lucide-react';
+import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck, Share2, Clock, TicketPercent } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function Sidebar() {
@@ -203,6 +203,10 @@ export default function Sidebar() {
             <Link href="/menu" className={`nav-item ${isActive('/menu')}`}>
               <UtensilsCrossed size={20} />
               Menu
+            </Link>
+            <Link href="/promotions" className={`nav-item ${isActive('/promotions')}`}>
+              <TicketPercent size={20} />
+              Promotions & Vouchers
             </Link>
           </>
         )}
