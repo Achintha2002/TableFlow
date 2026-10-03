@@ -14,8 +14,8 @@ class MyVouchersScreen extends StatefulWidget {
   State<MyVouchersScreen> createState() => _MyVouchersScreenState();
 }
 
-class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _MyVouchersScreenState extends State<MyVouchersScreen> {
+  int _selectedTabIndex = 1; // 0: My Wallet, 1: Earn 10% Tasks
   bool _isLoading = true;
   String _loyaltyTier = 'Silver';
   List<Map<String, dynamic>> _vouchers = [];
@@ -25,14 +25,7 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -216,7 +209,7 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
                 onPressed: () {
                   Navigator.pop(ctx);
                   _loadData();
-                  _tabController.animateTo(0);
+                  setState(() => _selectedTabIndex = 0);
                 },
                 child: const Text('View in My Wallet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               ),
@@ -349,25 +342,33 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
             )
           : _isLoading
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
-              : Column(
-                  children: [
-                    // Ultra-Luxury VIP Hero Card
-                    _buildHeroPrivilegeCard(),
+              // SINGLE SMOOTH VERTICAL SCROLL: 100% FIXED HORIZONTALLY, ZERO SWAYING!
+              : SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                  child: Column(
+                    children: [
+                      // Ultra-Luxury VIP Hero Card
+                      _buildHeroPrivilegeCard(),
 
-                    // Luxury Segmented Floating Tab Bar
-                    _buildSegmentedTabBar(),
+                      // Luxury Segmented Tab Bar (Rock-solid tap toggle)
+                      _buildSegmentedTabBar(),
 
-                    // Views
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildVouchersTab(),
-                          _buildTasksTab(),
-                        ],
+                      // Selected Tab Content (Unified vertical layout)
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: _selectedTabIndex == 0
+                            ? KeyedSubtree(
+                                key: const ValueKey('tab_vouchers'),
+                                child: _buildVouchersTab(),
+                              )
+                            : KeyedSubtree(
+                                key: const ValueKey('tab_tasks'),
+                                child: _buildTasksTab(),
+                              ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 36),
+                    ],
+                  ),
                 ),
     );
   }
@@ -603,7 +604,7 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2. LUXURY SEGMENTED FLOATING TAB BAR
+  // 2. LUXURY SEGMENTED TAB BAR (100% FIXED & STABLE)
   // ─────────────────────────────────────────────────────────────
   Widget _buildSegmentedTabBar() {
     return Container(
@@ -621,46 +622,99 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
           ),
         ],
       ),
-      child: TabBar(
-        controller: _tabController,
-        indicator: BoxDecoration(
-          color: const Color(0xFF3A2E28),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF3A2E28).withValues(alpha: 0.25),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: const Color(0xFFFDE68A),
-        unselectedLabelColor: const Color(0xFF64748B),
-        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        dividerColor: Colors.transparent,
-        tabs: [
-          Tab(
-            height: 40,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.confirmation_number_outlined, size: 16),
-                const SizedBox(width: 6),
-                Text('My Wallet (${_vouchers.length})'),
-              ],
+      child: Row(
+        children: [
+          // Tab 0: My Wallet
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedTabIndex = 0);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _selectedTabIndex == 0 ? const Color(0xFF3A2E28) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: _selectedTabIndex == 0
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF3A2E28).withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.confirmation_number_outlined,
+                      size: 16,
+                      color: _selectedTabIndex == 0 ? const Color(0xFFFDE68A) : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'My Wallet (${_vouchers.length})',
+                      style: TextStyle(
+                        fontWeight: _selectedTabIndex == 0 ? FontWeight.w800 : FontWeight.w600,
+                        fontSize: 13,
+                        color: _selectedTabIndex == 0 ? const Color(0xFFFDE68A) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          const Tab(
-            height: 40,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.auto_awesome, size: 15, color: Color(0xFFD4AF37)),
-                SizedBox(width: 6),
-                Text('Earn 10% Tasks'),
-              ],
+
+          // Tab 1: Earn 10% Tasks
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedTabIndex = 1);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _selectedTabIndex == 1 ? const Color(0xFF3A2E28) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: _selectedTabIndex == 1
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF3A2E28).withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      size: 15,
+                      color: _selectedTabIndex == 1 ? const Color(0xFFFDE68A) : const Color(0xFFD4AF37),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Earn 10% Tasks',
+                      style: TextStyle(
+                        fontWeight: _selectedTabIndex == 1 ? FontWeight.w800 : FontWeight.w600,
+                        fontSize: 13,
+                        color: _selectedTabIndex == 1 ? const Color(0xFFFDE68A) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -712,7 +766,7 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
               ),
               const SizedBox(height: 22),
               ElevatedButton.icon(
-                onPressed: () => _tabController.animateTo(1),
+                onPressed: () => setState(() => _selectedTabIndex = 1),
                 icon: const Icon(Icons.flash_on_rounded, size: 16),
                 label: const Text('Explore Challenges (Earn 10%)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 style: ElevatedButton.styleFrom(
@@ -730,6 +784,8 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
     }
 
     return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       itemCount: _vouchers.length,
       itemBuilder: (context, index) {
@@ -986,6 +1042,8 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
   // ─────────────────────────────────────────────────────────────
   Widget _buildTasksTab() {
     return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       itemCount: _tasks.length,
       itemBuilder: (context, index) {
