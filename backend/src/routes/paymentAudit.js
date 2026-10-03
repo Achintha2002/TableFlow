@@ -388,9 +388,15 @@ module.exports = function(supabaseAdmin) {
 
       // 2. Create the Order
       let newOrder;
-      const notesWithRef = special_notes 
+      let notesWithRef = special_notes 
         ? `[Bank Transfer Ref: ${cleanRef} | Slip: ${slipPath}] ${special_notes}`
         : `[Bank Transfer Ref: ${cleanRef} | Slip: ${slipPath}]`;
+
+      if (coupon_code && totalDiscount > 0) {
+        notesWithRef = `[Coupon: ${coupon_code.trim().toUpperCase()} (-LKR ${totalDiscount.toFixed(2)})] ${notesWithRef}`.trim();
+      } else if (pointsDiscount > 0) {
+        notesWithRef = `[Points Discount: -LKR ${pointsDiscount.toFixed(2)}] ${notesWithRef}`.trim();
+      }
 
       const primaryPayload = {
         user_id: req.user.id,

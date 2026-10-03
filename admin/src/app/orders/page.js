@@ -15,6 +15,45 @@ function fmtTime(iso) {
   });
 }
 
+function extractDiscountInfo(o) {
+  let discount = Number(o.discount_amount) || 0;
+  let subtotal = Number(o.subtotal) || 0;
+  let code = null;
+
+  const notes = o.special_notes || '';
+  
+  // 1. Check coupon tag [Coupon: CODE (-LKR XXX)]
+  const couponMatch = notes.match(/\[Coupon:\s*([A-Z0-9_\-]+)(?:\s*\(-LKR\s*([\d\.]+)\))?\]/i);
+  if (couponMatch) {
+    code = couponMatch[1];
+    if (couponMatch[2] && discount === 0) {
+      discount = parseFloat(couponMatch[2]);
+    }
+  }
+
+  // 2. Check points discount [Points Discount: -LKR XXX]
+  const pointsMatch = notes.match(/\[Points Discount:\s*-LKR\s*([\d\.]+)\]/i);
+  if (pointsMatch && discount === 0) {
+    discount = parseFloat(pointsMatch[1]);
+    code = 'Points';
+  }
+
+  // 3. Check general discount [Discount: LKR XXX] or [Settled: ... Discount: LKR XXX]
+  const discountMatch = notes.match(/Discount:\s*LKR\s*([\d\.]+)/i);
+  if (discountMatch && discount === 0) {
+    discount = parseFloat(discountMatch[1]);
+  }
+
+  // 4. Implied gross subtotal
+  if (subtotal === 0 && discount > 0) {
+    subtotal = (Number(o.total_amount) || 0) + discount;
+  } else if (subtotal > 0 && discount === 0 && subtotal > (Number(o.total_amount) || 0)) {
+    discount = Math.round((subtotal - (Number(o.total_amount) || 0)) * 100) / 100;
+  }
+
+  return { discount, subtotal, code };
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [filterTab, setFilterTab] = useState('active'); // 'active' | 'awaiting_audit' | 'all'
@@ -61,11 +100,13 @@ export default function OrdersPage() {
   };
 
   async function fetchOrders() {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('orders')
       .select(`
         id, 
         total_amount, 
+        subtotal,
+        discount_amount,
         status, 
         payment_status,
         special_notes,
@@ -78,7 +119,23 @@ export default function OrdersPage() {
       .order('created_at', { ascending: false });
       
     if (error) {
-      console.warn('Fetch orders notice:', error.message || error);
+      console.warn('Fetch orders with discount notice, falling back:', error.message || error);
+      const fallback = await supabase
+        .from('orders')
+        .select(`
+          id, 
+          total_amount, 
+          status, 
+          payment_status,
+          special_notes,
+          created_at,
+          users (full_name),
+          restaurant_tables (table_number),
+          order_items (quantity, menu_items (name)),
+          reviews (rating, comment)
+        `)
+        .order('created_at', { ascending: false });
+      data = fallback.data;
     }
     setOrders(data || []);
     setLoading(false);
@@ -354,10 +411,59 @@ export default function OrdersPage() {
                   <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
                   <td>{o.users?.full_name || 'Guest'}</td>
                   <td>{o.restaurant_tables?.table_number ? `T-${o.restaurant_tables.table_number}` : '—'}</td>
-                  <td style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '200px' }}>
-                    {o.order_items?.map(item => `${item.quantity}x ${item.menu_items?.name}`).join(', ') || '—'}
+                  <td style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '220px' }}>
+                    <div>
+                      {o.order_items?.map(item => `${item.quantity}x ${item.menu_items?.name}`).join(', ') || '—'}
+                    </div>
+                    {o.special_notes && !o.special_notes.startsWith('[Bank Transfer Ref:') && (
+                      <div style={{ fontSize: '11px', color: 'var(--primary-gold)', marginTop: '3px', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                        📝 {o.special_notes.replace(/\[Bank Transfer Ref:[^\]]+\]/g, '').trim()}
+                      </div>
+                    )}
                   </td>
-                  <td>LKR {(o.total_amount ?? 0).toFixed(2)}</td>
+                  <td>
+                    {(() => {
+                      const { discount, subtotal, code } = extractDiscountInfo(o);
+                      const finalAmount = Number(o.total_amount ?? 0);
+
+                      if (discount > 0) {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            <span style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '13px' }}>
+                              LKR {finalAmount.toFixed(2)}
+                            </span>
+                            {subtotal > 0 && subtotal > finalAmount && (
+                              <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', fontSize: '11px' }}>
+                                LKR {subtotal.toFixed(2)}
+                              </span>
+                            )}
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981',
+                              border: '1px solid rgba(16, 185, 129, 0.35)',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              width: 'fit-content',
+                              marginTop: '1px'
+                            }}>
+                              🏷️ -LKR {discount.toFixed(2)} {code ? `(${code})` : ''}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '13px' }}>
+                          LKR {finalAmount.toFixed(2)}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>
                     {isAwaiting ? (
                       <span style={{

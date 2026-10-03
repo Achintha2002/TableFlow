@@ -1040,6 +1040,14 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     }
 
     // 6. Create the Order
+    let finalSpecialNotes = special_notes || '';
+    if ((couponRecord || coupon_code) && totalDiscount > 0) {
+      const codeToTag = (couponRecord?.code || coupon_code).trim().toUpperCase();
+      finalSpecialNotes = `[Coupon: ${codeToTag} (-LKR ${totalDiscount.toFixed(2)})] ${finalSpecialNotes}`.trim();
+    } else if (pointsDiscount > 0) {
+      finalSpecialNotes = `[Points Discount: -LKR ${pointsDiscount.toFixed(2)}] ${finalSpecialNotes}`.trim();
+    }
+
     const insertPayload = {
       user_id: req.user.id,
       reservation_id: effectiveReservationId,
@@ -1054,7 +1062,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       payment_method: payment_method,
       prep_time_minutes: maxPrepTime,
       target_serve_time: targetServeTime.toISOString(),
-      special_notes: special_notes || null,
+      special_notes: finalSpecialNotes || null,
       idempotency_key: idempotencyKey || null
     };
 
@@ -1081,7 +1089,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         payment_status: payment_method === 'online_card' ? 'processing' : 'pending',
         prep_time_minutes: maxPrepTime,
         target_serve_time: targetServeTime.toISOString(),
-        special_notes: special_notes || null
+        special_notes: finalSpecialNotes || null
       };
       const { data: fallbackOrder, error: fallbackErr } = await supabaseAdmin
         .from('orders')

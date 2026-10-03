@@ -19,6 +19,40 @@ function fmtTime(iso) {
   });
 }
 
+function extractDiscountInfo(o) {
+  let discount = Number(o.discount_amount) || 0;
+  let subtotal = Number(o.subtotal) || 0;
+  let code = null;
+
+  const notes = o.special_notes || '';
+  const couponMatch = notes.match(/\[Coupon:\s*([A-Z0-9_\-]+)(?:\s*\(-LKR\s*([\d\.]+)\))?\]/i);
+  if (couponMatch) {
+    code = couponMatch[1];
+    if (couponMatch[2] && discount === 0) {
+      discount = parseFloat(couponMatch[2]);
+    }
+  }
+
+  const pointsMatch = notes.match(/\[Points Discount:\s*-LKR\s*([\d\.]+)\]/i);
+  if (pointsMatch && discount === 0) {
+    discount = parseFloat(pointsMatch[1]);
+    code = 'Points';
+  }
+
+  const discountMatch = notes.match(/Discount:\s*LKR\s*([\d\.]+)/i);
+  if (discountMatch && discount === 0) {
+    discount = parseFloat(discountMatch[1]);
+  }
+
+  if (subtotal === 0 && discount > 0) {
+    subtotal = (Number(o.total_amount) || 0) + discount;
+  } else if (subtotal > 0 && discount === 0 && subtotal > (Number(o.total_amount) || 0)) {
+    discount = Math.round((subtotal - (Number(o.total_amount) || 0)) * 100) / 100;
+  }
+
+  return { discount, subtotal, code };
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState({ queue: 0, orders: 0, reservations: 0, customers: 0, admins: 0 });
   const [recentOrders, setRecentOrders] = useState([]);
@@ -45,7 +79,11 @@ export default function Dashboard() {
       const customerCount = usersRes.filter(u => u.role === 'customer').length;
       const adminCount = usersRes.filter(u => u.role === 'admin').length;
 
-      const { data: oData } = await supabase.from('orders').select('id, status, total_amount, created_at').order('created_at', { ascending: false }).limit(5);
+      const { data: oData } = await supabase
+        .from('orders')
+        .select('id, status, total_amount, subtotal, discount_amount, special_notes, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
       const { data: qData } = await supabase.from('queue_entries').select('id, pax, status, joined_at').order('joined_at', { ascending: false }).limit(5);
 
       setStats({ 
@@ -177,7 +215,39 @@ export default function Dashboard() {
               {recentOrders.length > 0 ? recentOrders.map(o => (
                 <tr key={o.id}>
                   <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
-                  <td>LKR {(o.total_amount ?? 0).toFixed(2)}</td>
+                  <td>
+                    {(() => {
+                      const { discount, subtotal, code } = extractDiscountInfo(o);
+                      const finalAmount = Number(o.total_amount ?? 0);
+
+                      if (discount > 0) {
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>
+                              LKR {finalAmount.toFixed(2)}
+                            </span>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              width: 'fit-content'
+                            }}>
+                              🏷️ -LKR {discount.toFixed(2)} {code ? `(${code})` : ''}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return <span>LKR {finalAmount.toFixed(2)}</span>;
+                    })()}
+                  </td>
                   <td>{badge(o.status === 'served' ? 'success' : o.status === 'preparing' ? 'info' : o.status === 'pending' ? 'warning' : 'muted', o.status)}</td>
                   <td>{fmtTime(o.created_at)}</td>
                 </tr>
