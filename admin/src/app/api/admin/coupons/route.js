@@ -8,7 +8,15 @@ export async function GET() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase coupons error:', error);
+      return NextResponse.json({
+        error: error.message || 'Database error querying coupons',
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      }, { status: 500 });
+    }
 
     // Fetch redemptions count
     const { data: redemptions, error: redErr } = await supabaseAdmin

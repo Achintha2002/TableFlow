@@ -3,7 +3,8 @@ import { supabaseAdmin } from '../../../../../lib/supabaseAdmin';
 
 export async function PUT(req, { params }) {
   try {
-    const { id } = await params;
+    const resolved = params instanceof Promise ? await params : params;
+    const id = resolved?.id;
     const body = await req.json();
     const {
       code,
@@ -44,7 +45,8 @@ export async function PUT(req, { params }) {
 
 export async function PATCH(req, { params }) {
   try {
-    const { id } = await params;
+    const resolved = params instanceof Promise ? await params : params;
+    const id = resolved?.id;
     const body = await req.json();
     const { is_active } = body;
 
@@ -66,7 +68,8 @@ export async function PATCH(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    const { id } = await params;
+    const resolved = params instanceof Promise ? await params : params;
+    const id = resolved?.id;
 
     // Check if there are redemptions
     const { count, error: countErr } = await supabaseAdmin

@@ -31,6 +31,8 @@ export default function PromotionsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [tableNotCreated, setTableNotCreated] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,22 +75,19 @@ export default function PromotionsPage() {
     if (isManual) setRefreshing(true);
     try {
       const res = await fetch('/api/admin/coupons');
-      if (res.ok) {
-        const json = await res.json();
-        setCoupons(json.coupons || []);
-      } else {
-        // Direct Supabase Fallback
-        const { data, error } = await supabase
-          .from('coupons')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setCoupons(data || []);
+      const json = await res.json();
+      if (!res.ok) {
+        const errMsg = json.error || '';
+        if (errMsg.includes('does not exist') || errMsg.includes('coupons') || json.code === '42P01') {
+          setTableNotCreated(true);
+        }
+        throw new Error(errMsg || `Server responded with status ${res.status}`);
       }
+      setTableNotCreated(false);
+      setCoupons(json.coupons || []);
     } catch (err) {
-      console.error('Failed to fetch coupons:', err);
-      showToast('Error loading vouchers: ' + err.message, 'error');
+      console.error('Failed to fetch coupons:', err.message || err);
+      showToast('Notice: ' + (err.message || 'Could not load vouchers'), 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -418,6 +417,115 @@ export default function PromotionsPage() {
           </button>
         </div>
       </div>
+
+      {/* Missing DB Table Banner */}
+      {tableNotCreated && (
+        <div style={{
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          borderRadius: '14px',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={22} color="#d97706" />
+            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#92400e' }}>
+              Database Setup Required: `coupons` table not found in Supabase
+            </h4>
+          </div>
+          <p style={{ margin: 0, fontSize: '13px', color: '#b45309', lineHeight: 1.5 }}>
+            To activate discount vouchers, please run the SQL setup script in your Supabase SQL editor:
+            {' '}<a href="https://supabase.com/dashboard/project/azjjndqecpemltvdbkvy/sql" target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', fontWeight: 700 }}>
+              Open Supabase SQL Editor
+            </a>
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                const sql = `CREATE TABLE IF NOT EXISTS public.coupons (
+    id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    description TEXT,
+    discount_percent INT DEFAULT 0,
+    discount_amount DECIMAL(10, 2) DEFAULT 0.00,
+    min_order_amount DECIMAL(10, 2) DEFAULT 0.00,
+    max_uses_per_user INT DEFAULT 1,
+    is_active BOOLEAN DEFAULT true,
+    valid_until TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.coupon_redemptions (
+    id SERIAL PRIMARY KEY,
+    coupon_id INT REFERENCES public.coupons(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+    redeemed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.coupons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.coupon_redemptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view active coupons" ON public.coupons;
+CREATE POLICY "Anyone can view active coupons" ON public.coupons FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admins manage coupons" ON public.coupons;
+CREATE POLICY "Admins manage coupons" ON public.coupons FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Allow redemptions read" ON public.coupon_redemptions;
+CREATE POLICY "Allow redemptions read" ON public.coupon_redemptions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow redemptions insert" ON public.coupon_redemptions;
+CREATE POLICY "Allow redemptions insert" ON public.coupon_redemptions FOR INSERT WITH CHECK (true);
+
+INSERT INTO public.coupons (code, description, discount_percent, discount_amount, min_order_amount, max_uses_per_user, is_active, valid_until)
+VALUES 
+    ('WELCOME10', '10% Welcome discount for new diners', 10, 0, 1000, 1, true, NOW() + INTERVAL '60 days'),
+    ('TF-FEAST500', 'Flat LKR 500 discount on bills over LKR 3,500', 0, 500, 3500, 2, true, NOW() + INTERVAL '30 days')
+ON CONFLICT (code) DO NOTHING;`;
+                navigator.clipboard.writeText(sql);
+                setCopiedSql(true);
+                showToast('SQL script copied! Paste it in Supabase SQL editor.', 'success');
+                setTimeout(() => setCopiedSql(false), 3000);
+              }}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                background: '#d97706',
+                color: '#ffffff',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Copy size={13} />
+              {copiedSql ? 'SQL Copied!' : 'Copy SQL Setup Script'}
+            </button>
+            <button
+              onClick={() => fetchCoupons(true)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #d97706',
+                background: '#ffffff',
+                color: '#92400e',
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer'
+              }}
+            >
+              ↻ I ran it, Reload now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>

@@ -26,6 +26,8 @@ export default function Topbar() {
     title = 'Reports & Analytics'; subtitle = 'Restaurant sales performance and revenue';
   } else if (pathname === '/partner-sync') {
     title = 'Partner Sync'; subtitle = 'Live integration with delivery & booking partners';
+  } else if (pathname === '/promotions') {
+    title = 'Promotions & Vouchers'; subtitle = 'Discount codes, vouchers & customer promotions';
   }
 
   return (
