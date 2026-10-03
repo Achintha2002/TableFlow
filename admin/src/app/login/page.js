@@ -77,6 +77,42 @@ export default function LoginPage() {
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              setLoading(true);
+              setErrorMsg('');
+              try {
+                const res = await fetch('/api/admin/reset-admin');
+                const json = await res.json();
+                if (res.ok) {
+                  setEmail('tableflow@gmail.com');
+                  setPassword('adminPassword123!');
+                  setErrorMsg('');
+                  alert('✅ Admin credentials reset successfully!\n\nEmail: tableflow@gmail.com\nPassword: adminPassword123!\n\nNow click "Sign In".');
+                } else {
+                  setErrorMsg('Failed to reset: ' + json.error);
+                }
+              } catch (err) {
+                setErrorMsg('Error: ' + err.message);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            style={{
+              background: 'transparent',
+              border: '1px dashed #cbd5e1',
+              borderRadius: 4,
+              padding: '8px',
+              color: 'var(--text-muted)',
+              fontSize: 12,
+              cursor: 'pointer',
+              marginTop: 4
+            }}
+          >
+            🔧 Auto-Fix / Reset Admin Password
+          </button>
         </form>
       </div>
     </div>
