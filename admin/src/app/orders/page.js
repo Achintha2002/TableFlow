@@ -394,6 +394,8 @@ export default function OrdersPage() {
               <th>Customer</th>
               <th>Table</th>
               <th>Items</th>
+              <th>Subtotal</th>
+              <th style={{ color: '#10b981' }}>Discount</th>
               <th>Total Amount</th>
               <th>Status</th>
               <th>Payment</th>
@@ -405,13 +407,16 @@ export default function OrdersPage() {
           <tbody>
             {displayedOrders.length > 0 ? displayedOrders.map(o => {
               const isAwaiting = isAwaitingVerification(o);
+              const { discount, subtotal, code } = extractDiscountInfo(o);
+              const finalAmount = Number(o.total_amount ?? 0);
+              const displaySubtotal = subtotal > 0 ? subtotal : (discount > 0 ? (finalAmount + discount) : finalAmount);
 
               return (
                 <tr key={o.id}>
                   <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
                   <td>{o.users?.full_name || 'Guest'}</td>
                   <td>{o.restaurant_tables?.table_number ? `T-${o.restaurant_tables.table_number}` : '—'}</td>
-                  <td style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '220px' }}>
+                  <td style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '200px' }}>
                     <div>
                       {o.order_items?.map(item => `${item.quantity}x ${item.menu_items?.name}`).join(', ') || '—'}
                     </div>
@@ -421,48 +426,34 @@ export default function OrdersPage() {
                       </div>
                     )}
                   </td>
+                  <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    LKR {displaySubtotal.toFixed(2)}
+                  </td>
                   <td>
-                    {(() => {
-                      const { discount, subtotal, code } = extractDiscountInfo(o);
-                      const finalAmount = Number(o.total_amount ?? 0);
-
-                      if (discount > 0) {
-                        return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            <span style={{ fontWeight: '700', color: 'var(--text-primary)', fontSize: '13px' }}>
-                              LKR {finalAmount.toFixed(2)}
-                            </span>
-                            {subtotal > 0 && subtotal > finalAmount && (
-                              <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', fontSize: '11px' }}>
-                                LKR {subtotal.toFixed(2)}
-                              </span>
-                            )}
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                              color: '#10b981',
-                              border: '1px solid rgba(16, 185, 129, 0.35)',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              width: 'fit-content',
-                              marginTop: '1px'
-                            }}>
-                              🏷️ -LKR {discount.toFixed(2)} {code ? `(${code})` : ''}
-                            </span>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '13px' }}>
-                          LKR {finalAmount.toFixed(2)}
-                        </span>
-                      );
-                    })()}
+                    {discount > 0 ? (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                        color: '#10b981',
+                        border: '1px solid rgba(16, 185, 129, 0.35)',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        🏷️ -LKR {discount.toFixed(2)} {code ? `(${code})` : ''}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    <strong style={{ color: 'var(--text-primary)', fontSize: '13px' }}>
+                      LKR {finalAmount.toFixed(2)}
+                    </strong>
                   </td>
                   <td>
                     {isAwaiting ? (
@@ -601,7 +592,7 @@ export default function OrdersPage() {
               );
             }) : (
               <tr>
-                <td colSpan="10" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>
+                <td colSpan="12" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>
                   {filterTab === 'awaiting_audit' ? 'No orders awaiting payment audit! All clear.' : 'No orders found'}
                 </td>
               </tr>
