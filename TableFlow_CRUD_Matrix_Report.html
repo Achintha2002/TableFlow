@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TableFlow — Full System CRUD Matrix & Architecture Audit</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-dark: #3730a3;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --bg-page: #f8fafc;
+      --card-bg: #ffffff;
+      --border-color: #e2e8f0;
+      --c-green: #10b981;
+      --c-blue: #3b82f6;
+      --c-amber: #f59e0b;
+      --c-red: #ef4444;
+      --c-purple: #8b5cf6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding: 30px 20px;
+    }
+
+    .report-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    /* Print Controls Bar (hidden during printing) */
+    .print-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e1b4b;
+      color: #ffffff;
+      padding: 14px 28px;
+    }
+
+    .print-btn {
+      background: #6366f1;
+      color: #ffffff;
+      border: none;
+      padding: 10px 22px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s ease;
+    }
+
+    .print-btn:hover {
+      background: #4f46e5;
+    }
+
+    .content-area {
+      padding: 40px;
+    }
+
+    /* Header */
+    .header {
+      border-bottom: 2px solid #f1f5f9;
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+    }
+
+    .brand-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #6366f1;
+      background: #eef2ff;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* KPI Summary Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .kpi-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+      text-align: center;
+    }
+
+    .kpi-num {
+      font-size: 32px;
+      font-weight: 800;
+      color: #1e1b4b;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Section Styling */
+    .section-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 36px 0 16px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .badge-count {
+      font-size: 12px;
+      background: #e2e8f0;
+      color: #334155;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 700;
+    }
+
+    /* CRUD Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 13px;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      text-align: left;
+      padding: 10px 12px;
+      font-weight: 700;
+      border: 1px solid #e2e8f0;
+    }
+
+    td {
+      padding: 10px 12px;
+      border: 1px solid #e2e8f0;
+      vertical-align: top;
+      color: #334155;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #fafbfc;
+    }
+
+    /* CRUD Badges */
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-right: 4px;
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-c { background: #dcfce7; color: #15803d; } /* Create */
+    .badge-r { background: #dbeafe; color: #1d4ed8; } /* Read */
+    .badge-u { background: #fef3c7; color: #b45309; } /* Update */
+    .badge-d { background: #fee2e2; color: #b91c1c; } /* Delete */
+
+    .tag-app {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .tag-admin { background: #e0e7ff; color: #3730a3; }
+    .tag-guest { background: #ccfbf1; color: #0f766e; }
+    .tag-staff { background: #fce7f3; color: #9d174d; }
+
+    .desc-cell {
+      line-height: 1.45;
+    }
+
+    .desc-cell ul {
+      margin-left: 18px;
+      margin-top: 4px;
+    }
+
+    .desc-cell li {
+      margin-bottom: 3px;
+    }
+
+    /* Callout Box */
+    .callout {
+      background: #f8fafc;
+      border-left: 4px solid #6366f1;
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+      font-size: 13px;
+      color: #334155;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* Print Styles */
+    @media print {
+      body {
+        background: #ffffff;
+        padding: 0;
+      }
+      .report-container {
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .print-bar {
+        display: none !important;
+      }
+      .content-area {
+        padding: 10px;
+      }
+      .section-title {
+        page-break-after: avoid;
+      }
+      table {
+        page-break-inside: auto;
+      }
+      tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+      }
+      @page {
+        size: A4;
+        margin: 12mm 10mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="report-container">
+  
+  <!-- Printable Bar -->
+  <div class="print-bar">
+    <div>
+      <strong>TableFlow Architecture Specification</strong> &bull; Total CRUD Operations Audit
+    </div>
+    <button class="print-btn" onclick="window.print()">
+      🖨️ Print / Save as PDF
+    </button>
+  </div>
+
+  <div class="content-area">
+
+    <!-- Report Header -->
+    <div class="header">
+      <div class="brand-tag">SYSTEM ARCHITECTURE SPECIFICATION</div>
+      <h1>TableFlow Ecosystem — Master CRUD Inventory</h1>
+      <p>Comprehensive audit of all Create, Read, Update, and Delete operations spanning Admin Dashboard, Mobile Guest App, Waiter/Staff Floor Mode, and Supabase Backend Services.</p>
+    </div>
+
+    <!-- KPI Summary Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-num">14</div>
+        <div class="kpi-label">Admin Web Modules</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">10</div>
+        <div class="kpi-label">Mobile Guest Flows</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">8</div>
+        <div class="kpi-label">Staff Floor Features</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">48+</div>
+        <div class="kpi-label">Backend CRUD APIs</div>
+      </div>
+    </div>
+
+    <!-- SECTION 1: ADMIN DASHBOARD -->
+    <div class="section-title">
+      <span>1. Admin Dashboard Web Portal (Next.js)</span>
+      <span class="badge-count">14 Modules</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 18%;">Module & Route</th>
+          <th style="width: 14%;">CRUD Operations</th>
+          <th style="width: 28%;">Database Entities</th>
+          <th style="width: 40%;">Functional Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Menu Management</strong><br><code>/menu</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>menu_items</code><br>Supabase Storage (menu-images)</td>
+          <td class="desc-cell">
+            Create new luxury food/beverage items, browse categorized items, upload dish photos, update prices, portion options, allergen tags, spice levels, toggle live availability, and delete obsolete dishes.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Restaurant Tables</strong><br><code>/tables</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>restaurant_tables</code><br><code>table_categories</code></td>
+          <td class="desc-cell">
+            Add physical dining tables with number and seating capacity, view interactive floor layout, edit zones/section assignments, regenerate secure QR tokens, and delete retired tables.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Promotions & Vouchers</strong><br><code>/promotions</code> <small style="color:#6366f1;font-weight:700;">(NEW)</small></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>coupons</code><br><code>user_vouchers</code><br><code>coupon_redemptions</code></td>
+          <td class="desc-cell">
+            Full campaign control: Create discount codes (% or fixed LKR), set minimum spend, set expiry, view redemption metrics, live toggle active/inactive status, and delete campaigns.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Reservations Manager</strong><br><code>/reservations</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>reservations</code><br><code>restaurant_tables</code></td>
+          <td class="desc-cell">
+            Create direct/phone bookings, view upcoming/past guest reservations by date, re-assign tables, modify guest count & time, cancel with hotline reasons, and free up tables.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Order Management</strong><br><code>/orders</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>orders</code><br><code>order_items</code></td>
+          <td class="desc-cell">
+            View live dining and takeaway orders with line item details, track settlement status, and transition states: <code>pending &rarr; preparing &rarr; ready &rarr; served &rarr; cancelled</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Live Virtual Queue</strong><br><code>/queue</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>queue_entries</code><br>FCM Push Dispatch</td>
+          <td class="desc-cell">
+            Add walk-in queue tickets, view active waitlist with calculated wait times, trigger customer FCM push call notifications, assign available tables, and remove/cancel entries.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Staff Daily Roster</strong><br><code>/staff-roster</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>in-memory staff shifts</code><br>FCM Topic Broadcast</td>
+          <td class="desc-cell">
+            Create daily shift schedules (morning, evening, night), filter shifts by calendar date, update floor section assignments, dispatch emergency broadcast notifications to staff devices, and delete shifts.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>User & Staff Directory</strong><br><code>/users</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>users</code> (Supabase Auth & Public Table)</td>
+          <td class="desc-cell">
+            Create verified staff/waiter/cashier accounts via admin API, list registered customers and loyalty tiers, modify user roles and profile details, sync auth records, and remove inactive accounts.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Kitchen Display System</strong><br><code>/kds</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>orders</code><br><code>order_items</code></td>
+          <td class="desc-cell">
+            Real-time kitchen order board displaying tickets by elapsed time, cooking preferences, and line item customizations. Chefs mark tickets as <code>preparing</code> or <code>ready</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Point of Sale / Cashier</strong><br><code>/pos</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>orders</code><br><code>restaurant_tables</code></td>
+          <td class="desc-cell">
+            View active table balances, apply concurrency bill locks, settle orders with Cash or Card POS, consolidate multiple tickets for a table, and transition table to <code>cleaning</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Payment Slip Audit</strong><br><code>/payment-audit</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>payment_audits</code><br><code>orders</code><br>Private Storage</td>
+          <td class="desc-cell">
+            Audit customer bank transfer slips: inspect high-resolution receipts, verify reference numbers, approve payments (releasing orders to kitchen), or reject with reason notices.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Partner Integrations</strong><br><code>/partner-sync</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>partner_sync_settings</code></td>
+          <td class="desc-cell">
+            Read external booking channels (BookMe, Reserve.lk, DineHub), toggle live sync on/off, trigger real-time handshake health tests, and review sync audit logs.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Sales Reports & Analytics</strong><br><code>/reports</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>orders</code><br><code>order_items</code></td>
+          <td class="desc-cell">
+            Generate executive revenue reports, average check sizes, item category breakdowns, peak hourly traffic graphs, register Z-reports, and download standard RFC 4180 CSV exports.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Admin Dashboard Home</strong><br><code>/</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td>Aggregate Dashboard APIs</td>
+          <td class="desc-cell">
+            Real-time operational summary: live table occupancy rate, active queue count, today's gross revenue, pending bank slip alerts, and rapid quick actions.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 2: MOBILE CUSTOMER APP -->
+    <div class="section-title">
+      <span>2. Mobile Guest Application (Flutter)</span>
+      <span class="badge-count">10 Feature Flows</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 22%;">Feature Screen</th>
+          <th style="width: 14%;">CRUD Operations</th>
+          <th style="width: 24%;">Database Entities</th>
+          <th style="width: 40%;">Guest Flow Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Digital Menu & Dish Detail</strong><br><code>menu_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>menu_items</code></td>
+          <td class="desc-cell">Browse dishes, filter by dietary preferences/categories, search keywords, select custom portions and optional addons.</td>
+        </tr>
+        <tr>
+          <td><strong>Cart & Order Punch-in</strong><br><code>cart_screen.dart</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>orders</code><br><code>order_items</code></td>
+          <td class="desc-cell">Create order checkouts, apply discount vouchers from wallet, attach special cooking instructions, and select Dine-In or Takeaway.</td>
+        </tr>
+        <tr>
+          <td><strong>Live Order Tracking</strong><br><code>live_order_tracker_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>orders</code> (Supabase Realtime)</td>
+          <td class="desc-cell">Track preparation stages from kitchen acceptance to food serving with animated ETA progress bar.</td>
+        </tr>
+        <tr>
+          <td><strong>Table QR Check-in</strong><br><code>qr_checkin_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>restaurant_tables</code></td>
+          <td class="desc-cell">Scan dining table QR code, cryptographically verify token with server, and associate user session with table number.</td>
+        </tr>
+        <tr>
+          <td><strong>Table Reservations</strong><br><code>reservation_step1_screen.dart</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>reservations</code></td>
+          <td class="desc-cell">Book table reservations by date/time/pax, browse history, modify details, or cancel booking within 10-minute policy window.</td>
+        </tr>
+        <tr>
+          <td><strong>Virtual Queue Waiting</strong><br><code>queue_screen.dart</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>queue_entries</code></td>
+          <td class="desc-cell">Join virtual waitlist, view real-time queue position and estimated wait time, receive table ready notifications, or leave queue.</td>
+        </tr>
+        <tr>
+          <td><strong>My Vouchers & Tasks Wallet</strong><br><code>my_vouchers_screen.dart</code> <small style="color:#6366f1;font-weight:700;">(NEW)</small></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>user_vouchers</code><br><code>user_discount_tasks</code><br><code>coupons</code></td>
+          <td class="desc-cell">Silver tier auto-granted <code>WELCOME10</code> voucher, view wallet coupons, track "Earn 10%" dine-in tasks progress, claim reward vouchers, and copy/apply directly to cart.</td>
+        </tr>
+        <tr>
+          <td><strong>Loyalty Tier & Rewards</strong><br><code>loyalty_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>users</code> (loyalty_points, tier)</td>
+          <td class="desc-cell">Track accumulated loyalty points, current tier status (Bronze, Silver, Gold, Platinum), and redeem point milestones.</td>
+        </tr>
+        <tr>
+          <td><strong>Service Request Bell</strong><br><code>table_landing_screen.dart</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>service_requests</code></td>
+          <td class="desc-cell">Request waiter assistance, water refill, cutlery, or bill check directly from table via discrete in-app bell.</td>
+        </tr>
+        <tr>
+          <td><strong>Customer Profile & Auth</strong><br><code>profile_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>users</code></td>
+          <td class="desc-cell">View profile details, update display name and contact phone number, and upload custom profile avatar.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 3: STAFF / FLOOR MODE -->
+    <div class="section-title">
+      <span>3. Mobile Staff & Waiter Floor Mode (Flutter)</span>
+      <span class="badge-count">8 Core Modules</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 22%;">Staff Feature Screen</th>
+          <th style="width: 14%;">CRUD Operations</th>
+          <th style="width: 24%;">Database Entities</th>
+          <th style="width: 40%;">Operational Functionality</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Floor Table Map</strong><br><code>waiter_floor_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>restaurant_tables</code></td>
+          <td class="desc-cell">Inspect live table statuses across restaurant zones; update tables between <code>available</code>, <code>occupied</code>, and <code>needs_cleaning</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>Table Order Punch-in</strong><br><code>quick_order_sheet.dart</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>orders</code><br><code>order_items</code></td>
+          <td class="desc-cell">Waiters take table orders on handheld mobile devices; creates new ticket or appends items to existing active open checks.</td>
+        </tr>
+        <tr>
+          <td><strong>Table Assignment Sheet</strong><br><code>assign_table_sheet.dart</code></td>
+          <td>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>queue_entries</code><br><code>restaurant_tables</code></td>
+          <td class="desc-cell">Assign waiting queue parties or reservations directly to clean, available dining tables.</td>
+        </tr>
+        <tr>
+          <td><strong>Table Sanitization Desk</strong><br><code>table_cleaning_tasks_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>restaurant_tables</code></td>
+          <td class="desc-cell">Busser/cleaner view of dirty tables; mark tables sanitized and return them to <code>available</code> status.</td>
+        </tr>
+        <tr>
+          <td><strong>Floor Service Requests</strong><br><code>staff_hub_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>service_requests</code></td>
+          <td class="desc-cell">Receive instant buzzer alerts when tables call a waiter; atomic claim & attend request action to prevent duplicate staff runs.</td>
+        </tr>
+        <tr>
+          <td><strong>Reservations Desk</strong><br><code>reservations_management_screen.dart</code></td>
+          <td>
+            <span class="badge badge-c">C</span>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+          </td>
+          <td><code>reservations</code></td>
+          <td class="desc-cell">Handle guest check-ins, record manual walk-in reservations, and cancel bookings with recorded operational reasons.</td>
+        </tr>
+        <tr>
+          <td><strong>Queue Management</strong><br><code>manage_queue_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+            <span class="badge badge-u">U</span>
+            <span class="badge badge-d">D</span>
+          </td>
+          <td><code>queue_entries</code></td>
+          <td class="desc-cell">Call next party in line, re-notify via push notification, seat party, or remove no-shows from queue.</td>
+        </tr>
+        <tr>
+          <td><strong>Daily Roster & Hub</strong><br><code>daily_schedule_screen.dart</code></td>
+          <td>
+            <span class="badge badge-r">R</span>
+          </td>
+          <td><code>staff_shifts</code></td>
+          <td class="desc-cell">View personal shift timings, assigned dining floor zone, duty captain, and manager shift announcements.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- SECTION 4: DATABASE & BACKEND SCHEMA -->
+    <div class="section-title">
+      <span>4. Backend Database Tables & CRUD Coverage</span>
+      <span class="badge-count">13 Tables</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 20%;">Table Name</th>
+          <th style="width: 15%;">CRUD Support</th>
+          <th style="width: 30%;">Key REST API Endpoints</th>
+          <th style="width: 35%;">Storage & Business Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>coupons</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span> <span class="badge badge-d">D</span></td>
+          <td><code>/api/admin/coupons</code><br><code>/api/coupons/validate</code></td>
+          <td>Promotional codes, discount %, fixed amount, minimum spend, expiry, and active status.</td>
+        </tr>
+        <tr>
+          <td><code>user_vouchers</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span></td>
+          <td><code>/api/vouchers/my-vouchers</code><br><code>/api/orders</code></td>
+          <td>Customer voucher wallet, tracking source (Silver welcome / task reward) and redemption timestamps.</td>
+        </tr>
+        <tr>
+          <td><code>user_discount_tasks</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span></td>
+          <td><code>/api/vouchers/my-tasks</code><br><code>/api/vouchers/claim-task</code></td>
+          <td>Gamified dine-in tasks engine (3 orders, weekday booking, chef specials) and reward claim states.</td>
+        </tr>
+        <tr>
+          <td><code>menu_items</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span> <span class="badge badge-d">D</span></td>
+          <td><code>/api/menu</code><br><code>/api/menu/customizations</code></td>
+          <td>Catalog of restaurant dishes, prices, portion options, categories, image URLs, and availability.</td>
+        </tr>
+        <tr>
+          <td><code>restaurant_tables</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span> <span class="badge badge-d">D</span></td>
+          <td><code>/api/tables</code><br><code>/api/tables/:id/status</code><br><code>/api/tables/verify-qr</code></td>
+          <td>Dining tables, table numbers, seat capacity, floor zone, QR verification secret tokens, and occupancy status.</td>
+        </tr>
+        <tr>
+          <td><code>reservations</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span></td>
+          <td><code>/api/reservations</code><br><code>/api/reservations/:id/cancel</code></td>
+          <td>Booking records, date/time slots, party sizes, customer phone numbers, and hotline cancellation policy.</td>
+        </tr>
+        <tr>
+          <td><code>orders</code> & <code>order_items</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span></td>
+          <td><code>/api/orders</code><br><code>/api/staff/orders</code><br><code>/api/kitchen/orders</code><br><code>/api/pos/orders/:id/settle</code></td>
+          <td>Customer & staff orders, line items, cooking preferences, total bills, payment statuses, and preparation flow.</td>
+        </tr>
+        <tr>
+          <td><code>queue_entries</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span> <span class="badge badge-d">D</span></td>
+          <td><code>/api/queue</code><br><code>/api/queue/:id/notify</code><br><code>/api/queue/walk-in</code></td>
+          <td>Live waiting list, customer names, party sizes, queue sequence, wait time calculations, and table calls.</td>
+        </tr>
+        <tr>
+          <td><code>users</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span> <span class="badge badge-d">D</span></td>
+          <td><code>/api/admin/users</code><br><code>/api/admin/create-staff</code><br><code>/api/me</code></td>
+          <td>User authentication profiles, role permissions (admin, manager, staff, customer), and loyalty tiers.</td>
+        </tr>
+        <tr>
+          <td><code>service_requests</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span></td>
+          <td><code>/api/service-requests</code><br><code>/api/service-requests/:id/attend</code></td>
+          <td>Table buzzer calls (waiter call, bill request, water refill), staff atomic claim lock, and attended status.</td>
+        </tr>
+        <tr>
+          <td><code>payment_audits</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span></td>
+          <td><code>/api/orders/with-slip</code><br><code>/api/admin/orders/pending-verification</code></td>
+          <td>Customer uploaded bank transfer slips, transaction reference numbers, verification desk reviews, and approval audit trails.</td>
+        </tr>
+        <tr>
+          <td><code>staff_shifts</code></td>
+          <td><span class="badge badge-c">C</span> <span class="badge badge-r">R</span> <span class="badge badge-u">U</span> <span class="badge badge-d">D</span></td>
+          <td><code>/api/admin/shifts</code><br><code>/api/admin/broadcast-notification</code></td>
+          <td>Shift rosters (morning, evening, night), duty sections, attendance statuses, and emergency push alerts.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Architecture Note:</strong> All mutations enforce strict Row-Level Security (RLS) policies in PostgreSQL. Sensitive writes (order status, bill settlements, user roles, voucher grants) are routed through authenticated backend endpoints powered by the Supabase Service Role key to prevent client tampering.
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div>TableFlow Inc. &bull; Enterprise Restaurant Automation Platform</div>
+      <div>Generated on October 3, 2026 &bull; Production Build v2.4</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Auto open print dialog if opened in a dedicated browser tab
+  if (window.location.search.includes('print=true')) {
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 500);
+    };
+  }
+</script>
+
+</body>
+</html>
