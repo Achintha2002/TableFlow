@@ -120,4 +120,98 @@ class ApiService {
       rethrow;
     }
   }
+
+  /// Fetch customer's active vouchers wallet
+  static Future<List<Map<String, dynamic>>> fetchMyVouchers() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/vouchers/my-vouchers'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['vouchers'] ?? []);
+      }
+      throw Exception('Failed to load vouchers');
+    } catch (e) {
+      debugPrint('Fetch My Vouchers HTTP Error: $e, falling back to Supabase');
+      // Direct Supabase fallback
+      final user = SupabaseService.client.auth.currentUser;
+      if (user == null) return [];
+
+      final data = await SupabaseService.client
+          .from('user_vouchers')
+          .select('*, coupons(*)')
+          .eq('user_id', user.id)
+          .filter('used_at', 'is', null)
+          .order('claimed_at', ascending: false);
+
+      return (data as List).map((v) {
+        final c = v['coupons'] as Map<String, dynamic>?;
+        return {
+          'id': v['id'],
+          'code': v['coupon_code'],
+          'source': v['source'],
+          'claimed_at': v['claimed_at'],
+          'discount_percent': c?['discount_percent'] ?? 10,
+          'discount_amount': c?['discount_amount'] ?? 0,
+          'min_order_amount': c?['min_order_amount'] ?? 0,
+          'description': c?['description'] ?? 'Exclusive discount voucher',
+          'valid_until': c?['valid_until'],
+        };
+      }).toList();
+    }
+  }
+
+  /// Fetch user's discount tasks & progress
+  static Future<List<Map<String, dynamic>>> fetchMyTasks() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/vouchers/my-tasks'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['tasks'] ?? []);
+      }
+      throw Exception('Failed to load tasks');
+    } catch (e) {
+      debugPrint('Fetch My Tasks HTTP Error: $e, falling back to Supabase');
+      final user = SupabaseService.client.auth.currentUser;
+      if (user == null) return [];
+
+      final data = await SupabaseService.client
+          .from('user_discount_tasks')
+          .select('*')
+          .eq('user_id', user.id);
+
+      return List<Map<String, dynamic>>.from(data);
+    }
+  }
+
+  /// Claim 10% voucher for a completed task
+  static Future<Map<String, dynamic>> claimTaskReward(String taskKey) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/vouchers/claim-task'),
+        headers: headers,
+        body: jsonEncode({'task_key': taskKey}),
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return data;
+      } else {
+        throw Exception(data['error'] ?? 'Failed to claim reward');
+      }
+    } catch (e) {
+      debugPrint('Claim Task Reward Error: $e');
+      rethrow;
+    }
+  }
 }

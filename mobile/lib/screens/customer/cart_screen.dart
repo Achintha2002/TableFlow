@@ -251,6 +251,139 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  Future<String?> _showVoucherPickerModal() async {
+    final user = SupabaseService.client.auth.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to view your vouchers wallet.')),
+      );
+      return null;
+    }
+
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Available Vouchers',
+                    style: TextStyle(fontFamily: 'Playfair Display', fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      context.push('/my-vouchers');
+                    },
+                    child: const Text('Earn More', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: ApiService.fetchMyVouchers(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: Padding(padding: EdgeInsets.all(24.0), child: CircularProgressIndicator(color: AppTheme.primary)));
+                  }
+                  final vouchers = snapshot.data ?? [];
+                  if (vouchers.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24.0),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.discount_outlined, color: Colors.grey.shade400, size: 40),
+                            const SizedBox(height: 8),
+                            const Text('No active vouchers in wallet', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: vouchers.length,
+                    itemBuilder: (context, i) {
+                      final v = vouchers[i];
+                      final code = v['code'] ?? '';
+                      final disc = v['discount_percent'] ?? 10;
+                      final desc = v['description'] ?? '';
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$disc%',
+                              style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFB45309), fontSize: 14),
+                            ),
+                          ),
+                          title: Text(
+                            code,
+                            style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          subtitle: Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                          trailing: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              elevation: 0,
+                            ),
+                            onPressed: () => Navigator.pop(ctx, code),
+                            child: const Text('Apply', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _toggleLoyaltyPoints(bool? value) {
     final cart = context.read<CartProvider>();
     final checked = value ?? false;
@@ -1369,6 +1502,29 @@ class _CartScreenState extends State<CartScreen> {
                 ),
             ],
           ),
+
+          if (cart.couponCode == null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () async {
+                  final code = await _showVoucherPickerModal();
+                  if (code != null && mounted) {
+                    _couponController.text = code;
+                    _applyCoupon();
+                  }
+                },
+                icon: const Icon(Icons.confirmation_number_outlined, size: 14, color: AppTheme.primary),
+                label: const Text('Browse My Vouchers', style: TextStyle(color: AppTheme.primary, fontSize: 11.5, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
 
           if (cart.couponCode != null) ...[
             const SizedBox(height: 8),

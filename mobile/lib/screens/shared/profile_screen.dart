@@ -637,6 +637,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           }
                         },
                       ),
+                      const Divider(height: 1),
+                      _buildActionTile(
+                        icon: Icons.confirmation_number_outlined,
+                        title: 'My Vouchers & Rewards',
+                        subtitle: ['Silver', 'Gold', 'Platinum'].contains(_loyaltyTier)
+                            ? 'Silver 10% voucher active & earn tasks.'
+                            : 'View active vouchers & earn 10% discount.',
+                        onTap: () async {
+                          if (isGuest) {
+                            final loggedIn = await AuthGuard.requireAuth(
+                              context,
+                              actionTitle: 'My Vouchers',
+                              actionSubtitle: 'Sign in to access your dining vouchers and task rewards.',
+                            );
+                            if (loggedIn && context.mounted) {
+                              _fetchProfileData();
+                              context.push('/my-vouchers');
+                            }
+                          } else {
+                            context.push('/my-vouchers');
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ],

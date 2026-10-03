@@ -18,6 +18,7 @@ import '../screens/shared/main_shell.dart';
 import '../screens/customer/order_history_screen.dart';
 import '../screens/customer/reservation_history_screen.dart';
 import '../screens/customer/loyalty_screen.dart';
+import '../screens/customer/my_vouchers_screen.dart';
 import '../screens/customer/qr_checkin_screen.dart';
 import '../screens/customer/live_order_tracker_screen.dart';
 import '../screens/staff/waiter_floor_screen.dart';
@@ -59,6 +60,7 @@ class AppRoutes {
   static const orderHistory = '/order-history';
   static const reservations = '/reservations';
   static const loyalty = '/loyalty';
+  static const myVouchers = '/my-vouchers';
   static const qrCheckin = '/qr-checkin';
   static const orderTracker = '/order-tracker';
   static const waiterFloor = '/waiter-floor';
@@ -139,6 +141,7 @@ class AppRoutes {
       GoRoute(path: orderHistory, builder: (context, state) => const OrderHistoryScreen()),
       GoRoute(path: reservations, builder: (context, state) => const ReservationHistoryScreen()),
       GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
+      GoRoute(path: myVouchers, builder: (context, state) => const MyVouchersScreen()),
       GoRoute(path: qrCheckin, builder: (context, state) => const QrCheckinScreen()),
       GoRoute(
         path: table,

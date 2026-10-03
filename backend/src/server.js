@@ -1126,6 +1126,16 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
           user_id: req.user.id,
           order_id: newOrder.id
         });
+
+        // Mark user_vouchers as used
+        await supabaseAdmin
+          .from('user_vouchers')
+          .update({
+            used_at: new Date().toISOString(),
+            used_order_id: newOrder.id
+          })
+          .eq('user_id', req.user.id)
+          .eq('coupon_code', couponRecord.code);
       } catch (err) {
         console.warn('Coupon redemption log notice:', err.message);
       }
@@ -1278,11 +1288,94 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
       });
     }
 
+    // When order transitions to 'served', update user discount tasks progress!
+    if (status === 'served' && currentOrder.user_id) {
+      handleOrderServedTasks(currentOrder.user_id, orderId).catch(err => {
+        console.error('Error updating discount tasks on served:', err);
+      });
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Helper function to increment user discount tasks when order is served
+async function handleOrderServedTasks(userId, orderId) {
+  try {
+    // 1. Task: dine_3_orders
+    const { data: dineTask } = await supabaseAdmin
+      .from('user_discount_tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('task_key', 'dine_3_orders')
+      .maybeSingle();
+
+    if (dineTask && !dineTask.is_completed) {
+      const nextProgress = (dineTask.current_progress || 0) + 1;
+      const isCompleted = nextProgress >= dineTask.target_progress;
+      await supabaseAdmin
+        .from('user_discount_tasks')
+        .update({
+          current_progress: nextProgress,
+          is_completed: isCompleted,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', dineTask.id);
+
+      if (isCompleted) {
+        await supabaseAdmin.from('notifications').insert({
+          user_id: userId,
+          title: '🎉 Task Completed: Dine-In Explorer!',
+          body: 'You completed 3 dine-in meals! Go to My Vouchers to claim your 10% discount reward.',
+          is_read: false
+        });
+      }
+    }
+
+    // 2. Task: chef_special (Check if order contains any Chef's special item)
+    const { data: orderItems } = await supabaseAdmin
+      .from('order_items')
+      .select('menu_item_id, menu_items(name, category)')
+      .eq('order_id', orderId);
+
+    const hasChefSpecial = orderItems && orderItems.some(item => {
+      const cat = (item.menu_items?.category || '').toLowerCase();
+      const name = (item.menu_items?.name || '').toLowerCase();
+      return cat.includes('special') || cat.includes('signature') || cat.includes('chef') || name.includes('wagyu') || name.includes('truffle') || name.includes('rib');
+    });
+
+    if (hasChefSpecial) {
+      const { data: chefTask } = await supabaseAdmin
+        .from('user_discount_tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('task_key', 'chef_special')
+        .maybeSingle();
+
+      if (chefTask && !chefTask.is_completed) {
+        await supabaseAdmin
+          .from('user_discount_tasks')
+          .update({
+            current_progress: 1,
+            is_completed: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', chefTask.id);
+
+        await supabaseAdmin.from('notifications').insert({
+          user_id: userId,
+          title: "🎉 Task Completed: Chef's Special Fan!",
+          body: "You enjoyed a Chef's Special dish! Claim your 10% discount reward in My Vouchers.",
+          is_read: false
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error in handleOrderServedTasks:', err);
+  }
+}
 
 // ==========================================
 // Waitlist (Queue) Endpoints
@@ -2109,6 +2202,18 @@ app.post('/api/coupons/validate', async (req, res) => {
     }
 
     if (user_id) {
+      // 1. One-time-use enforcement on user_vouchers wallet
+      const { data: userVoucher } = await supabaseAdmin
+        .from('user_vouchers')
+        .select('*')
+        .eq('user_id', user_id)
+        .eq('coupon_code', coupon.code)
+        .maybeSingle();
+
+      if (userVoucher && userVoucher.used_at) {
+        return res.status(400).json({ error: 'This voucher has already been redeemed on a previous order.' });
+      }
+
       const { count: userUses } = await supabaseAdmin
         .from('coupon_redemptions')
         .select('*', { count: 'exact', head: true })
@@ -2139,6 +2244,223 @@ app.post('/api/coupons/validate', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// Customer Vouchers & Rewards Wallet Endpoints
+// ==========================================
+
+// GET /api/vouchers/my-vouchers - List active unused vouchers for current user
+app.get('/api/vouchers/my-vouchers', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Check if user is Silver/Gold/Platinum member
+    const { data: userProfile } = await supabaseAdmin
+      .from('users')
+      .select('loyalty_tier')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (userProfile && ['Silver', 'Gold', 'Platinum'].includes(userProfile.loyalty_tier)) {
+      // Auto-grant WELCOME10 if not present
+      await supabaseAdmin
+        .from('user_vouchers')
+        .insert({
+          user_id: userId,
+          coupon_code: 'WELCOME10',
+          source: 'silver_tier_welcome'
+        })
+        .select()
+        .maybeSingle();
+    }
+
+    // Fetch user's vouchers joined with coupons
+    const { data: vouchers, error } = await supabaseAdmin
+      .from('user_vouchers')
+      .select('*, coupons(*)')
+      .eq('user_id', userId)
+      .is('used_at', null)
+      .order('claimed_at', { ascending: false });
+
+    if (error) {
+      console.warn('Error querying user_vouchers, returning empty list:', error.message);
+      return res.json({ success: true, vouchers: [] });
+    }
+
+    // Filter out expired coupons if valid_until is past
+    const active = (vouchers || []).filter(v => {
+      const c = v.coupons;
+      if (!c || !c.is_active) return false;
+      if (c.valid_until && new Date(c.valid_until) < new Date()) return false;
+      return true;
+    }).map(v => ({
+      id: v.id,
+      code: v.coupon_code,
+      source: v.source,
+      claimed_at: v.claimed_at,
+      discount_percent: v.coupons?.discount_percent || 10,
+      discount_amount: v.coupons?.discount_amount || 0,
+      min_order_amount: v.coupons?.min_order_amount || 0,
+      description: v.coupons?.description || 'Exclusive discount voucher',
+      valid_until: v.coupons?.valid_until || null
+    }));
+
+    res.json({ success: true, vouchers: active });
+  } catch (err) {
+    console.error('Error fetching user vouchers:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/vouchers/my-tasks - List gamified 10% discount tasks
+app.get('/api/vouchers/my-tasks', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Check if user already has tasks
+    const { data: existingTasks } = await supabaseAdmin
+      .from('user_discount_tasks')
+      .select('*')
+      .eq('user_id', userId);
+
+    const defaultTasks = [
+      {
+        task_key: 'dine_3_orders',
+        title: 'Dine-In Explorer',
+        description: 'Complete 3 served dine-in meals at TableFlow to unlock 10% OFF.',
+        target_progress: 3,
+        reward_discount_percent: 10
+      },
+      {
+        task_key: 'weekday_booking',
+        title: 'Weekday Gourmet',
+        description: 'Book and complete a table reservation between Monday and Thursday.',
+        target_progress: 1,
+        reward_discount_percent: 10
+      },
+      {
+        task_key: 'chef_special',
+        title: "Chef's Signature Fan",
+        description: "Order any signature dish from our Chef's Special menu.",
+        target_progress: 1,
+        reward_discount_percent: 10
+      }
+    ];
+
+    if (!existingTasks || existingTasks.length === 0) {
+      // Seed default tasks for this user
+      const toInsert = defaultTasks.map(t => ({
+        user_id: userId,
+        task_key: t.task_key,
+        title: t.title,
+        description: t.description,
+        current_progress: 0,
+        target_progress: t.target_progress,
+        reward_discount_percent: t.reward_discount_percent,
+        is_completed: false,
+        is_claimed: false
+      }));
+
+      const { data: seeded } = await supabaseAdmin
+        .from('user_discount_tasks')
+        .insert(toInsert)
+        .select();
+
+      return res.json({ success: true, tasks: seeded || toInsert });
+    }
+
+    res.json({ success: true, tasks: existingTasks });
+  } catch (err) {
+    console.error('Error fetching user tasks:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/vouchers/claim-task - Claim 10% voucher for a completed task
+app.post('/api/vouchers/claim-task', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { task_key } = req.body;
+
+    if (!task_key) {
+      return res.status(400).json({ error: 'task_key is required' });
+    }
+
+    const { data: task, error } = await supabaseAdmin
+      .from('user_discount_tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('task_key', task_key)
+      .maybeSingle();
+
+    if (error || !task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    if (!task.is_completed) {
+      return res.status(400).json({ error: 'This task is not completed yet.' });
+    }
+
+    if (task.is_claimed) {
+      return res.status(400).json({ error: 'This reward has already been claimed.' });
+    }
+
+    // Generate unique task voucher code
+    const uniqueCode = `TASK10-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+    // 1. Insert into coupons catalog
+    await supabaseAdmin
+      .from('coupons')
+      .insert({
+        code: uniqueCode,
+        description: `10% Reward for completing "${task.title}"`,
+        discount_percent: 10,
+        discount_amount: 0,
+        min_order_amount: 0,
+        max_uses_per_user: 1,
+        is_active: true,
+        valid_until: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString() // 60 days
+      });
+
+    // 2. Insert into user_vouchers wallet
+    await supabaseAdmin
+      .from('user_vouchers')
+      .insert({
+        user_id: userId,
+        coupon_code: uniqueCode,
+        source: 'task_reward'
+      });
+
+    // 3. Mark task claimed
+    await supabaseAdmin
+      .from('user_discount_tasks')
+      .update({
+        is_claimed: true,
+        claimed_voucher_code: uniqueCode,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', task.id);
+
+    // 4. Send celebratory notification
+    await supabaseAdmin
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        title: '🎟️ 10% Voucher Unlocked!',
+        body: `Congratulations! You unlocked voucher ${uniqueCode} for completing "${task.title}". It's now in your My Vouchers wallet!`,
+        is_read: false
+      });
+
+    res.json({
+      success: true,
+      voucher_code: uniqueCode,
+      message: `Reward claimed! Code ${uniqueCode} added to your wallet.`
+    });
+  } catch (err) {
+    console.error('Error claiming task reward:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
