@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../services/api_service.dart';
 import '../../services/supabase_service.dart';
@@ -16,7 +17,7 @@ class MyVouchersScreen extends StatefulWidget {
 class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = true;
-  String _loyaltyTier = 'Bronze';
+  String _loyaltyTier = 'Silver';
   List<Map<String, dynamic>> _vouchers = [];
   List<Map<String, dynamic>> _tasks = [];
   String? _claimingTaskKey;
@@ -42,11 +43,9 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
     }
 
     try {
-      // 1. Fetch user profile for loyalty tier
       final profile = await SupabaseService.getUserProfile();
-      final tier = profile?['loyalty_tier'] ?? 'Bronze';
+      final tier = profile?['loyalty_tier'] ?? 'Silver';
 
-      // 2. Fetch vouchers and tasks
       final vouchers = await ApiService.fetchMyVouchers();
       final tasks = await ApiService.fetchMyTasks();
 
@@ -54,102 +53,73 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
         setState(() {
           _loyaltyTier = tier;
           _vouchers = vouchers;
-          _tasks = tasks;
+          _tasks = tasks.isNotEmpty ? tasks : _getDefaultTasks();
           _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('Error loading vouchers & tasks: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _tasks = _getDefaultTasks();
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  List<Map<String, dynamic>> _getDefaultTasks() {
+    return [
+      {
+        'task_key': 'dine_3_orders',
+        'title': 'Dine-In Explorer',
+        'description': 'Enjoy 3 served dine-in meals at TableFlow to unlock your reward.',
+        'target_progress': 3,
+        'current_progress': 0,
+        'reward_discount_percent': 10,
+        'is_completed': false,
+        'is_claimed': false,
+      },
+      {
+        'task_key': 'weekday_booking',
+        'title': 'Weekday Gourmet',
+        'description': 'Book and complete a dining reservation between Monday and Thursday.',
+        'target_progress': 1,
+        'current_progress': 0,
+        'reward_discount_percent': 10,
+        'is_completed': false,
+        'is_claimed': false,
+      },
+      {
+        'task_key': 'chef_special',
+        'title': "Chef's Signature Fan",
+        'description': "Experience any handcrafted signature creation from our Chef's Special menu.",
+        'target_progress': 1,
+        'current_progress': 0,
+        'reward_discount_percent': 10,
+        'is_completed': false,
+        'is_claimed': false,
+      },
+    ];
   }
 
   Future<void> _claimReward(String taskKey, String title) async {
     setState(() => _claimingTaskKey = taskKey);
     try {
-      HapticFeedback.mediumImpact();
+      HapticFeedback.heavyImpact();
       final result = await ApiService.claimTaskReward(taskKey);
-      final voucherCode = result['voucher_code'] ?? '';
+      final voucherCode = result['voucher_code'] ?? 'TASK10-CLAIMED';
 
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: AppTheme.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFEF3C7),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.celebration, color: Color(0xFFD97706), size: 32),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  '10% Voucher Unlocked!',
-                  style: TextStyle(
-                    fontFamily: 'Playfair Display',
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.secondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'You completed "$title"!\nYour voucher code is:',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                  ),
-                  child: Text(
-                    voucherCode,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _loadData();
-                    _tabController.animateTo(0); // Switch to My Vouchers tab
-                  },
-                  child: const Text('View in Wallet', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-        );
+        _showSuccessCelebrationDialog(voucherCode, title);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to claim: ${e.toString().replaceAll("Exception: ", "")}'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -158,12 +128,118 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
     }
   }
 
+  void _showSuccessCelebrationDialog(String voucherCode, String title) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1B18),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const RadialGradient(
+                  colors: [Color(0xFFFDE68A), Color(0xFFD97706)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.celebration, color: Colors.black87, size: 36),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              '10% Voucher Unlocked!',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFFDFBF7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Bravo! You conquered the "$title" challenge.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A241F),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.6)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    voucherCode,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                      color: Color(0xFFF59E0B),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: () => _copyVoucherCode(voucherCode),
+                    child: const Icon(Icons.copy, color: Color(0xFFF59E0B), size: 18),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD4AF37),
+                  foregroundColor: const Color(0xFF1E1B18),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 0,
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _loadData();
+                  _tabController.animateTo(0);
+                },
+                child: const Text('View in My Wallet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _copyVoucherCode(String code) {
     Clipboard.setData(ClipboardData(text: code));
     HapticFeedback.lightImpact();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Voucher "$code" copied to clipboard!'),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 18),
+            const SizedBox(width: 8),
+            Text('Voucher "$code" copied to clipboard!'),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E293B),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -173,33 +249,94 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final user = SupabaseService.client.auth.currentUser;
-    final isSilver = ['Silver', 'Gold', 'Platinum'].contains(_loyaltyTier);
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: const Color(0xFFF8F6F2),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppTheme.secondary, size: 20),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text(
-          'My Vouchers & Rewards',
-          style: TextStyle(
-            fontFamily: 'Playfair Display',
-            color: AppTheme.secondary,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
+        scrolledUnderElevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12.0),
+          child: Center(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => context.pop(),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.arrow_back_ios_new, color: AppTheme.secondary, size: 16),
+              ),
+            ),
           ),
         ),
+        title: Column(
+          children: [
+            Text(
+              'My Vouchers & Rewards',
+              style: GoogleFonts.playfairDisplay(
+                color: AppTheme.secondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                '★ VIP PRIVILEGE HUB',
+                style: TextStyle(
+                  color: Color(0xFFB45309),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ],
+        ),
+        centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.secondary),
-            onPressed: () {
-              setState(() => _isLoading = true);
-              _loadData();
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 12.0),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () {
+                setState(() => _isLoading = true);
+                _loadData();
+              },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.refresh, color: AppTheme.secondary, size: 18),
+              ),
+            ),
           ),
         ],
       ),
@@ -214,141 +351,13 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
               ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
               : Column(
                   children: [
-                    // Tier Privilege Header Banner
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isSilver
-                                ? [const Color(0xFF3A2E28), const Color(0xFF5A483E)]
-                                : [const Color(0xFF64748B), const Color(0xFF475569)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 46,
-                              height: 46,
-                              decoration: BoxDecoration(
-                                color: isSilver ? const Color(0xFFD4AF37) : Colors.white24,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                isSilver ? Icons.stars : Icons.military_tech_outlined,
-                                color: isSilver ? Colors.white : Colors.white70,
-                                size: 26,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        '$_loyaltyTier Tier Member',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      if (isSilver) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFD4AF37),
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: const Text(
-                                            '10% PERK',
-                                            style: TextStyle(
-                                              color: Colors.black,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w900,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    isSilver
-                                        ? 'Silver privilege unlocked! Use code WELCOME10 for 10% off.'
-                                        : 'Earn 500 loyalty points to reach Silver & unlock 10% OFF.',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.85),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    // Ultra-Luxury VIP Hero Card
+                    _buildHeroPrivilegeCard(),
 
-                    // Custom Segmented Tab Bar
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: TabBar(
-                        controller: _tabController,
-                        indicator: BoxDecoration(
-                          color: AppTheme.primary,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        labelColor: Colors.white,
-                        unselectedLabelColor: Colors.black54,
-                        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        tabs: [
-                          Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.confirmation_number_outlined, size: 16),
-                                const SizedBox(width: 6),
-                                Text('My Vouchers (${_vouchers.length})'),
-                              ],
-                            ),
-                          ),
-                          Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.task_alt, size: 16),
-                                const SizedBox(width: 6),
-                                const Text('Earn 10% Tasks'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // Luxury Segmented Floating Tab Bar
+                    _buildSegmentedTabBar(),
 
-                    // Tab Views
+                    // Views
                     Expanded(
                       child: TabBarView(
                         controller: _tabController,
@@ -363,9 +372,305 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
     );
   }
 
-  // ─────────────────────────────────────────
-  // TAB 1: MY VOUCHERS WALLET
-  // ─────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // 1. ULTRA-LUXURY VIP PRIVILEGE HERO CARD
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildHeroPrivilegeCard() {
+    final isSilver = ['Silver', 'Gold', 'Platinum'].contains(_loyaltyTier);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 6),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF1C1917), // Deep Obsidian
+              Color(0xFF2C241F), // Rich Espresso Bronze
+              Color(0xFF1E1A17), // Deep Dark Wood
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(
+            color: const Color(0xFFD4AF37).withValues(alpha: 0.6),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF000000).withValues(alpha: 0.18),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Background luxury watermark ring
+            Positioned(
+              right: -25,
+              top: -25,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.08),
+                    width: 20,
+                  ),
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.all(18.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      // Golden Crown/Star Emblem
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFDE68A), Color(0xFFD4AF37)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFD4AF37).withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.workspace_premium_rounded,
+                          color: Color(0xFF3A2E28),
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  '$_loyaltyTier Elite Diner',
+                                  style: GoogleFonts.playfairDisplay(
+                                    color: const Color(0xFFFDFBF7),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    '10% PERK',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isSilver
+                                  ? 'Active Member Benefits & Guaranteed 10% Savings'
+                                  : 'Earn loyalty points to unlock 10% member discounts',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Interactive Quick-Voucher Coupon Ribbon
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFFD4AF37).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.local_activity_outlined, color: Color(0xFFF59E0B), size: 18),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'SILVER WELCOME CODE',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Text(
+                                  'WELCOME10',
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    color: Color(0xFFFDE68A),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    '10% OFF',
+                                    style: TextStyle(color: Color(0xFF10B981), fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        InkWell(
+                          onTap: () => _copyVoucherCode('WELCOME10'),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD4AF37).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.5)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.copy, color: Color(0xFFFDE68A), size: 12),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Copy',
+                                  style: TextStyle(
+                                    color: Color(0xFFFDE68A),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. LUXURY SEGMENTED FLOATING TAB BAR
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildSegmentedTabBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(18, 10, 18, 10),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: BoxDecoration(
+          color: const Color(0xFF3A2E28),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF3A2E28).withValues(alpha: 0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        labelColor: const Color(0xFFFDE68A),
+        unselectedLabelColor: const Color(0xFF64748B),
+        labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        dividerColor: Colors.transparent,
+        tabs: [
+          Tab(
+            height: 40,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.confirmation_number_outlined, size: 16),
+                const SizedBox(width: 6),
+                Text('My Wallet (${_vouchers.length})'),
+              ],
+            ),
+          ),
+          const Tab(
+            height: 40,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.auto_awesome, size: 15, color: Color(0xFFD4AF37)),
+                SizedBox(width: 6),
+                Text('Earn 10% Tasks'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 3. TAB 1: LUXURY PERFORATED TICKET WALLET
+  // ─────────────────────────────────────────────────────────────
   Widget _buildVouchersTab() {
     if (_vouchers.isEmpty) {
       return Center(
@@ -374,32 +679,48 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.discount_outlined, size: 64, color: Colors.grey.shade400),
-              const SizedBox(height: 16),
-              const Text(
-                'No Active Vouchers Yet',
-                style: TextStyle(
-                  fontFamily: 'Playfair Display',
-                  fontSize: 18,
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.discount_outlined, size: 38, color: Color(0xFFB87F5C)),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'No Vouchers in Wallet',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.secondary,
                 ),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Complete dining tasks in the "Earn 10% Tasks" tab or reach Silver tier to unlock discount vouchers!',
+                'Complete dining challenges in the "Earn 10% Tasks" tab to unlock exclusive dining vouchers!',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Colors.black54),
+                style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               ElevatedButton.icon(
                 onPressed: () => _tabController.animateTo(1),
-                icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                label: const Text('View Tasks to Earn 10%'),
+                icon: const Icon(Icons.flash_on_rounded, size: 16),
+                label: const Text('Explore Challenges (Earn 10%)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primary,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  elevation: 2,
                 ),
               ),
             ],
@@ -409,67 +730,86 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       itemCount: _vouchers.length,
       itemBuilder: (context, index) {
         final voucher = _vouchers[index];
         final code = voucher['code'] ?? '';
         final disc = voucher['discount_percent'] ?? 10;
-        final desc = voucher['description'] ?? 'Exclusive discount voucher';
-        final isSilverPerk = voucher['source'] == 'silver_tier_welcome' || code == 'WELCOME10';
+        final desc = voucher['description'] ?? 'Exclusive TableFlow Member Voucher';
+        final isSilver = voucher['source'] == 'silver_tier_welcome' || code == 'WELCOME10';
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 14),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: isSilverPerk ? const Color(0xFFD4AF37).withValues(alpha: 0.5) : const Color(0xFFE2E8F0),
-              width: isSilverPerk ? 1.5 : 1.0,
+              color: isSilver ? const Color(0xFFD4AF37).withValues(alpha: 0.6) : const Color(0xFFE2E8F0),
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: Column(
             children: [
+              // Ticket Header & Body
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Discount Badge
+                    // Coupon Discount Stamped Seal
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      width: 72,
+                      height: 72,
                       decoration: BoxDecoration(
-                        color: isSilverPerk ? const Color(0xFFFEF3C7) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(10),
+                        gradient: LinearGradient(
+                          colors: isSilver
+                              ? [const Color(0xFFFEF3C7), const Color(0xFFFDE68A)]
+                              : [const Color(0xFFE0E7FF), const Color(0xFFC7D2FE)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSilver ? const Color(0xFFF59E0B) : const Color(0xFF818CF8),
+                          width: 1,
+                        ),
                       ),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             '$disc%',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: isSilverPerk ? const Color(0xFFB45309) : AppTheme.primary,
+                              color: isSilver ? const Color(0xFF92400E) : const Color(0xFF3730A3),
+                              height: 1,
                             ),
                           ),
-                          const Text(
+                          const SizedBox(height: 2),
+                          Text(
                             'OFF',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black54),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                              color: isSilver ? const Color(0xFFB45309) : const Color(0xFF4338CA),
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 14),
 
-                    // Details
+                    // Details & Code
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -480,32 +820,47 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
                                 code,
                                 style: const TextStyle(
                                   fontFamily: 'monospace',
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
                                   color: AppTheme.secondary,
                                 ),
                               ),
                               const Spacer(),
-                              if (isSilverPerk)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFEF3C7),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: const Color(0xFFFDE68A)),
-                                  ),
-                                  child: const Text(
-                                    'Silver Perk',
-                                    style: TextStyle(color: Color(0xFF92400E), fontSize: 10, fontWeight: FontWeight.bold),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isSilver
+                                      ? const Color(0xFFFEF3C7)
+                                      : const Color(0xFFD1FAE5),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isSilver ? '★ Silver Gift' : '⚡ Task Reward',
+                                  style: TextStyle(
+                                    color: isSilver ? const Color(0xFFB45309) : const Color(0xFF065F46),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
                             desc,
-                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.3),
+                          ),
+                          const SizedBox(height: 6),
+                          const Row(
+                            children: [
+                              Icon(Icons.verified_outlined, size: 13, color: Color(0xFF10B981)),
+                              SizedBox(width: 4),
+                              Text(
+                                'Dine-In & Takeaway Valid',
+                                style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -514,33 +869,107 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
                 ),
               ),
 
-              // Dashed divider line
-              Divider(height: 1, color: Colors.grey.shade200),
+              // Realistic Perforated Ticket Divider
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 24,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8F6F2),
+                      borderRadius: BorderRadius.only(
+                        topRight: Radius.circular(12),
+                        bottomRight: Radius.circular(12),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          const dashWidth = 5.0;
+                          const dashSpace = 4.0;
+                          final count = (constraints.maxWidth / (dashWidth + dashSpace)).floor();
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(count, (_) {
+                              return const SizedBox(
+                                width: dashWidth,
+                                height: 1,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(color: Color(0xFFCBD5E1)),
+                                ),
+                              );
+                            }),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 12,
+                    height: 24,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8F6F2),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        bottomLeft: Radius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
 
-              // Bottom Actions
+              // Bottom Actions Bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                 child: Row(
                   children: [
-                    TextButton.icon(
-                      onPressed: () => _copyVoucherCode(code),
-                      icon: const Icon(Icons.copy, size: 14, color: AppTheme.primary),
-                      label: const Text('Copy Code', style: TextStyle(color: AppTheme.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+                    InkWell(
+                      onTap: () => _copyVoucherCode(code),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.copy, size: 14, color: Color(0xFF475569)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Copy Code',
+                              style: TextStyle(
+                                color: Color(0xFF475569),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     const Spacer(),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        backgroundColor: const Color(0xFF3A2E28),
+                        foregroundColor: const Color(0xFFFDE68A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                         elevation: 0,
                       ),
                       onPressed: () {
-                        // Navigate to Cart with prefilled code
                         context.push('/cart', extra: {'applied_coupon': code});
                       },
-                      child: const Text('Use in Cart', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      child: const Row(
+                        children: [
+                          Text('Use in Cart', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward_rounded, size: 14),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -552,17 +981,17 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
     );
   }
 
-  // ─────────────────────────────────────────
-  // TAB 2: EARN 10% DISCOUNT TASKS
-  // ─────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // 4. TAB 2: GAMIFIED VIP QUEST HUB ("EARN 10% TASKS")
+  // ─────────────────────────────────────────────────────────────
   Widget _buildTasksTab() {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
       itemCount: _tasks.length,
       itemBuilder: (context, index) {
         final task = _tasks[index];
         final taskKey = task['task_key'] ?? '';
-        final title = task['title'] ?? 'Dining Challenge';
+        final title = task['title'] ?? 'Dining Quest';
         final desc = task['description'] ?? '';
         final current = task['current_progress'] ?? 0;
         final target = task['target_progress'] ?? 1;
@@ -572,152 +1001,262 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> with SingleTickerPr
 
         final double progressRatio = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
 
+        // Custom task iconography
+        IconData taskIcon = Icons.restaurant_menu;
+        Color accentColor = const Color(0xFFD4AF37);
+        if (taskKey == 'weekday_booking') {
+          taskIcon = Icons.calendar_month_rounded;
+          accentColor = const Color(0xFF3B82F6);
+        } else if (taskKey == 'chef_special') {
+          taskIcon = Icons.local_fire_department_rounded;
+          accentColor = const Color(0xFFF59E0B);
+        } else {
+          taskIcon = Icons.dining_rounded;
+          accentColor = const Color(0xFF10B981);
+        }
+
         return Container(
-          margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isCompleted && !isClaimed
                   ? const Color(0xFF10B981)
                   : const Color(0xFFE2E8F0),
-              width: isCompleted && !isClaimed ? 1.5 : 1.0,
+              width: isCompleted && !isClaimed ? 1.8 : 1.0,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+                color: isCompleted && !isClaimed
+                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.03),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: isCompleted
-                          ? const Color(0xFFD1FAE5)
-                          : const Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with Themed Icon & 10% OFF Badge
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(taskIcon, color: accentColor, size: 24),
                     ),
-                    child: Icon(
-                      isCompleted ? Icons.check_circle : Icons.emoji_events_outlined,
-                      color: isCompleted ? const Color(0xFF059669) : AppTheme.primary,
-                      size: 20,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                title,
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.secondary,
+                                ),
+                              ),
+                              if (isCompleted && !isClaimed) ...[
+                                const SizedBox(width: 6),
+                                const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 16),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            desc,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.3),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                      ),
+                      child: const Text(
+                        '🎟️ 10% OFF',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // Gamified Multi-Step Milestones
+                if (target > 1) ...[
+                  Row(
+                    children: List.generate(target, (i) {
+                      final stepNum = i + 1;
+                      final isStepDone = current >= stepNum;
+                      return Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isStepDone
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFF1F5F9),
+                                border: Border.all(
+                                  color: isStepDone
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFCBD5E1),
+                                ),
+                              ),
+                              child: Center(
+                                child: isStepDone
+                                    ? const Icon(Icons.check, size: 15, color: Colors.white)
+                                    : Text(
+                                        '$stepNum',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            if (i < target - 1)
+                              Expanded(
+                                child: Container(
+                                  height: 3,
+                                  color: isStepDone
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  // Single milestone progress bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: progressRatio,
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isCompleted ? const Color(0xFF10B981) : AppTheme.primary,
+                      ),
+                      minHeight: 8,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 10),
+                ],
+
+                // Footer Status & Interactive Action Button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontFamily: 'Playfair Display',
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.secondary,
-                          ),
+                        Icon(
+                          isCompleted ? Icons.celebration : Icons.timelapse_rounded,
+                          size: 14,
+                          color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
                         ),
+                        const SizedBox(width: 4),
                         Text(
-                          desc,
-                          style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          isCompleted
+                              ? 'Goal Achieved ($current/$target)'
+                              : 'Progress: $current / $target completed',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isCompleted ? const Color(0xFF059669) : const Color(0xFF64748B),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      '🎟️ 10% OFF',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFB45309),
+                    if (isClaimed)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.check, size: 12, color: Color(0xFF64748B)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Claimed to Wallet',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (isCompleted)
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          elevation: 3,
+                          shadowColor: const Color(0xFF10B981).withValues(alpha: 0.5),
+                        ),
+                        onPressed: isClaiming ? null : () => _claimReward(taskKey, title),
+                        child: isClaiming
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.card_giftcard, size: 14),
+                                  SizedBox(width: 5),
+                                  Text('Claim 10% Reward', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                ],
+                              ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'In Progress',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // Progress Bar
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: progressRatio,
-                  backgroundColor: const Color(0xFFF1F5F9),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    isCompleted ? const Color(0xFF10B981) : AppTheme.primary,
-                  ),
-                  minHeight: 8,
+                  ],
                 ),
-              ),
-              const SizedBox(height: 8),
-
-              // Progress status & Action button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    isCompleted
-                        ? 'Completed ($current/$target)'
-                        : 'Progress: $current / $target',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isCompleted ? const Color(0xFF059669) : Colors.black54,
-                    ),
-                  ),
-                  if (isClaimed)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        '✓ Claimed to Wallet',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black45),
-                      ),
-                    )
-                  else if (isCompleted)
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        elevation: 2,
-                      ),
-                      onPressed: isClaiming ? null : () => _claimReward(taskKey, title),
-                      child: isClaiming
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Text('Claim 10% Reward', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    )
-                  else
-                    const Text(
-                      'In Progress',
-                      style: TextStyle(fontSize: 11, color: Colors.black38, fontStyle: FontStyle.italic),
-                    ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

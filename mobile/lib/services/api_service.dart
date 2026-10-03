@@ -14,7 +14,13 @@ class ApiService {
 
   /// Helper to get headers with the Supabase JWT token
   static Future<Map<String, String>> _getHeaders({String? idempotencyKey}) async {
-    final session = SupabaseService.client.auth.currentSession;
+    var session = SupabaseService.client.auth.currentSession;
+    if (session == null || session.isExpired) {
+      try {
+        final res = await SupabaseService.client.auth.refreshSession();
+        session = res.session;
+      } catch (_) {}
+    }
     final token = session?.accessToken;
 
     final headers = <String, String>{
