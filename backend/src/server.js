@@ -564,6 +564,185 @@ app.delete('/api/admin/users/:id', async (req, res) => {
 });
 
 // ==========================================
+// User Self-Service Account Deletion (30-Day Grace Period)
+// ==========================================
+
+app.delete('/api/users/me', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
+    }
+
+    // 1. Role check: Verify caller is a 'customer'
+    const { data: userProfile, error: profileErr } = await supabaseAdmin
+      .from('users')
+      .select('id, role, full_name, email, is_pending_deletion')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileErr) {
+      return res.status(500).json({ error: 'Could not fetch user profile details: ' + profileErr.message });
+    }
+
+    const currentRole = userProfile?.role || 'customer';
+    if (currentRole !== 'customer') {
+      return res.status(403).json({
+        error: 'Staff and administrative accounts cannot be deleted through the customer app. Please contact your restaurant manager.'
+      });
+    }
+
+    // 2. Active-record checks
+    // 2a. Check for active orders
+    const { data: activeOrders } = await supabaseAdmin
+      .from('orders')
+      .select('id, status')
+      .eq('user_id', userId)
+      .in('status', ['pending', 'preparing', 'ready', 'payment_pending'])
+      .limit(1);
+
+    if (activeOrders && activeOrders.length > 0) {
+      const order = activeOrders[0];
+      let msg = 'You have an active order.';
+      if (order.status === 'preparing') {
+        msg = 'You have an order currently being prepared in the kitchen.';
+      } else if (order.status === 'payment_pending') {
+        msg = 'You have an order awaiting bank transfer payment verification.';
+      } else if (order.status === 'ready') {
+        msg = 'You have an order ready to be served or picked up.';
+      }
+      return res.status(400).json({
+        error: `${msg} Please complete or cancel your active orders before requesting account deletion.`,
+        blockType: 'order',
+        orderId: order.id
+      });
+    }
+
+    // 2b. Check for upcoming/active reservations
+    const todayStr = new Date().toISOString().split('T')[0];
+    const { data: activeReservations } = await supabaseAdmin
+      .from('reservations')
+      .select('id, reservation_date, reservation_time, status')
+      .eq('user_id', userId)
+      .in('status', ['pending', 'confirmed'])
+      .gte('reservation_date', todayStr)
+      .limit(1);
+
+    if (activeReservations && activeReservations.length > 0) {
+      const resv = activeReservations[0];
+      return res.status(400).json({
+        error: `You have an upcoming table reservation on ${resv.reservation_date} at ${resv.reservation_time || ''}. Please cancel your reservation before requesting account deletion.`,
+        blockType: 'reservation',
+        reservationId: resv.id
+      });
+    }
+
+    // 2c. Check for active waiting queue entry
+    const { data: activeQueues } = await supabaseAdmin
+      .from('queue_entries')
+      .select('id, status, queue_number')
+      .eq('user_id', userId)
+      .in('status', ['waiting', 'notified'])
+      .limit(1);
+
+    if (activeQueues && activeQueues.length > 0) {
+      return res.status(400).json({
+        error: 'You are currently in line on the restaurant waiting queue. Please leave or complete the queue wait before requesting account deletion.',
+        blockType: 'queue',
+        queueId: activeQueues[0].id
+      });
+    }
+
+    // 3. Mark account as pending deletion with 30-day grace period
+    const deletionRequestedAt = new Date().toISOString();
+    const scheduledDeletionAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({
+        is_pending_deletion: true,
+        deletion_requested_at: deletionRequestedAt,
+        scheduled_deletion_at: scheduledDeletionAt
+      })
+      .eq('id', userId);
+
+    if (updateErr) {
+      console.error('[Account Deletion] Error setting pending deletion:', updateErr);
+      return res.status(500).json({ error: 'Failed to schedule account deletion: ' + updateErr.message });
+    }
+
+    // 4. Send in-app notification to the user
+    try {
+      const formattedDate = new Date(scheduledDeletionAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      await supabaseAdmin.from('notifications').insert({
+        user_id: userId,
+        title: 'Account Deletion Scheduled ⏳',
+        body: `Your account will be permanently deleted on ${formattedDate}. Log in anytime before then to cancel.`,
+        type: 'account_deletion_scheduled',
+        read: false
+      });
+    } catch (_) {}
+
+    return res.status(200).json({
+      success: true,
+      message: 'Account scheduled for deletion in 30 days',
+      scheduled_deletion_at: scheduledDeletionAt,
+      deletion_requested_at: deletionRequestedAt
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/users/me:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/users/me/cancel-deletion', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
+    }
+
+    // Clear pending deletion flags
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({
+        is_pending_deletion: false,
+        deletion_requested_at: null,
+        scheduled_deletion_at: null
+      })
+      .eq('id', userId);
+
+    if (updateErr) {
+      console.error('[Account Deletion] Error cancelling pending deletion:', updateErr);
+      return res.status(500).json({ error: 'Failed to cancel account deletion: ' + updateErr.message });
+    }
+
+    // Send confirmation notification
+    try {
+      await supabaseAdmin.from('notifications').insert({
+        user_id: userId,
+        title: 'Account Deletion Cancelled ✅',
+        body: 'Your account deletion request has been cancelled. Your account remains active with all loyalty points and order history preserved.',
+        type: 'account_deletion_cancelled',
+        read: false
+      });
+    } catch (_) {}
+
+    return res.status(200).json({
+      success: true,
+      message: 'Account deletion cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error in POST /api/users/me/cancel-deletion:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
 // KDS & Orders Endpoints
 // ==========================================
 
@@ -4515,6 +4694,10 @@ app.use('/api', paymentAuditRouter);
 // Start 24h Bank Transfer Order Auto-Expiry Scheduler (runs every 15 minutes)
 const { startOrderExpiryScheduler } = require('./jobs/orderExpiryJob');
 startOrderExpiryScheduler(supabaseAdmin);
+
+// Start Scheduled Account Deletion Purge Scheduler (daily check, runs every hour)
+const { startDeletionPurgeScheduler } = require('./jobs/deletionPurgeJob');
+startDeletionPurgeScheduler(supabaseAdmin);
 
 // ==========================================
 // Rich Luxury Menu Auto-Seed

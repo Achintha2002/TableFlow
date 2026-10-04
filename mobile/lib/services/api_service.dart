@@ -220,4 +220,67 @@ class ApiService {
       rethrow;
     }
   }
+
+  /// Request customer account deletion (initiates 30-day grace period)
+  static Future<Map<String, dynamic>> requestAccountDeletion() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/users/me'),
+        headers: headers,
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Account scheduled for deletion in 30 days',
+          'scheduled_deletion_at': data['scheduled_deletion_at'],
+        };
+      } else {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Failed to schedule account deletion',
+          'blockType': data['blockType'],
+        };
+      }
+    } catch (e) {
+      debugPrint('Request Account Deletion Error: $e');
+      return {
+        'success': false,
+        'error': 'Network connection error. Please try again.',
+      };
+    }
+  }
+
+  /// Cancel scheduled account deletion and restore normal account status
+  static Future<Map<String, dynamic>> cancelAccountDeletion() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/me/cancel-deletion'),
+        headers: headers,
+      );
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Account deletion cancelled successfully',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Failed to cancel account deletion',
+        };
+      }
+    } catch (e) {
+      debugPrint('Cancel Account Deletion Error: $e');
+      return {
+        'success': false,
+        'error': 'Network connection error. Please try again.',
+      };
+    }
+  }
 }
+
