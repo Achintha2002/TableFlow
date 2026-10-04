@@ -126,6 +126,7 @@ class CartProvider extends ChangeNotifier {
   // Active Dining Table details
   int? _selectedTableId;
   int? _selectedTableNumber;
+  String? _tableSource; // 'reservation', 'qr', 'manual'
 
   // Coupon & Discount details
   String? _couponCode;
@@ -138,6 +139,7 @@ class CartProvider extends ChangeNotifier {
   static const String _storageKey = 'tableflow_cart_items_v1';
   static const String _tableIdKey = 'tableflow_cart_table_id';
   static const String _tableNumKey = 'tableflow_cart_table_num';
+  static const String _tableSourceKey = 'tableflow_cart_table_source';
 
   CartProvider() {
     _loadFromPrefs();
@@ -156,6 +158,7 @@ class CartProvider extends ChangeNotifier {
       }
       _selectedTableId = prefs.getInt(_tableIdKey);
       _selectedTableNumber = prefs.getInt(_tableNumKey);
+      _tableSource = prefs.getString(_tableSourceKey);
       notifyListeners();
     } catch (e) {
       debugPrint('[CartProvider] Error loading persisted cart: $e');
@@ -176,6 +179,11 @@ class CartProvider extends ChangeNotifier {
         await prefs.setInt(_tableNumKey, _selectedTableNumber!);
       } else {
         await prefs.remove(_tableNumKey);
+      }
+      if (_tableSource != null) {
+        await prefs.setString(_tableSourceKey, _tableSource!);
+      } else {
+        await prefs.remove(_tableSourceKey);
       }
     } catch (e) {
       debugPrint('[CartProvider] Error saving cart: $e');
@@ -206,11 +214,13 @@ class CartProvider extends ChangeNotifier {
   // Table Getters
   int? get selectedTableId => _selectedTableId;
   int? get selectedTableNumber => _selectedTableNumber;
+  String? get tableSource => _tableSource;
   bool get hasTableSelected => _selectedTableId != null;
 
-  void setTable(int id, int number) {
+  void setTable(int id, int number, {String source = 'manual'}) {
     _selectedTableId = id;
     _selectedTableNumber = number;
+    _tableSource = source;
     notifyListeners();
     _saveToPrefs();
   }
@@ -218,6 +228,7 @@ class CartProvider extends ChangeNotifier {
   void clearTable() {
     _selectedTableId = null;
     _selectedTableNumber = null;
+    _tableSource = null;
     notifyListeners();
     _saveToPrefs();
   }

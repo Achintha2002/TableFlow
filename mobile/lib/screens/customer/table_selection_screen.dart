@@ -234,6 +234,29 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       if (!loggedIn) return;
     }
 
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    if (currentUser != null) {
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      try {
+        final activeBookings = await Supabase.instance.client
+            .from('reservations')
+            .select('id, reservation_date, reservation_time, table_id')
+            .eq('user_id', currentUser.id)
+            .gte('reservation_date', todayStr)
+            .or('status.eq.confirmed,status.eq.pending,status.eq.seated')
+            .timeout(const Duration(seconds: 4));
+
+        if (activeBookings.length >= 2) {
+          if (!mounted) return;
+          _showBookingLimitReachedDialog(context);
+          return;
+        }
+      } catch (checkErr) {
+        debugPrint('Active bookings check notice: $checkErr');
+      }
+    }
+
     if (!mounted) return;
     final table = _tables.firstWhere((t) => t['id'] == _selectedTableId);
     context.push('/reservation-details', extra: {
@@ -243,6 +266,83 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       'time': '${_selectedTime.hour}:${_selectedTime.minute.toString().padLeft(2, '0')}',
       'seats': table['seats'],
     });
+  }
+
+  void _showBookingLimitReachedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.table_restaurant_rounded, color: Colors.amber.shade900, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Reservation Limit',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber.shade900, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Max 2 Tables Allowed per Account',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Each guest account can only hold up to 2 active table reservations at a time to ensure fair seating for all restaurant guests.\n\nYou already have 2 active reservations. Please complete or cancel an existing reservation before booking another table.',
+              style: TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.push('/reservations');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('My Reservations'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

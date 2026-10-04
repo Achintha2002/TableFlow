@@ -50,6 +50,7 @@ class _CartScreenState extends State<CartScreen> {
     _checkActiveOrder();
     _fetchTables();
     _fetchLoyaltyPoints();
+    _checkActiveReservationTable();
   }
 
   @override
@@ -141,12 +142,69 @@ class _CartScreenState extends State<CartScreen> {
           .select('id, table_number')
           .order('table_number', ascending: true);
       if (mounted) {
+        final cart = context.read<CartProvider>();
         setState(() {
           _tables = List<Map<String, dynamic>>.from(data);
+          if (cart.selectedTableId != null) {
+            _selectedTableId = cart.selectedTableId;
+          }
         });
+        if (cart.selectedTableId == null && _selectedTableId == null) {
+          _checkActiveReservationTable();
+        }
       }
     } catch (e) {
       debugPrint('Error fetching tables: $e');
+    }
+  }
+
+  Future<void> _checkActiveReservationTable() async {
+    final cart = context.read<CartProvider>();
+    if (cart.hasTableSelected) {
+      if (mounted && _selectedTableId != cart.selectedTableId) {
+        setState(() => _selectedTableId = cart.selectedTableId);
+      }
+      return;
+    }
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      // Check for user's active/confirmed reservation for today
+      final resData = await Supabase.instance.client
+          .from('reservations')
+          .select('id, table_id, reservation_date, reservation_time, status, restaurant_tables(id, table_number)')
+          .eq('user_id', user.id)
+          .eq('reservation_date', todayStr)
+          .or('status.eq.confirmed,status.eq.pending,status.eq.seated')
+          .order('reservation_time', ascending: true)
+          .limit(1)
+          .maybeSingle();
+
+      if (resData != null && mounted) {
+        final tableId = resData['table_id'] as int?;
+        int? tableNum;
+        if (resData['restaurant_tables'] != null) {
+          final rt = resData['restaurant_tables'];
+          if (rt is Map && rt['table_number'] != null) {
+            tableNum = rt['table_number'] is int ? rt['table_number'] : int.tryParse(rt['table_number'].toString());
+          }
+        }
+        tableNum ??= tableId;
+
+        if (tableId != null) {
+          setState(() {
+            _selectedTableId = tableId;
+          });
+          cart.setTable(tableId, tableNum ?? tableId, source: 'reservation');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error auto-selecting active reservation table: $e');
     }
   }
 
@@ -979,14 +1037,32 @@ class _CartScreenState extends State<CartScreen> {
                       Text('Dining Table', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ),
-                  if (hasTable)
+                  if (hasTable || _selectedTableId != null)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.12),
+                        color: (cart.tableSource == 'reservation' ? const Color(0xFF10B981) : Colors.green).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('QR LINKED', style: TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            cart.tableSource == 'reservation' ? Icons.bookmark_added_rounded : Icons.qr_code_2,
+                            size: 11,
+                            color: cart.tableSource == 'reservation' ? const Color(0xFF10B981) : Colors.green,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            cart.tableSource == 'reservation' ? 'BOOKED TABLE' : (hasTable ? 'QR LINKED' : 'SELECTED'),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: cart.tableSource == 'reservation' ? const Color(0xFF10B981) : Colors.green,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                 ],
               ),
@@ -997,22 +1073,43 @@ class _CartScreenState extends State<CartScreen> {
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15)),
                   ),
                   child: Row(
                     children: [
+                      Icon(
+                        cart.tableSource == 'reservation' ? Icons.event_seat_rounded : Icons.table_restaurant_rounded,
+                        color: AppTheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          'Table #${cart.selectedTableNumber}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.secondary),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Table #${cart.selectedTableNumber}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.secondary),
+                            ),
+                            if (cart.tableSource == 'reservation')
+                              const Text(
+                                'Auto-selected from your booking',
+                                style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w500),
+                              ),
+                          ],
                         ),
                       ),
                       InkWell(
-                        onTap: () => cart.clearTable(),
+                        onTap: () {
+                          cart.clearTable();
+                          setState(() => _selectedTableId = null);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
                           ),
                           child: const Text('Change', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                         ),
@@ -1030,7 +1127,7 @@ class _CartScreenState extends State<CartScreen> {
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<int>(
                       isExpanded: true,
-                      value: _selectedTableId,
+                      value: _tables.any((t) => t['id'] == _selectedTableId) ? _selectedTableId : null,
                       hint: Text(
                         'Select Table Number (Or Scan Table QR)',
                         style: TextStyle(color: AppTheme.secondary.withValues(alpha: 0.6), fontSize: 13),
@@ -1041,6 +1138,13 @@ class _CartScreenState extends State<CartScreen> {
                       )).toList(),
                       onChanged: (val) {
                         setState(() => _selectedTableId = val);
+                        if (val != null) {
+                          final match = _tables.firstWhere((t) => t['id'] == val, orElse: () => {});
+                          final tNum = match['table_number'] is int ? match['table_number'] : int.tryParse(match['table_number']?.toString() ?? '') ?? val;
+                          cart.setTable(val, tNum, source: 'manual');
+                        } else {
+                          cart.clearTable();
+                        }
                       },
                     ),
                   ),
