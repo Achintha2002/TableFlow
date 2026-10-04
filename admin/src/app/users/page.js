@@ -90,7 +90,12 @@ export default function UsersPage() {
     setFormLoading(false);
   }
 
-  async function handleDeleteUser(userId, userName) {
+  async function handleDeleteUser(userId, userName, userRole) {
+    if (userRole === 'admin') {
+      alert("Admin accounts cannot be deleted for security compliance.");
+      return;
+    }
+
     if (!confirm(`Are you sure you want to permanently delete user: ${userName || 'Unknown'}? This action cannot be undone.`)) {
       return;
     }
@@ -226,13 +231,30 @@ export default function UsersPage() {
                         </select>
                       </td>
                       <td>
-                        <button 
-                          className="btn" 
-                          onClick={() => handleDeleteUser(u.id, u.full_name || u.email)}
-                          style={{ padding: '4px 12px', fontSize: 12, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
-                        >
-                          Delete
-                        </button>
+                        {u.role === 'admin' ? (
+                          <span 
+                            style={{ 
+                              padding: '4px 10px', 
+                              fontSize: 11, 
+                              background: 'rgba(16, 185, 129, 0.1)', 
+                              color: '#10b981', 
+                              border: '1px solid rgba(16, 185, 129, 0.25)',
+                              borderRadius: 4,
+                              fontWeight: 600,
+                              letterSpacing: 0.3
+                            }}
+                          >
+                            🛡️ Protected
+                          </span>
+                        ) : (
+                          <button 
+                            className="btn" 
+                            onClick={() => handleDeleteUser(u.id, u.full_name || u.email, u.role)}
+                            style={{ padding: '4px 12px', fontSize: 12, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                          >
+                            Delete
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )) : (

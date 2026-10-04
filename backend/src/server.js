@@ -552,10 +552,46 @@ app.delete('/api/admin/users/:id', async (req, res) => {
       return res.status(400).json({ error: 'User ID is required' });
     }
 
-    // Delete user from auth (this cascades to public.users because of ON DELETE CASCADE)
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    // 1. Check if the target user is an Admin
+    const { data: targetUser } = await supabaseAdmin
+      .from('users')
+      .select('id, role, email')
+      .eq('id', userId)
+      .maybeSingle();
 
-    if (error) throw error;
+    if (targetUser && targetUser.role === 'admin') {
+      return res.status(403).json({ error: 'Admin accounts cannot be deleted for system safety.' });
+    }
+
+    // 2. Preserve financial & business audit compliance (Set user_id = NULL on orders, reservations, transactions)
+    try { await supabaseAdmin.from('orders').update({ user_id: null }).eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('reservations').update({ user_id: null }).eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('payment_transactions').update({ user_id: null }).eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('service_requests').update({ user_id: null }).eq('user_id', userId); } catch (_) {}
+
+    // 3. Delete customer-specific data (vouchers, tasks, notifications, queue, settings)
+    try { await supabaseAdmin.from('user_vouchers').delete().eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('user_discount_tasks').delete().eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('notifications').delete().eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('accessibility_settings').delete().eq('user_id', userId); } catch (_) {}
+    try { await supabaseAdmin.from('queue_entries').delete().eq('user_id', userId); } catch (_) {}
+
+    // 4. Delete user from auth
+    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (authError) {
+      console.warn('[Admin Delete User] Auth notice:', authError.message);
+    }
+
+    // 5. Ensure row is removed from public.users table
+    const { error: dbError } = await supabaseAdmin
+      .from('users')
+      .delete()
+      .eq('id', userId);
+
+    if (dbError) {
+      console.error('[Admin Delete User] DB delete error:', dbError.message);
+      return res.status(500).json({ error: 'Could not remove user record from database: ' + dbError.message });
+    }
 
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
