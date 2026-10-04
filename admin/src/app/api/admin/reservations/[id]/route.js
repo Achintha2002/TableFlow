@@ -228,7 +228,12 @@ export async function PATCH(req, { params }) {
         .from('restaurant_tables')
         .update({ status: 'available' })
         .eq('id', existing.table_id)
-        .eq('status', 'reserved')
+        .catch(() => {});
+    } else if (status === 'completed' && existing.table_id) {
+      await supabaseAdmin
+        .from('restaurant_tables')
+        .update({ status: 'occupied' })
+        .eq('id', existing.table_id)
         .catch(() => {});
     }
 

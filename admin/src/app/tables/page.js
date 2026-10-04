@@ -160,58 +160,95 @@ export default function TablesPage() {
 
   async function updateStatus(id, newStatus) {
     try {
-      await fetch(`${API_BASE}/api/tables/${id}`, {
-        method: 'PUT',
+      const res = await fetch(`/api/admin/tables/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
-      fetchTables();
-    } catch {
-      await supabase.from('restaurant_tables').update({ status: newStatus }).eq('id', id);
-      fetchTables();
+      if (!res.ok) {
+        // Fallback to backend API
+        await fetch(`${API_BASE}/api/tables/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+      }
+      showToast(`Status updated to ${newStatus.toUpperCase()}`);
+      await fetchTables();
+    } catch (err) {
+      console.error('Error updating status:', err);
+      showToast('Error updating status');
+      await fetchTables();
     }
   }
 
   async function handleSeatReservedGuests(t) {
     try {
-      await updateStatus(t.id, 'occupied');
-      if (t.current_reservation?.id) {
-        await supabase
-          .from('reservations')
-          .update({ status: 'completed' })
-          .eq('id', t.current_reservation.id);
+      const resId = t.current_reservation?.id;
+      if (resId) {
+        // Mark reservation completed via admin API
+        await fetch(`/api/admin/reservations/${resId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'completed',
+            admin_reply: '[Guests seated at table via Floor Plan]'
+          })
+        });
       }
+
+      // Mark table occupied via admin API
+      await fetch(`/api/admin/tables/${t.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'occupied' })
+      });
+
       showToast(`Guests seated at Table ${t.table_number}! Status updated to OCCUPIED.`);
-      fetchTables();
+      await fetchTables();
     } catch (err) {
       console.error('Error seating guests:', err);
       showToast('Error seating guests: ' + err.message);
+      await fetchTables();
     }
   }
 
   async function handleReleaseReservation(t) {
-    if (!t.current_reservation?.id) return;
+    const resId = t.current_reservation?.id;
+    if (!resId && !t.id) return;
     if (!confirm(`Cancel and release reservation for Table ${t.table_number}?`)) return;
 
     try {
-      await supabase
-        .from('reservations')
-        .update({ 
-          status: 'cancelled',
-          admin_reply: '[Cancelled by Staff via Floor Plan]'
-        })
-        .eq('id', t.current_reservation.id);
+      if (resId) {
+        // 1. Call Next.js admin API with service_role key to cancel reservation
+        const res = await fetch(`/api/admin/reservations/${resId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'cancelled',
+            admin_reply: '[Cancelled by Staff via Floor Plan]',
+            cancel_reason: 'Released by staff on Floor Plan'
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to cancel reservation');
+        }
+      }
 
-      await supabase
-        .from('restaurant_tables')
-        .update({ status: 'available' })
-        .eq('id', t.id);
+      // 2. Ensure table status is set to available
+      await fetch(`/api/admin/tables/${t.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'available' })
+      });
 
       showToast(`Reservation for Table ${t.table_number} cancelled. Table is now AVAILABLE.`);
-      fetchTables();
+      await fetchTables();
     } catch (err) {
       console.error('Error releasing reservation:', err);
       showToast('Error releasing reservation: ' + err.message);
+      await fetchTables();
     }
   }
 
@@ -338,9 +375,15 @@ export default function TablesPage() {
     if (!deletingTable) return;
     setIsSubmittingDelete(true);
     try {
-      const res = await fetch(`${API_BASE}/api/tables/${deletingTable.id}`, {
+      let res = await fetch(`/api/admin/tables/${deletingTable.id}`, {
         method: 'DELETE'
       });
+
+      if (!res.ok) {
+        res = await fetch(`${API_BASE}/api/tables/${deletingTable.id}`, {
+          method: 'DELETE'
+        });
+      }
 
       if (res.ok) {
         showToast(`🗑️ Table #${deletingTable.table_number} removed from floor plan.`);
