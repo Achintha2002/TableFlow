@@ -28,7 +28,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _phone = '';
   String _loyaltyTier = 'Bronze';
   String? _avatarUrl;
-  String _userRole = 'customer';
   bool _isPendingDeletion = false;
   DateTime? _scheduledDeletionAt;
   
@@ -50,7 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _phone = '';
           _loyaltyTier = 'Guest';
           _avatarUrl = null;
-          _userRole = 'guest';
           _isPendingDeletion = false;
           _scheduledDeletionAt = null;
           _isLoading = false;
@@ -74,7 +72,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _phone = profile?['phone_number'] ?? '';
           _loyaltyTier = profile?['loyalty_tier'] ?? 'Bronze';
           _avatarUrl = profile?['avatar_url'] as String?;
-          _userRole = profile?['role'] ?? 'customer';
           _isPendingDeletion = profile?['is_pending_deletion'] == true;
           _scheduledDeletionAt = scheduledDate;
           _isLoading = false;
@@ -392,46 +389,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showDeleteAccountDialog() {
-    if (_userRole != 'customer' && _userRole != 'guest') {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.amber.shade50, shape: BoxShape.circle),
-                child: Icon(Icons.shield_outlined, color: Colors.amber.shade800, size: 24),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('Admin / Staff Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ),
-            ],
+  Widget _buildDeleteWarningItem({required IconData icon, required String text}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.red.shade700),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 12, color: Colors.red.shade900, height: 1.3),
           ),
-          content: Text(
-            'You are logged in as an authoritative $_userRole account. Staff and admin accounts cannot be deleted through the customer mobile app for security compliance.',
-            style: const TextStyle(fontSize: 14, height: 1.4),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Understood'),
-            ),
-          ],
         ),
-      );
-      return;
-    }
+      ],
+    );
+  }
 
+  void _showDeleteAccountDialog() {
     bool isSubmitting = false;
 
     showDialog(
@@ -443,8 +417,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return AlertDialog(
               backgroundColor: AppTheme.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
               title: Row(
                 children: [
@@ -454,12 +428,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: Colors.red.shade50,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 26),
+                    child: Icon(Icons.delete_forever_rounded, color: Colors.red.shade700, size: 26),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
                     child: Text(
-                      'Delete Account?',
+                      'Delete My Account?',
                       style: TextStyle(
                         fontFamily: 'Playfair Display',
                         fontWeight: FontWeight.bold,
@@ -470,119 +444,178 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Your account will be deactivated immediately and permanently deleted after a 30-day grace period.',
-                    style: TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.amber.shade200),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Are you sure you want to delete your account? This action is permanent and cannot be undone.',
+                      style: TextStyle(fontSize: 14, height: 1.4, color: Colors.black87, fontWeight: FontWeight.w500),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.info_outline, size: 18, color: Colors.amber.shade900),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'You can log back in anytime within 30 days to cancel this request and restore all your data.',
-                            style: TextStyle(fontSize: 12, color: Colors.amber.shade900, height: 1.3),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.red.shade800, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'What will be permanently deleted:',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 10),
+                          _buildDeleteWarningItem(
+                            icon: Icons.stars_rounded,
+                            text: 'Loyalty Points: All earned points and tier benefits will be wiped out.',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDeleteWarningItem(
+                            icon: Icons.receipt_long_rounded,
+                            text: 'Order History: All your past orders, bills & reviews will be cleared.',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDeleteWarningItem(
+                            icon: Icons.confirmation_number_outlined,
+                            text: 'Vouchers & Rewards: All active coupons and discounts will be lost.',
+                          ),
+                          const SizedBox(height: 8),
+                          _buildDeleteWarningItem(
+                            icon: Icons.person_off_outlined,
+                            text: 'Profile & Database Record: Your user account will be permanently deleted.',
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '⚠️ Active orders, reservations, or queue entries must be completed or cancelled before requesting deletion.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Text(
+                      'You will be immediately logged out of TableFlow.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                ),
               ),
               actions: [
-                TextButton(
-                  onPressed: isSubmitting ? null : () => Navigator.of(dialogCtx).pop(),
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () async {
-                          setDialogState(() => isSubmitting = true);
-                          final result = await ApiService.requestAccountDeletion();
-                          if (!mounted) return;
-
-                          if (result['success'] == true) {
-                            if (dialogCtx.mounted) {
-                              Navigator.of(dialogCtx).pop();
-                            }
-                            await SupabaseService.signOut();
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  backgroundColor: Colors.blueGrey.shade900,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  content: Row(
-                                    children: const [
-                                      Icon(Icons.schedule, color: Colors.amberAccent),
-                                      SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          'Account scheduled for deletion. Log in anytime within 30 days to cancel.',
-                                          style: TextStyle(color: Colors.white, fontSize: 13),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  duration: const Duration(seconds: 6),
-                                ),
-                              );
-                              context.go('/login');
-                            }
-                          } else {
-                            if (dialogCtx.mounted) {
-                              Navigator.of(dialogCtx).pop();
-                            }
-                            final blockType = result['blockType'] as String?;
-                            final errorMsg = result['error'] as String? ?? 'Could not schedule account deletion';
-                            if (mounted) {
-                              _showBlockedDeletionDialog(blockType: blockType, message: errorMsg);
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade700,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    elevation: 0,
-                  ),
-                  child: isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text(
-                          'Delete My Account',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: Row(
+                    children: [
+                      // Cancel Button
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isSubmitting ? null : () => Navigator.of(dialogCtx).pop(),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(color: Colors.grey.shade300, width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            backgroundColor: Colors.grey.shade50,
+                          ),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Delete Button
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: isSubmitting
+                              ? null
+                              : () async {
+                                  setDialogState(() => isSubmitting = true);
+                                  final result = await ApiService.requestAccountDeletion();
+                                  if (!mounted) return;
+
+                                  if (result['success'] == true) {
+                                    if (dialogCtx.mounted) {
+                                      Navigator.of(dialogCtx).pop();
+                                    }
+                                    await SupabaseService.signOut();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          backgroundColor: Colors.red.shade800,
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          content: Row(
+                                            children: const [
+                                              Icon(Icons.check_circle_outline, color: Colors.white),
+                                              SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  'Your account, loyalty points, and history have been permanently deleted.',
+                                                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          duration: const Duration(seconds: 5),
+                                        ),
+                                      );
+                                      context.go('/login');
+                                    }
+                                  } else {
+                                    if (dialogCtx.mounted) {
+                                      Navigator.of(dialogCtx).pop();
+                                    }
+                                    final blockType = result['blockType'] as String?;
+                                    final errorMsg = result['error'] as String? ?? 'Could not delete account';
+                                    if (mounted) {
+                                      _showBlockedDeletionDialog(blockType: blockType, message: errorMsg);
+                                    }
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade700,
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            shadowColor: Colors.red.shade200,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: isSubmitting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.delete_forever_rounded, size: 18),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Delete',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             );
@@ -1210,7 +1243,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        'Schedule account deletion with 30-day grace period',
+                                        'Permanently delete account, points & order history',
                                         style: TextStyle(
                                           color: AppTheme.secondary.withValues(alpha: 0.6),
                                           fontSize: 13,
