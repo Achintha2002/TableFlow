@@ -2191,8 +2191,14 @@ app.get('/api/tables', async (req, res) => {
 
     if (error) throw error;
 
-    // Fetch today's active reservations (confirmed or pending)
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Fetch active reservations for today or requested date (supporting local timezone)
+    function getLocalDateString(d = new Date()) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const todayStr = req.query.date || getLocalDateString();
     const { data: reservations, error: resErr } = await supabaseAdmin
       .from('reservations')
       .select('id, table_id, reservation_date, reservation_time, pax, status, special_requests, users(full_name, phone_number, email)')

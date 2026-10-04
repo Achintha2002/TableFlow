@@ -58,20 +58,41 @@ export default function TablesPage() {
     setTimeout(() => setToastMessage(null), 4000);
   }
 
-  async function fetchTables() {
+function getLocalDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+  const [selectedFloorDate, setSelectedFloorDate] = useState(() => getLocalDateString());
+
+  async function fetchTables(targetDate = selectedFloorDate) {
     try {
-      // 1. Try Backend API first
+      const dateToUse = targetDate || selectedFloorDate || getLocalDateString();
+
+      // 1. Primary: Use Admin API (runs supabaseAdmin, bypasses RLS, fully enriched with live reservations)
       let tableList = null;
       try {
-        const res = await fetch(`${API_BASE}/api/tables`);
+        const res = await fetch(`/api/admin/tables?date=${dateToUse}&t=${Date.now()}`, { cache: 'no-store' });
         if (res.ok) {
           tableList = await res.json();
         }
       } catch (err) {
-        console.warn('Backend /api/tables fetch error, falling back to Supabase:', err);
+        console.warn('Next.js /api/admin/tables fetch error:', err);
       }
 
-      // 2. Fallback to direct Supabase
+      // 2. Fallback to Express backend API
+      if (!tableList) {
+        try {
+          const res = await fetch(`${API_BASE}/api/tables?date=${dateToUse}&t=${Date.now()}`);
+          if (res.ok) tableList = await res.json();
+        } catch (err) {
+          console.warn('Backend /api/tables fetch error, falling back to direct Supabase:', err);
+        }
+      }
+
+      // 3. Fallback to direct Supabase
       if (!tableList) {
         const { data, error } = await supabase
           .from('restaurant_tables')
@@ -81,29 +102,31 @@ export default function TablesPage() {
         if (!error && data) tableList = data;
       }
 
-      // 3. Fetch active reservations for today to guarantee instant real-time sync
-      const todayStr = new Date().toISOString().split('T')[0];
-      const { data: resData } = await supabase
-        .from('reservations')
-        .select('*, users(full_name, phone_number, email)')
-        .eq('reservation_date', todayStr)
-        .in('status', ['confirmed', 'pending'])
-        .order('reservation_time', { ascending: true });
+      // Check if tableList is already enriched with live reservations
+      if (tableList && tableList.length > 0 && tableList[0].current_reservation !== undefined) {
+        setTables(tableList);
+      } else if (tableList) {
+        // Enforce manual enrichment using reservations
+        const { data: resData } = await supabase
+          .from('reservations')
+          .select('*, users(full_name, phone_number, email)')
+          .eq('reservation_date', dateToUse)
+          .in('status', ['confirmed', 'pending'])
+          .order('reservation_time', { ascending: true });
 
-      const activeResMap = {};
-      if (resData) {
-        for (const r of resData) {
-          if (!activeResMap[r.table_id]) {
-            activeResMap[r.table_id] = r;
+        const activeResMap = {};
+        if (resData) {
+          for (const r of resData) {
+            if (!activeResMap[r.table_id]) {
+              activeResMap[r.table_id] = r;
+            }
           }
         }
-      }
 
-      if (tableList) {
         const enriched = tableList.map(t => {
           const res = t.current_reservation || activeResMap[t.id] || null;
-          const isBooked = !!res;
-          const displayStatus = (t.status === 'available' && isBooked) ? 'booked' : t.status;
+          const isBooked = !!res || t.status === 'reserved';
+          const displayStatus = (t.status === 'available' && isBooked) ? 'booked' : (t.status === 'reserved' ? 'booked' : t.status);
           return {
             ...t,
             current_reservation: res,
@@ -129,17 +152,17 @@ export default function TablesPage() {
   }
 
   useEffect(() => {
-    fetchTables();
+    fetchTables(selectedFloorDate);
 
-    // 4-second auto-poll backup for live synchronization
+    // 2-second fast auto-poll backup for live synchronization
     const pollInterval = setInterval(() => {
-      fetchTables();
-    }, 4000);
+      fetchTables(selectedFloorDate);
+    }, 2000);
 
     // Realtime channel for table status/edits
     const tablesChannel = supabase.channel('admin_tables_realtime_full').on('postgres_changes', 
       { event: '*', schema: 'public', table: 'restaurant_tables' }, 
-      () => { fetchTables(); }
+      () => { fetchTables(selectedFloorDate); }
     ).subscribe();
 
     // Realtime channel for customer reservations (instant notification when user books via app)
@@ -147,7 +170,7 @@ export default function TablesPage() {
       { event: '*', schema: 'public', table: 'reservations' }, 
       (payload) => { 
         console.log('Realtime reservation change received on tables page:', payload);
-        fetchTables(); 
+        fetchTables(selectedFloorDate); 
       }
     ).subscribe();
 
@@ -156,7 +179,8 @@ export default function TablesPage() {
       supabase.removeChannel(tablesChannel);
       supabase.removeChannel(reservationsChannel);
     };
-  }, []);
+  }, [selectedFloorDate]);
+
 
   async function updateStatus(id, newStatus) {
     try {
@@ -553,7 +577,7 @@ export default function TablesPage() {
       <div className="full-data-card" style={{ marginBottom: 24 }}>
         <div className="data-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Tables & Floor Plan</h3>
               <span style={{
                 display: 'inline-flex',
@@ -567,14 +591,88 @@ export default function TablesPage() {
                 fontWeight: '700',
                 border: '1px solid rgba(5,150,105,0.2)'
               }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />
-                Mobile Live Sync
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669', boxShadow: '0 0 6px #059669' }} />
+                ⚡ Live App Sync
               </span>
+
+              {/* Floor Date Selector */}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '3px 8px',
+                borderRadius: '10px',
+                background: '#f8fafc',
+                border: '1px solid var(--border)'
+              }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>Floor Date:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFloorDate(getLocalDateString())}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    background: selectedFloorDate === getLocalDateString() ? 'var(--primary)' : 'transparent',
+                    color: selectedFloorDate === getLocalDateString() ? '#ffffff' : 'var(--text-secondary)'
+                  }}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const tmrw = new Date();
+                    tmrw.setDate(tmrw.getDate() + 1);
+                    setSelectedFloorDate(getLocalDateString(tmrw));
+                  }}
+                  style={{
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    background: selectedFloorDate === (() => {
+                      const t = new Date();
+                      t.setDate(t.getDate() + 1);
+                      return getLocalDateString(t);
+                    })() ? 'var(--primary)' : 'transparent',
+                    color: selectedFloorDate === (() => {
+                      const t = new Date();
+                      t.setDate(t.getDate() + 1);
+                      return getLocalDateString(t);
+                    })() ? '#ffffff' : 'var(--text-secondary)'
+                  }}
+                >
+                  Tomorrow
+                </button>
+                <input
+                  type="date"
+                  value={selectedFloorDate}
+                  onChange={(e) => setSelectedFloorDate(e.target.value)}
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    outline: 'none',
+                    background: '#ffffff',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
             </div>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              Add, edit, and organize restaurant dining tables. All changes instantly sync with mobile booking and floor screens.
+              Showing real-time table occupancy & bookings for <b>{selectedFloorDate}</b>. Auto-updates instantly on mobile reservations.
             </p>
           </div>
+
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {/* Add Table Button (CREATE) */}

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
+import '../../services/supabase_service.dart';
 import '../../utils/auth_guard.dart';
 
 class ReservationDetailsScreen extends StatefulWidget {
@@ -106,11 +107,24 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
         'special_requests': _specialRequestsController.text.trim().isEmpty ? null : _specialRequestsController.text.trim(),
       });
 
+      // If booking is for today, also mark table as reserved in restaurant_tables for immediate live sync
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final bookingDateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      if (bookingDateStr == todayStr) {
+        try {
+          await Supabase.instance.client
+              .from('restaurant_tables')
+              .update({'status': 'reserved'})
+              .eq('id', widget.dbId);
+        } catch (_) {}
+      }
+
       // Automatically link booked table to CartProvider
       final tableNum = int.tryParse(widget.tableId.replaceAll(RegExp(r'[^0-9]'), '')) ?? widget.dbId;
       if (mounted) {
         context.read<CartProvider>().setTable(widget.dbId, tableNum, source: 'reservation');
       }
+
       
       if (mounted) {
         showDialog(
