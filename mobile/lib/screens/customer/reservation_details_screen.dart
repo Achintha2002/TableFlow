@@ -108,7 +108,6 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
       });
 
       // If booking is for today, also mark table as reserved in restaurant_tables for immediate live sync
-      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
       final bookingDateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       if (bookingDateStr == todayStr) {
         try {
