@@ -5,15 +5,38 @@ export async function DELETE(req, { params }) {
   try {
     const { id } = params;
 
-    // Check if target user is an Admin
+    // Check caller role
+    let callerRole = 'admin';
+    const authHeader = req.headers.get('authorization');
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user: callerUser } } = await supabaseAdmin.auth.getUser(token);
+        if (callerUser) {
+          const { data: callerRec } = await supabaseAdmin
+            .from('users')
+            .select('role')
+            .eq('id', callerUser.id)
+            .maybeSingle();
+          if (callerRec?.role) callerRole = callerRec.role;
+        }
+      } catch (_) {}
+    }
+
+    // Check if target user is Super Admin or Admin
     const { data: targetUser } = await supabaseAdmin
       .from('users')
       .select('id, role, email')
       .eq('id', id)
       .maybeSingle();
 
-    if (targetUser && targetUser.role === 'admin') {
-      return NextResponse.json({ error: 'Admin accounts cannot be deleted.' }, { status: 403 });
+    if (targetUser) {
+      if (targetUser.role === 'super_admin') {
+        return NextResponse.json({ error: 'Super Admin accounts cannot be deleted.' }, { status: 403 });
+      }
+      if (targetUser.role === 'admin' && callerRole !== 'super_admin') {
+        return NextResponse.json({ error: 'Admin accounts can only be deleted by a Super Admin.' }, { status: 403 });
+      }
     }
 
     // Preserve financial & business audit compliance

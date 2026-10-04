@@ -72,7 +72,7 @@ module.exports = function(supabaseAdmin) {
         return res.status(403).json({ error: 'Forbidden: Profile not found' });
       }
 
-      const allowedRoles = ['admin', 'manager', 'cashier', 'staff'];
+      const allowedRoles = ['super_admin', 'admin', 'manager', 'cashier', 'staff'];
       if (!allowedRoles.includes(userProfile.role)) {
         if (isAdminByEmail) {
           req.auditUser = userProfile;
@@ -142,8 +142,18 @@ module.exports = function(supabaseAdmin) {
           .select('id, order_id, status, created_at')
           .eq('transaction_reference', cleanRef)
           .maybeSingle();
-        if (!refErr && refCheck) {
-          existingRef = refCheck;
+
+        if (!refErr && refCheck && !['rejected', 'failed'].includes(refCheck.status)) {
+          // Check if associated order is not cancelled or rejected
+          const { data: ordCheck } = await supabaseAdmin
+            .from('orders')
+            .select('status, payment_status')
+            .eq('id', refCheck.order_id)
+            .maybeSingle();
+
+          if (ordCheck && !['cancelled', 'payment_rejected'].includes(ordCheck.status)) {
+            existingRef = refCheck;
+          }
         }
       } catch (err) {
         console.warn('[payment_transactions] check warning:', err.message);
@@ -152,14 +162,24 @@ module.exports = function(supabaseAdmin) {
       // Also check orders.special_notes in case payment_transactions table had fallback
       if (!existingRef) {
         try {
-          const { data: noteCheck } = await supabaseAdmin
+          const { data: noteOrders } = await supabaseAdmin
             .from('orders')
-            .select('id, created_at')
+            .select('id, status, payment_status, special_notes')
             .ilike('special_notes', `%[Bank Transfer Ref: ${cleanRef}%`)
-            .limit(1)
-            .maybeSingle();
-          if (noteCheck) {
-            existingRef = { order_id: noteCheck.id };
+            .not('status', 'in', '("cancelled","payment_rejected")')
+            .limit(10);
+
+          if (noteOrders && noteOrders.length > 0) {
+            // Ensure exact token match so "2" does NOT falsely match "23456"
+            const escapedRef = cleanRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const exactPattern = new RegExp(`\\[Bank Transfer Ref:\\s*${escapedRef}(?:[\\]\\s]|$)`, 'i');
+
+            for (const ord of noteOrders) {
+              if (exactPattern.test(ord.special_notes || '')) {
+                existingRef = { order_id: ord.id };
+                break;
+              }
+            }
           }
         } catch (err) {
           console.warn('[orders] special_notes ref check notice:', err.message);

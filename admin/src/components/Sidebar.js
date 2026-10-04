@@ -23,6 +23,7 @@ export default function Sidebar() {
           if (res.ok) {
             const data = await res.json();
             const roleLabels = {
+              'super_admin': 'Super Administrator',
               'admin': 'Administrator',
               'manager': 'Manager',
               'cashier': 'Cashier',
@@ -107,6 +108,9 @@ export default function Sidebar() {
   }, []);
 
   const isActive = (path) => pathname === path ? 'active' : '';
+  const isAdmin = profile.rawRole === 'admin' || profile.rawRole === 'super_admin';
+  const isManager = profile.rawRole === 'manager' || isAdmin;
+  const isCashier = profile.rawRole === 'cashier' || isManager;
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -120,7 +124,7 @@ export default function Sidebar() {
         <p>Admin Console</p>
       </div>
       <nav className="sidebar-nav">
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
+        {isCashier && (
           <>
             <div className="nav-section-label">Overview</div>
             <Link href="/" className={`nav-item ${isActive('/')}`}>
@@ -140,7 +144,7 @@ export default function Sidebar() {
           </>
         )}
 
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
+        {isCashier && (
           <>
             <div className="nav-section-label">Live</div>
             <Link href="/queue" className={`nav-item ${isActive('/queue')}`}>
@@ -150,14 +154,14 @@ export default function Sidebar() {
           </>
         )}
         
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
+        {isManager && (
           <Link href="/tables" className={`nav-item ${isActive('/tables')}`}>
             <Grid size={20} />
             Tables & Floor
           </Link>
         )}
         
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager' || profile.rawRole === 'cashier') && (
+        {isCashier && (
           <>
             <div className="nav-section-label">Operations</div>
             <Link href="/pos" className={`nav-item ${isActive('/pos')}`}>
@@ -190,7 +194,7 @@ export default function Sidebar() {
           </>
         )}
         
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
+        {isManager && (
           <>
             <Link href="/reservations" className={`nav-item ${isActive('/reservations')}`}>
               <CalendarDays size={20} />
@@ -211,14 +215,14 @@ export default function Sidebar() {
           </>
         )}
         
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
+        {isManager && (
           <Link href="/reports" className={`nav-item ${isActive('/reports')}`}>
             <Grid size={20} />
             Reports & Analytics
           </Link>
         )}
         
-        {(profile.rawRole === 'admin' || profile.rawRole === 'manager') && (
+        {isAdmin && (
           <>
             <div className="nav-section-label">Management</div>
             <Link href="/staff-roster" className={`nav-item ${isActive('/staff-roster')}`}>
@@ -234,8 +238,11 @@ export default function Sidebar() {
       </nav>
       <div className="sidebar-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-          <div className="sidebar-footer-avatar">
-            {profile.name.charAt(0).toUpperCase()}
+          <div className="sidebar-footer-avatar" style={{
+            background: profile.rawRole === 'super_admin' ? 'linear-gradient(135deg, #d4af37, #f59e0b)' : 'var(--primary)',
+            boxShadow: profile.rawRole === 'super_admin' ? '0 0 10px rgba(212, 175, 55, 0.5)' : 'none'
+          }}>
+            {profile.rawRole === 'super_admin' ? '👑' : profile.name.charAt(0).toUpperCase()}
           </div>
           <div className="sidebar-footer-info" style={{ overflow: 'hidden' }}>
             <p style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</p>

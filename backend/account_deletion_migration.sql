@@ -25,6 +25,8 @@ BEGIN
     ALTER TABLE public.payment_transactions ALTER COLUMN user_id DROP NOT NULL;
   END IF;
 
+
+
   -- Ensure orders user_id allows NULL
   IF EXISTS (
     SELECT 1 FROM information_schema.columns 

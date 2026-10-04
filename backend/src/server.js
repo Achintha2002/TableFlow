@@ -141,7 +141,7 @@ const requireStaffRole = async (req, res, next) => {
       return res.status(403).json({ error: 'Forbidden: User profile not found' });
     }
 
-    const staffRoles = ['staff', 'waiter', 'manager', 'admin'];
+    const staffRoles = ['staff', 'waiter', 'manager', 'admin', 'super_admin'];
     if (!staffRoles.includes(userProfile.role)) {
       return res.status(403).json({
         error: `Forbidden: Staff access required. Current role: ${userProfile.role}`
@@ -444,7 +444,7 @@ app.post('/api/admin/create-staff', async (req, res) => {
     }
 
     // Validate role
-    if (!['admin', 'manager', 'cashier', 'kitchen', 'staff'].includes(role)) {
+    if (!['super_admin', 'admin', 'manager', 'cashier', 'kitchen', 'staff'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role specified' });
     }
 
@@ -522,7 +522,7 @@ app.get('/api/admin/my-role', async (req, res) => {
       console.warn('Warning querying users table in /my-role:', dbErr.message);
     }
 
-    res.json({ role, full_name: fullName, email: user.email });
+    res.json({ id: user.id, role, full_name: fullName, email: user.email });
   } catch (error) {
     console.error('Error in /api/admin/my-role:', error);
     res.status(500).json({ error: error.message });
@@ -552,15 +552,48 @@ app.delete('/api/admin/users/:id', async (req, res) => {
       return res.status(400).json({ error: 'User ID is required' });
     }
 
-    // 1. Check if the target user is an Admin
+    // Determine caller role
+    let callerRole = 'admin';
+    let callerId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user: callerUser } } = await supabaseAdmin.auth.getUser(token);
+        if (callerUser) {
+          callerId = callerUser.id;
+          const { data: callerRec } = await supabaseAdmin
+            .from('users')
+            .select('role')
+            .eq('id', callerUser.id)
+            .maybeSingle();
+          if (callerRec && callerRec.role) {
+            callerRole = callerRec.role;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Cannot delete yourself
+    if (callerId && callerId === userId) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    // 1. Check if the target user is a Super Admin or Admin
     const { data: targetUser } = await supabaseAdmin
       .from('users')
       .select('id, role, email')
       .eq('id', userId)
       .maybeSingle();
 
-    if (targetUser && targetUser.role === 'admin') {
-      return res.status(403).json({ error: 'Admin accounts cannot be deleted for system safety.' });
+    if (targetUser) {
+      if (targetUser.role === 'super_admin') {
+        return res.status(403).json({ error: 'Super Admin accounts cannot be deleted.' });
+      }
+
+      if (targetUser.role === 'admin' && callerRole !== 'super_admin') {
+        return res.status(403).json({ error: 'Admin accounts can only be deleted by a Super Admin.' });
+      }
     }
 
     // 2. Preserve financial & business audit compliance (Set user_id = NULL on orders, reservations, transactions)
@@ -594,6 +627,98 @@ app.delete('/api/admin/users/:id', async (req, res) => {
     }
 
     res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/admin/update-role', async (req, res) => {
+  try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
+    }
+
+    const { userId, newRole } = req.body;
+    if (!userId || !newRole) {
+      return res.status(400).json({ error: 'User ID and new role are required' });
+    }
+
+    // Determine caller role
+    let callerRole = 'admin';
+    let callerId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user: callerUser } } = await supabaseAdmin.auth.getUser(token);
+        if (callerUser) {
+          callerId = callerUser.id;
+          const { data: callerRec } = await supabaseAdmin
+            .from('users')
+            .select('role')
+            .eq('id', callerUser.id)
+            .maybeSingle();
+          if (callerRec && callerRec.role) {
+            callerRole = callerRec.role;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (callerId && callerId === userId) {
+      return res.status(400).json({ error: 'You cannot change your own role.' });
+    }
+
+    const { data: targetUser } = await supabaseAdmin
+      .from('users')
+      .select('id, role, email')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Target user not found' });
+    }
+
+    // Super Admin role cannot be demoted
+    if (targetUser.role === 'super_admin') {
+      return res.status(403).json({ error: 'Super Admin role cannot be modified.' });
+    }
+
+    // Changing an Admin requires Super Admin
+    if (targetUser.role === 'admin' && callerRole !== 'super_admin') {
+      return res.status(403).json({ error: 'Only a Super Admin can change the role of an Admin account.' });
+    }
+
+    // Promoting to Super Admin requires Super Admin
+    if (newRole === 'super_admin' && callerRole !== 'super_admin') {
+      return res.status(403).json({ error: 'Only a Super Admin can assign the Super Admin role.' });
+    }
+
+    // Update public.users
+    const { error: dbError } = await supabaseAdmin
+      .from('users')
+      .update({ role: newRole })
+      .eq('id', userId);
+
+    if (dbError) {
+      return res.status(500).json({ error: dbError.message });
+    }
+
+    // Update auth metadata
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { role: newRole }
+    }).catch(() => {});
+
+    res.json({ message: 'User role updated successfully', role: newRole });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/init-super-admin', async (req, res) => {
+  try {
+    const result = await ensureSuperAdmin();
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -4907,10 +5032,61 @@ app.use((err, req, res, next) => {
   });
 });
 
+async function ensureSuperAdmin() {
+  const email = 'superadmin@tableflow.com';
+  const password = 'SuperAdmin@2026';
+  const fullName = 'Super Admin';
+  const role = 'super_admin';
+
+  try {
+    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
+    let superUser = users?.find(u => u.email === email);
+
+    if (!superUser) {
+      const { data, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName, role }
+      });
+      if (createErr) {
+        console.warn('[SuperAdmin Init] Auth create note:', createErr.message);
+        return { success: false, error: createErr.message };
+      }
+      superUser = data.user;
+      console.log('[SuperAdmin Init] Created Auth Super Admin user:', superUser.id);
+    } else {
+      await supabaseAdmin.auth.admin.updateUserById(superUser.id, {
+        password: password,
+        user_metadata: { full_name: fullName, role }
+      }).catch(() => {});
+    }
+
+    const { error: dbErr } = await supabaseAdmin.from('users').upsert({
+      id: superUser.id,
+      email,
+      full_name: fullName,
+      role
+    }, { onConflict: 'id' });
+
+    if (dbErr) {
+      console.warn('[SuperAdmin Init] DB Upsert note:', dbErr.message);
+      return { success: false, error: dbErr.message, hint: 'Run ALTER TYPE user_role ADD VALUE IF NOT EXISTS \'super_admin\'; in Supabase SQL editor.' };
+    }
+
+    console.log('[SuperAdmin Init] Super Admin ready: superadmin@tableflow.com');
+    return { success: true, email, password, role };
+  } catch (err) {
+    console.error('[SuperAdmin Init] Error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   seedRichMenuItems();
+  ensureSuperAdmin();
 });
 
 
