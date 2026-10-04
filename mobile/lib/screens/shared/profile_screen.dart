@@ -393,6 +393,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showDeleteAccountDialog() {
+    if (_userRole != 'customer' && _userRole != 'guest') {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.amber.shade50, shape: BoxShape.circle),
+                child: Icon(Icons.shield_outlined, color: Colors.amber.shade800, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('Admin / Staff Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ),
+            ],
+          ),
+          content: Text(
+            'You are logged in as an authoritative $_userRole account. Staff and admin accounts cannot be deleted through the customer mobile app for security compliance.',
+            style: const TextStyle(fontSize: 14, height: 1.4),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Understood'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     bool isSubmitting = false;
 
     showDialog(
@@ -489,7 +528,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           if (!mounted) return;
 
                           if (result['success'] == true) {
-                            Navigator.of(dialogCtx).pop();
+                            if (dialogCtx.mounted) {
+                              Navigator.of(dialogCtx).pop();
+                            }
                             await SupabaseService.signOut();
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -515,10 +556,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               context.go('/login');
                             }
                           } else {
-                            Navigator.of(dialogCtx).pop();
+                            if (dialogCtx.mounted) {
+                              Navigator.of(dialogCtx).pop();
+                            }
                             final blockType = result['blockType'] as String?;
                             final errorMsg = result['error'] as String? ?? 'Could not schedule account deletion';
-                            _showBlockedDeletionDialog(blockType: blockType, message: errorMsg);
+                            if (mounted) {
+                              _showBlockedDeletionDialog(blockType: blockType, message: errorMsg);
+                            }
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -1122,7 +1167,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   
-                  if (!isGuest && _userRole == 'customer' && !_isPendingDeletion) ...[
+                  if (!isGuest && !_isPendingDeletion) ...[
                     const SizedBox(height: 32),
                     Text(
                       'Account Management',
@@ -1156,7 +1201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Delete Account',
+                                        'Delete My Account',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
