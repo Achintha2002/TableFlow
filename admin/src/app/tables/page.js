@@ -196,8 +196,16 @@ export default function TablesPage() {
     try {
       await supabase
         .from('reservations')
-        .update({ status: 'cancelled' })
+        .update({ 
+          status: 'cancelled',
+          admin_reply: '[Cancelled by Staff via Floor Plan]'
+        })
         .eq('id', t.current_reservation.id);
+
+      await supabase
+        .from('restaurant_tables')
+        .update({ status: 'available' })
+        .eq('id', t.id);
 
       showToast(`Reservation for Table ${t.table_number} cancelled. Table is now AVAILABLE.`);
       fetchTables();

@@ -79,6 +79,23 @@ export async function POST(req) {
       }
     }
 
+    // Check maximum active table reservations policy (Max 2 active per account)
+    if (userId && !body.allow_override && (status === 'confirmed' || status === 'pending')) {
+      const { count: activeCount } = await supabaseAdmin
+        .from('reservations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .in('status', ['confirmed', 'pending']);
+
+      if (activeCount >= 2) {
+        return NextResponse.json({
+          error: `Guest (${cleanName}) already has ${activeCount} active table reservations. Policy limit is maximum 2 active bookings per account.`,
+          code: 'MAX_RESERVATIONS_EXCEEDED',
+          activeCount
+        }, { status: 400 });
+      }
+    }
+
     // 2. Format reservation time (HH:MM:SS)
     let formattedTime = reservation_time;
     if (formattedTime.length === 5) {

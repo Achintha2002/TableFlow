@@ -1181,9 +1181,36 @@ export default function ReservationsPage() {
                       {/* 4. 10-Min Policy Status */}
                       <td style={{ padding: '12px 14px' }}>
                         {isCancelled ? (
-                          <span style={{ fontSize: '11px', color: '#dc2626', background: '#fee2e2', padding: '2px 7px', borderRadius: '5px', fontWeight: 700, display: 'inline-block' }}>
-                            Cancelled
-                          </span>
+                          <div>
+                            <span style={{
+                              fontSize: '11px',
+                              color: r.admin_reply?.includes('Hotline') ? '#c2410c' : r.admin_reply?.includes('Self') ? '#059669' : '#dc2626',
+                              background: r.admin_reply?.includes('Hotline') ? '#ffedd5' : r.admin_reply?.includes('Self') ? '#ecfdf5' : '#fee2e2',
+                              border: `1px solid ${r.admin_reply?.includes('Hotline') ? '#fed7aa' : r.admin_reply?.includes('Self') ? '#a7f3d0' : '#fecaca'}`,
+                              padding: '2px 7px',
+                              borderRadius: '5px',
+                              fontWeight: 700,
+                              display: 'inline-block'
+                            }}>
+                              {r.admin_reply?.includes('Hotline') ? '📞 Cancelled (Hotline)' : r.admin_reply?.includes('Self') ? '📱 Cancelled (Self <10m)' : 'Cancelled'}
+                            </span>
+                            {r.admin_reply && (
+                              <div
+                                style={{
+                                  fontSize: '10px',
+                                  color: '#64748b',
+                                  marginTop: '2px',
+                                  maxWidth: '180px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title={r.admin_reply}
+                              >
+                                {r.admin_reply.replace(/^\[|\]$/g, '')}
+                              </div>
+                            )}
+                          </div>
                         ) : isCompleted ? (
                           <span style={{ fontSize: '11px', color: '#475569', background: '#f1f5f9', padding: '2px 7px', borderRadius: '5px', fontWeight: 700, display: 'inline-block' }}>
                             Completed

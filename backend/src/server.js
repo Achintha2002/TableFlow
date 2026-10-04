@@ -3318,12 +3318,27 @@ app.post('/api/reservations/:id/cancel', authMiddleware, async (req, res) => {
       }
     }
 
-    const { data: updated, error: updateErr } = await supabaseAdmin
+    const cancelNote = isStaffOrAdmin
+      ? (req.body?.reason ? `[Cancelled via Hotline: ${req.body.reason}]` : '[Cancelled via Hotline / Desk]')
+      : '[Self-Cancelled by Guest (<10m policy)]';
+
+    let { data: updated, error: updateErr } = await supabaseAdmin
       .from('reservations')
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled', admin_reply: cancelNote })
       .eq('id', id)
       .select('*, restaurant_tables(table_number)')
       .single();
+
+    if (updateErr && (updateErr.message?.includes('admin_reply') || updateErr.code === 'PGRST204')) {
+      const fallback = await supabaseAdmin
+        .from('reservations')
+        .update({ status: 'cancelled' })
+        .eq('id', id)
+        .select('*, restaurant_tables(table_number)')
+        .single();
+      updated = fallback.data;
+      updateErr = fallback.error;
+    }
 
     if (updateErr) {
       return res.status(500).json({ error: updateErr.message });
