@@ -91,7 +91,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
       if (existingRes.length >= 2) {
         setState(() => _isLoading = false);
         if (mounted) {
-          _showBookingLimitReachedDialog(context);
+          _showBookingLimitReachedDialog(context, userEmail: user.email);
         }
         return;
       }
@@ -191,7 +191,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
       debugPrint('Reservation error: $e');
       if (mounted) {
         if (e.toString().contains('Maximum 2 active table reservations')) {
-          _showBookingLimitReachedDialog(context);
+          _showBookingLimitReachedDialog(context, userEmail: user.email);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
         }
@@ -201,7 +201,8 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
     }
   }
 
-  void _showBookingLimitReachedDialog(BuildContext context) {
+  void _showBookingLimitReachedDialog(BuildContext context, {String? userEmail}) {
+    final emailText = userEmail ?? Supabase.instance.client.auth.currentUser?.email ?? 'Your Account';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -238,21 +239,21 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.amber.shade900, size: 20),
+                  Icon(Icons.person_outline, color: Colors.amber.shade900, size: 20),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Max 2 Tables Allowed per Account',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      'Max 2 Active Bookings for:\n$emailText',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
-              'Each guest account can only hold up to 2 active table reservations at a time to ensure fair seating for all restaurant guests.\n\nYou already have 2 active reservations. Please complete or cancel an existing reservation before booking another table.',
-              style: TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
+            Text(
+              'The account ($emailText) already has 2 active table reservations.\n\nEach account is strictly limited to 2 active tables at a time. If you wish to make a booking under a different email account, tap "Switch Account" below.',
+              style: const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
             ),
           ],
         ),
@@ -260,6 +261,17 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await SupabaseService.signOut();
+              if (context.mounted) {
+                context.go('/login');
+              }
+            },
+            icon: const Icon(Icons.swap_horiz, size: 16),
+            label: const Text('Switch Account'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -271,7 +283,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('My Reservations'),
+            child: const Text('My Bookings'),
           ),
         ],
       ),

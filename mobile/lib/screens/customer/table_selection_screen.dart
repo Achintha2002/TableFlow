@@ -35,16 +35,14 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     super.initState();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    if (_selectedDate.isBefore(today)) {
+    // If opening late at night (past 9 PM / 21:00), default to tomorrow at 12:00 PM
+    if (now.hour >= 21) {
+      _selectedDate = today.add(const Duration(days: 1));
+      _selectedTime = const TimeOfDay(hour: 12, minute: 0);
+    } else {
       _selectedDate = today;
-    }
-    if (_selectedDate.isAtSameMomentAs(today)) {
-      final currentMinutes = now.hour * 60 + now.minute;
-      final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-      if (selectedMinutes <= currentMinutes) {
-        final nextHour = (now.hour + 1).clamp(0, 23);
-        _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
-      }
+      final nextHour = (now.hour + 1).clamp(11, 22);
+      _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
     }
     _fetchTables();
     _setupRealtime();
@@ -206,6 +204,29 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       final currentMinutes = now.hour * 60 + now.minute;
       final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
       if (selectedMinutes <= currentMinutes) {
+        if (now.hour >= 21) {
+          setState(() {
+            _selectedDate = today.add(const Duration(days: 1));
+            _selectedTime = const TimeOfDay(hour: 12, minute: 0);
+          });
+          _fetchTables();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(child: Text("Dining hours for tonight have ended. Date switched to tomorrow at 12:00 PM. Please select your table.")),
+                ],
+              ),
+              backgroundColor: AppTheme.primary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+          return;
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Row(
@@ -249,7 +270,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
         if (activeBookings.length >= 2) {
           if (!mounted) return;
-          _showBookingLimitReachedDialog(context);
+          _showBookingLimitReachedDialog(context, userEmail: currentUser.email);
           return;
         }
       } catch (checkErr) {
@@ -268,7 +289,8 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     });
   }
 
-  void _showBookingLimitReachedDialog(BuildContext context) {
+  void _showBookingLimitReachedDialog(BuildContext context, {String? userEmail}) {
+    final emailText = userEmail ?? Supabase.instance.client.auth.currentUser?.email ?? 'Your Account';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -305,21 +327,21 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.amber.shade900, size: 20),
+                  Icon(Icons.person_outline, color: Colors.amber.shade900, size: 20),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Max 2 Tables Allowed per Account',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      'Max 2 Active Bookings for:\n$emailText',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
-              'Each guest account can only hold up to 2 active table reservations at a time to ensure fair seating for all restaurant guests.\n\nYou already have 2 active reservations. Please complete or cancel an existing reservation before booking another table.',
-              style: TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
+            Text(
+              'The account ($emailText) currently has 2 active table reservations.\n\nEach account is strictly limited to 2 active tables at a time. If you want to reserve tables with another email address, tap "Switch Account" below.',
+              style: const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
             ),
           ],
         ),
@@ -327,6 +349,17 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Close', style: TextStyle(color: Colors.grey)),
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await SupabaseService.signOut();
+              if (context.mounted) {
+                context.go('/login');
+              }
+            },
+            icon: const Icon(Icons.swap_horiz, size: 16),
+            label: const Text('Switch Account'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -338,12 +371,13 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('My Reservations'),
+            child: const Text('My Bookings'),
           ),
         ],
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
