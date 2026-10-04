@@ -4,40 +4,54 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck, Share2, Clock, TicketPercent } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, getSafeSession } from '../lib/supabase';
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [profile, setProfile] = useState({ name: 'Loading...', role: '' });
+  const [profile, setProfile] = useState({ name: 'Admin', role: 'Staff' });
   const [pendingAuditCount, setPendingAuditCount] = useState(0);
 
   useEffect(() => {
     async function loadProfile() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSafeSession(1500);
       if (session) {
-        try {
-          const res = await fetch('http://localhost:3000/api/admin/my-role', {
-            headers: { 'Authorization': `Bearer ${session.access_token}` }
+        const roleLabels = {
+          'super_admin': 'Super Administrator',
+          'admin': 'Administrator',
+          'manager': 'Manager',
+          'cashier': 'Cashier',
+          'kitchen': 'Kitchen Staff',
+          'staff': 'Staff Member'
+        };
+        const metaRole = session.user?.user_metadata?.role;
+        const metaName = session.user?.user_metadata?.full_name || session.user?.email?.split('@')[0] || 'Admin';
+        if (metaRole) {
+          setProfile({
+            name: metaName,
+            role: roleLabels[metaRole] || 'Staff',
+            rawRole: metaRole
           });
+        }
+
+        try {
+          const controller = new AbortController();
+          const tid = setTimeout(() => controller.abort(), 2500);
+          const res = await fetch('http://localhost:3000/api/admin/my-role', {
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            signal: controller.signal
+          });
+          clearTimeout(tid);
           if (res.ok) {
             const data = await res.json();
-            const roleLabels = {
-              'super_admin': 'Super Administrator',
-              'admin': 'Administrator',
-              'manager': 'Manager',
-              'cashier': 'Cashier',
-              'kitchen': 'Kitchen Staff',
-              'staff': 'Staff Member'
-            };
             setProfile({
-              name: data.full_name || data.email.split('@')[0],
+              name: data.full_name || data.email?.split('@')[0],
               role: roleLabels[data.role] || 'Staff',
               rawRole: data.role
             });
           }
         } catch (e) {
-          console.error("Failed to load profile in sidebar", e);
+          console.warn("Note loading profile in sidebar:", e.message);
         }
       }
     }

@@ -76,8 +76,9 @@ export default function Dashboard() {
         fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] }))
       ]);
 
-      const customerCount = usersRes.filter(u => u.role === 'customer').length;
-      const adminCount = usersRes.filter(u => u.role === 'admin').length;
+      const safeUsers = Array.isArray(usersRes) ? usersRes : [];
+      const customerCount = safeUsers.filter(u => u.role === 'customer').length;
+      const adminCount = safeUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').length;
 
       const { data: oData } = await supabase
         .from('orders')

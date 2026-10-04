@@ -45,13 +45,13 @@ export default function LoginPage() {
       setErrorMsg(error.message);
       setLoading(false);
     } else {
-      router.push('/');
+      window.location.href = '/';
     }
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-base)' }}>
-      <div className="full-data-card" style={{ width: 400, padding: 40, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8 }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary, #f8fafc)' }}>
+      <div className="full-data-card" style={{ width: 400, padding: 40, background: 'var(--bg-card, #ffffff)', border: '1px solid var(--border)', borderRadius: 8 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <h1 style={{ fontFamily: 'var(--font-serif)', color: 'var(--primary)', fontSize: 28, margin: 0 }}>TableFlow</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', marginTop: 4 }}>Admin Console</p>
