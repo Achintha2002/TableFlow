@@ -244,7 +244,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             .select('id, reservation_date, reservation_time, table_id')
             .eq('user_id', currentUser.id)
             .gte('reservation_date', todayStr)
-            .or('status.eq.confirmed,status.eq.pending,status.eq.seated')
+            .or('status.eq.confirmed,status.eq.pending')
             .timeout(const Duration(seconds: 4));
 
         if (activeBookings.length >= 2) {

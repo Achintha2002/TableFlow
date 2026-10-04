@@ -180,7 +180,7 @@ class _CartScreenState extends State<CartScreen> {
           .select('id, table_id, reservation_date, reservation_time, status, restaurant_tables(id, table_number)')
           .eq('user_id', user.id)
           .eq('reservation_date', todayStr)
-          .or('status.eq.confirmed,status.eq.pending,status.eq.seated')
+          .or('status.eq.confirmed,status.eq.pending')
           .order('reservation_time', ascending: true)
           .limit(1)
           .maybeSingle();

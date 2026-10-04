@@ -91,29 +91,29 @@ export async function PUT(req, { params }) {
 
     if (oldTableId && oldTableId !== newTableId) {
       // Release old table
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'available' })
-        .eq('id', oldTableId)
-        .eq('status', 'reserved')
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'available' })
+          .eq('id', oldTableId);
+      } catch (_) {}
     }
 
     if (newTableId && (status === 'confirmed' || (!status && existing.status === 'confirmed'))) {
       // Reserve new table
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'reserved' })
-        .eq('id', newTableId)
-        .eq('status', 'available')
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'reserved' })
+          .eq('id', newTableId);
+      } catch (_) {}
     } else if (status === 'cancelled' && newTableId) {
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'available' })
-        .eq('id', newTableId)
-        .eq('status', 'reserved')
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'available' })
+          .eq('id', newTableId);
+      } catch (_) {}
     }
 
     return NextResponse.json({ message: 'Reservation updated successfully', reservation: updated });
@@ -150,12 +150,12 @@ export async function DELETE(req, { params }) {
 
     // Release table if it was reserved
     if (existing.table_id) {
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'available' })
-        .eq('id', existing.table_id)
-        .eq('status', 'reserved')
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'available' })
+          .eq('id', existing.table_id);
+      } catch (_) {}
     }
 
     return NextResponse.json({ message: 'Reservation deleted successfully' });
@@ -224,22 +224,24 @@ export async function PATCH(req, { params }) {
 
     // Release table if cancelled
     if (status === 'cancelled' && existing.table_id) {
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'available' })
-        .eq('id', existing.table_id)
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'available' })
+          .eq('id', existing.table_id);
+      } catch (_) {}
     } else if (status === 'completed' && existing.table_id) {
-      await supabaseAdmin
-        .from('restaurant_tables')
-        .update({ status: 'occupied' })
-        .eq('id', existing.table_id)
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('restaurant_tables')
+          .update({ status: 'occupied' })
+          .eq('id', existing.table_id);
+      } catch (_) {}
     }
 
     return NextResponse.json({ message: 'Reservation updated successfully', reservation: updated });
   } catch (error) {
     console.error('API Error updating reservation:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }

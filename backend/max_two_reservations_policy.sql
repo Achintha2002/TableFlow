@@ -8,14 +8,14 @@ RETURNS TRIGGER AS $$
 DECLARE
     active_count INT;
 BEGIN
-    -- Only check for active reservations (pending, confirmed, seated) on or after today
-    IF NEW.status IN ('confirmed', 'pending', 'seated') AND NEW.reservation_date >= CURRENT_DATE THEN
+    -- Only check for active reservations (pending, confirmed) on or after today
+    IF NEW.status::text IN ('confirmed', 'pending') AND NEW.reservation_date >= CURRENT_DATE THEN
         SELECT COUNT(*)
         INTO active_count
         FROM public.reservations
         WHERE user_id = NEW.user_id
           AND id != COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid)
-          AND status IN ('confirmed', 'pending', 'seated')
+          AND status::text IN ('confirmed', 'pending')
           AND reservation_date >= CURRENT_DATE;
 
         IF active_count >= 2 THEN

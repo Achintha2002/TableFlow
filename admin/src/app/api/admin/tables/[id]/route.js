@@ -25,26 +25,28 @@ export async function PATCH(req, { params }) {
 
     // If table is made available, also cancel active reservations for this table
     if (status === 'available') {
-      await supabaseAdmin
-        .from('reservations')
-        .update({
-          status: 'cancelled',
-          admin_reply: '[Cancelled by Staff via Floor Plan]'
-        })
-        .eq('table_id', id)
-        .in('status', ['confirmed', 'pending'])
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('reservations')
+          .update({
+            status: 'cancelled',
+            admin_reply: '[Cancelled by Staff via Floor Plan]'
+          })
+          .eq('table_id', id)
+          .in('status', ['confirmed', 'pending']);
+      } catch (_) {}
     } else if (status === 'occupied') {
       // If table is marked occupied (guests seated), complete the reservation
-      await supabaseAdmin
-        .from('reservations')
-        .update({
-          status: 'completed',
-          admin_reply: '[Guests seated at table]'
-        })
-        .eq('table_id', id)
-        .in('status', ['confirmed', 'pending'])
-        .catch(() => {});
+      try {
+        await supabaseAdmin
+          .from('reservations')
+          .update({
+            status: 'completed',
+            admin_reply: '[Guests seated at table]'
+          })
+          .eq('table_id', id)
+          .in('status', ['confirmed', 'pending']);
+      } catch (_) {}
     }
 
     return NextResponse.json({ message: 'Table status updated', table: updated });
@@ -91,11 +93,12 @@ export async function DELETE(req, { params }) {
     const { id } = await params;
 
     // Unlink active reservations
-    await supabaseAdmin
-      .from('reservations')
-      .update({ table_id: null })
-      .eq('table_id', id)
-      .catch(() => {});
+    try {
+      await supabaseAdmin
+        .from('reservations')
+        .update({ table_id: null })
+        .eq('table_id', id);
+    } catch (_) {}
 
     const { error } = await supabaseAdmin
       .from('restaurant_tables')

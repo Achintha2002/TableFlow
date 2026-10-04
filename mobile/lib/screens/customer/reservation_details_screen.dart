@@ -85,7 +85,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
           .select('id')
           .eq('user_id', user.id)
           .gte('reservation_date', todayStr)
-          .or('status.eq.confirmed,status.eq.pending,status.eq.seated')
+          .or('status.eq.confirmed,status.eq.pending')
           .timeout(const Duration(seconds: 4));
 
       if (existingRes.length >= 2) {
