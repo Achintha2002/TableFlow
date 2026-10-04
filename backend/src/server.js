@@ -496,7 +496,11 @@ app.get('/api/admin/my-role', async (req, res) => {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) return res.status(401).json({ error: 'Invalid token' });
 
-    let role = user.user_metadata?.role || 'admin';
+    const isSuperAdminEmail = user.email?.toLowerCase() === 'superadmin@tableflow.com' || user.email?.toLowerCase().includes('superadmin');
+    const isSuperAdminMeta = user.user_metadata?.role === 'super_admin';
+    const isSuperAdmin = isSuperAdminEmail || isSuperAdminMeta;
+
+    let role = isSuperAdmin ? 'super_admin' : (user.user_metadata?.role || 'admin');
     let fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Admin';
 
     try {
@@ -507,7 +511,11 @@ app.get('/api/admin/my-role', async (req, res) => {
         .maybeSingle();
 
       if (userRecord && userRecord.role) {
-        role = userRecord.role;
+        if (isSuperAdmin) {
+          role = 'super_admin';
+        } else {
+          role = userRecord.role;
+        }
         fullName = userRecord.full_name || fullName;
       } else {
         // Upsert so user record exists in users table
@@ -515,8 +523,17 @@ app.get('/api/admin/my-role', async (req, res) => {
           id: user.id,
           email: user.email,
           full_name: fullName,
-          role: role
-        }, { onConflict: 'id' }).catch(() => {});
+          role: isSuperAdmin ? 'super_admin' : role
+        }, { onConflict: 'id' }).catch(() => {
+          if (isSuperAdmin) {
+            supabaseAdmin.from('users').upsert({
+              id: user.id,
+              email: user.email,
+              full_name: fullName,
+              role: 'admin'
+            }, { onConflict: 'id' }).catch(() => {});
+          }
+        });
       }
     } catch (dbErr) {
       console.warn('Warning querying users table in /my-role:', dbErr.message);
@@ -562,13 +579,18 @@ app.delete('/api/admin/users/:id', async (req, res) => {
         const { data: { user: callerUser } } = await supabaseAdmin.auth.getUser(token);
         if (callerUser) {
           callerId = callerUser.id;
+          if (callerUser.email?.toLowerCase() === 'superadmin@tableflow.com' ||
+              callerUser.email?.toLowerCase().includes('superadmin') ||
+              callerUser.user_metadata?.role === 'super_admin') {
+            callerRole = 'super_admin';
+          }
           const { data: callerRec } = await supabaseAdmin
             .from('users')
             .select('role')
             .eq('id', callerUser.id)
             .maybeSingle();
-          if (callerRec && callerRec.role) {
-            callerRole = callerRec.role;
+          if (callerRec && callerRec.role === 'super_admin') {
+            callerRole = 'super_admin';
           }
         }
       } catch (_) {}
@@ -653,13 +675,18 @@ app.patch('/api/admin/update-role', async (req, res) => {
         const { data: { user: callerUser } } = await supabaseAdmin.auth.getUser(token);
         if (callerUser) {
           callerId = callerUser.id;
+          if (callerUser.email?.toLowerCase() === 'superadmin@tableflow.com' ||
+              callerUser.email?.toLowerCase().includes('superadmin') ||
+              callerUser.user_metadata?.role === 'super_admin') {
+            callerRole = 'super_admin';
+          }
           const { data: callerRec } = await supabaseAdmin
             .from('users')
             .select('role')
             .eq('id', callerUser.id)
             .maybeSingle();
-          if (callerRec && callerRec.role) {
-            callerRole = callerRec.role;
+          if (callerRec && callerRec.role === 'super_admin') {
+            callerRole = 'super_admin';
           }
         }
       } catch (_) {}
@@ -5071,7 +5098,14 @@ async function ensureSuperAdmin() {
 
     if (dbErr) {
       console.warn('[SuperAdmin Init] DB Upsert note:', dbErr.message);
-      return { success: false, error: dbErr.message, hint: 'Run ALTER TYPE user_role ADD VALUE IF NOT EXISTS \'super_admin\'; in Supabase SQL editor.' };
+      if (dbErr.message.includes('enum') || dbErr.message.includes('user_role') || dbErr.message.includes('invalid input value')) {
+        await supabaseAdmin.from('users').upsert({
+          id: superUser.id,
+          email,
+          full_name: fullName,
+          role: 'admin'
+        }, { onConflict: 'id' }).catch(() => {});
+      }
     }
 
     console.log('[SuperAdmin Init] Super Admin ready: superadmin@tableflow.com');

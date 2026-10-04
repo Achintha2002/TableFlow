@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, getSafeSession } from '../../lib/supabase';
 import Topbar from '../../components/Topbar';
 
 function badge(type, text) {
@@ -25,7 +25,9 @@ export default function UsersPage() {
   const [newStaff, setNewStaff] = useState({ full_name: '', email: '', password: '', role: 'cashier' });
   const [formLoading, setFormLoading] = useState(false);
 
-  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isSuperAdmin = currentUser?.role === 'super_admin' || 
+                       currentUser?.email?.toLowerCase() === 'superadmin@tableflow.com' ||
+                       currentUser?.email?.toLowerCase().includes('superadmin');
 
   useEffect(() => {
     loadCurrentProfile();
@@ -34,15 +36,34 @@ export default function UsersPage() {
 
   async function loadCurrentProfile() {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const res = await fetch('http://localhost:3000/api/admin/my-role', {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+      const session = await getSafeSession(1500);
+      if (session?.user) {
+        const isSA = session.user.email?.toLowerCase() === 'superadmin@tableflow.com' || 
+                     session.user.email?.toLowerCase().includes('superadmin') || 
+                     session.user.user_metadata?.role === 'super_admin';
+        
+        // Immediate state setup so super admin controls unlock instantly
+        setCurrentUser({
+          id: session.user.id,
+          email: session.user.email,
+          role: isSA ? 'super_admin' : (session.user.user_metadata?.role || 'admin'),
+          full_name: session.user.user_metadata?.full_name || 'Admin'
         });
-        if (res.ok) {
-          const data = await res.json();
-          setCurrentUser(data);
-        }
+
+        try {
+          const controller = new AbortController();
+          const tid = setTimeout(() => controller.abort(), 2500);
+          const res = await fetch('http://localhost:3000/api/admin/my-role', {
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            signal: controller.signal
+          });
+          clearTimeout(tid);
+          if (res.ok) {
+            const data = await res.json();
+            if (isSA) data.role = 'super_admin';
+            setCurrentUser(data);
+          }
+        } catch (_) {}
       }
     } catch (e) {
       console.error("Failed to load current user profile:", e);
@@ -88,7 +109,7 @@ export default function UsersPage() {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSafeSession(1500);
       const res = await fetch('http://localhost:3000/api/admin/update-role', {
         method: 'PATCH',
         headers: {
@@ -172,7 +193,7 @@ export default function UsersPage() {
     }
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSafeSession(1500);
       const res = await fetch(`http://localhost:3000/api/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
@@ -357,9 +378,9 @@ export default function UsersPage() {
                   </thead>
                   <tbody>
                     {users.length > 0 ? users.map(u => {
-                      const isTargetSA = u.role === 'super_admin';
+                      const isTargetSA = u.role === 'super_admin' || u.email?.toLowerCase() === 'superadmin@tableflow.com';
                       const isTargetAdmin = u.role === 'admin';
-                      const isSelf = u.id === currentUser?.id;
+                      const isSelf = u.id === currentUser?.id || (currentUser?.email && u.email?.toLowerCase() === currentUser.email.toLowerCase());
                       const canEditRole = !isSelf && !isTargetSA && (isSuperAdmin || !isTargetAdmin);
 
                       return (

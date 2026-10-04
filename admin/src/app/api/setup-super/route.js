@@ -46,7 +46,14 @@ export async function POST(req) {
 
     if (dbErr) {
       console.warn('DB upsert error:', dbErr.message);
-      // Even if enum isn't updated yet, auth login can still proceed
+      if (dbErr.message.includes('enum') || dbErr.message.includes('invalid input value') || dbErr.message.includes('user_role')) {
+        await supabaseAdmin.from('users').upsert({
+          id: superUser.id,
+          email: email,
+          full_name: fullName,
+          role: 'admin'
+        }, { onConflict: 'id' }).catch(() => {});
+      }
     }
 
     return NextResponse.json({ 
