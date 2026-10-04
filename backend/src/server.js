@@ -750,15 +750,6 @@ app.patch('/api/admin/update-role', async (req, res) => {
   }
 });
 
-app.post('/api/admin/init-super-admin', async (req, res) => {
-  try {
-    const result = await ensureSuperAdmin();
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // ==========================================
 // User Self-Service Account Deletion (30-Day Grace Period)
 // ==========================================
@@ -5088,68 +5079,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-async function ensureSuperAdmin() {
-  const email = 'superadmin@tableflow.com';
-  const password = 'SuperAdmin@2026';
-  const fullName = 'Super Admin';
-  const role = 'super_admin';
-
-  try {
-    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
-    let superUser = users?.find(u => u.email === email);
-
-    if (!superUser) {
-      const { data, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName, role }
-      });
-      if (createErr) {
-        console.warn('[SuperAdmin Init] Auth create note:', createErr.message);
-        return { success: false, error: createErr.message };
-      }
-      superUser = data.user;
-      console.log('[SuperAdmin Init] Created Auth Super Admin user:', superUser.id);
-    } else {
-      await supabaseAdmin.auth.admin.updateUserById(superUser.id, {
-        password: password,
-        user_metadata: { full_name: fullName, role }
-      }).catch(() => {});
-    }
-
-    const { error: dbErr } = await supabaseAdmin.from('users').upsert({
-      id: superUser.id,
-      email,
-      full_name: fullName,
-      role
-    }, { onConflict: 'id' });
-
-    if (dbErr) {
-      console.warn('[SuperAdmin Init] DB Upsert note:', dbErr.message);
-      if (dbErr.message.includes('enum') || dbErr.message.includes('user_role') || dbErr.message.includes('invalid input value')) {
-        await supabaseAdmin.from('users').upsert({
-          id: superUser.id,
-          email,
-          full_name: fullName,
-          role: 'admin'
-        }, { onConflict: 'id' }).catch(() => {});
-      }
-    }
-
-    console.log('[SuperAdmin Init] Super Admin ready: superadmin@tableflow.com');
-    return { success: true, email, password, role };
-  } catch (err) {
-    console.error('[SuperAdmin Init] Error:', err.message);
-    return { success: false, error: err.message };
-  }
-}
-
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   seedRichMenuItems();
-  ensureSuperAdmin();
 });
 
 

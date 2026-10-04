@@ -73,9 +73,6 @@ export default function UsersPage() {
   async function loadUsers() {
     setLoading(true);
     try {
-      // Trigger super admin check in background if needed
-      fetch('http://localhost:3000/api/admin/init-super-admin', { method: 'POST' }).catch(() => {});
-
       const res = await fetch('http://localhost:3000/api/admin/users');
       if (res.ok) {
         const data = await res.json();
