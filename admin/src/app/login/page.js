@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 
@@ -10,22 +10,41 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const router = useRouter();
 
+  useEffect(() => {
+    // Proactively ensure superadmin account is ready in Supabase
+    fetch('/api/setup-super', { method: 'POST' }).catch(() => {});
+  }, []);
+
   async function handleLogin(e) {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const cleanEmail = email.trim();
+    let { data, error } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: password,
     });
+
+    // If super admin login failed, attempt explicit auto-provision and retry
+    if (error && cleanEmail.toLowerCase() === 'superadmin@tableflow.com') {
+      try {
+        const setupRes = await fetch('/api/setup-super', { method: 'POST' });
+        if (setupRes.ok) {
+          const retry = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: password,
+          });
+          data = retry.data;
+          error = retry.error;
+        }
+      } catch (_) {}
+    }
 
     if (error) {
       setErrorMsg(error.message);
       setLoading(false);
     } else {
-      // AuthGuard will handle the redirection after verifying the role
-      // But we can eagerly redirect to trigger it
       router.push('/');
     }
   }

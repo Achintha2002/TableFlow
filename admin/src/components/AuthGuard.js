@@ -60,7 +60,7 @@ export default function AuthGuard({ children }) {
         if (!res || !res.ok) {
           console.warn('Role verification returned non-OK status:', res?.status);
           const metaRole = currentSession.user?.user_metadata?.role;
-          const allowedRoles = ['admin', 'manager', 'cashier', 'kitchen', 'staff'];
+          const allowedRoles = ['super_admin', 'admin', 'manager', 'cashier', 'kitchen', 'staff'];
           
           if (metaRole && allowedRoles.includes(metaRole)) {
             setAuthorized(true);
@@ -81,7 +81,7 @@ export default function AuthGuard({ children }) {
         
         const { role } = await res.json();
 
-        const allowedRoles = ['admin', 'manager', 'cashier', 'kitchen', 'staff'];
+        const allowedRoles = ['super_admin', 'admin', 'manager', 'cashier', 'kitchen', 'staff'];
         if (role && allowedRoles.includes(role)) {
           setAuthorized(true);
           if (pathname === '/login') {
