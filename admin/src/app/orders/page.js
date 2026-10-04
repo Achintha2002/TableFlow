@@ -390,18 +390,13 @@ export default function OrdersPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Order ID</th>
-              <th>Customer</th>
-              <th>Table</th>
-              <th>Items</th>
-              <th>Subtotal</th>
-              <th style={{ color: '#10b981' }}>Discount</th>
-              <th>Total Amount</th>
-              <th>Status</th>
-              <th>Payment</th>
-              <th>Guest Rating</th>
-              <th>Time Ordered</th>
-              <th>Actions</th>
+              <th style={{ width: '13%' }}>Order</th>
+              <th style={{ width: '17%' }}>Table & Customer</th>
+              <th style={{ width: '24%' }}>Items</th>
+              <th style={{ width: '16%' }}>Total Amount</th>
+              <th style={{ width: '10%' }}>Status</th>
+              <th style={{ width: '10%' }}>Payment</th>
+              <th style={{ width: '10%' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -413,49 +408,88 @@ export default function OrdersPage() {
 
               return (
                 <tr key={o.id}>
-                  <td style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>#{o.id.slice(0,8)}</td>
-                  <td>{o.users?.full_name || 'Guest'}</td>
-                  <td>{o.restaurant_tables?.table_number ? `T-${o.restaurant_tables.table_number}` : '—'}</td>
-                  <td style={{ fontSize: '13px', color: 'var(--text-muted)', maxWidth: '200px' }}>
-                    <div>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontWeight: '700', fontSize: '13px' }}>
+                      #{o.id.slice(0,8)}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {fmtTime(o.created_at)}
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {o.restaurant_tables?.table_number ? (
+                        <span style={{
+                          background: 'rgba(184, 127, 92, 0.12)',
+                          color: 'var(--primary)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          T-{o.restaurant_tables.table_number}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontStyle: 'italic', whiteSpace: 'nowrap' }}>Takeaway</span>
+                      )}
+                      <span style={{ fontWeight: '500', color: 'var(--text-primary)', fontSize: '13px' }}>
+                        {o.users?.full_name || 'Guest'}
+                      </span>
+                    </div>
+                    {o.reviews && o.reviews.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }}>
+                        <span style={{ color: '#f59e0b', fontSize: '11px', fontWeight: 'bold' }}>
+                          ★ {o.reviews[0].rating}/5
+                        </span>
+                        {o.reviews[0].comment && (
+                          <span 
+                            style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
+                            title={o.reviews[0].comment}
+                          >
+                            &quot;{o.reviews[0].comment}&quot;
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    <div style={{ lineHeight: '1.4' }}>
                       {o.order_items?.map(item => `${item.quantity}x ${item.menu_items?.name}`).join(', ') || '—'}
                     </div>
                     {o.special_notes && !o.special_notes.startsWith('[Bank Transfer Ref:') && (
-                      <div style={{ fontSize: '11px', color: 'var(--primary-gold)', marginTop: '3px', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '3px', fontStyle: 'italic', wordBreak: 'break-word' }}>
                         📝 {o.special_notes.replace(/\[Bank Transfer Ref:[^\]]+\]/g, '').trim()}
                       </div>
                     )}
                   </td>
-                  <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    LKR {displaySubtotal.toFixed(2)}
-                  </td>
-                  <td>
-                    {discount > 0 ? (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                        color: '#10b981',
-                        border: '1px solid rgba(16, 185, 129, 0.35)',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        🏷️ -LKR {discount.toFixed(2)} {code ? `(${code})` : ''}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    <strong style={{ color: 'var(--text-primary)', fontSize: '13px' }}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: '700', fontSize: '13px' }}>
                       LKR {finalAmount.toFixed(2)}
-                    </strong>
+                    </div>
+                    {discount > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px',
+                          backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                          color: '#10b981',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          fontSize: '10.5px',
+                          fontWeight: '700'
+                        }}>
+                          🏷️ -LKR {discount.toFixed(2)} {code ? `(${code})` : ''}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                          LKR {displaySubtotal.toFixed(2)}
+                        </span>
+                      </div>
+                    ) : null}
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     {isAwaiting ? (
                       <span style={{
                         background: 'rgba(245, 158, 11, 0.15)',
@@ -477,13 +511,13 @@ export default function OrdersPage() {
                       )
                     )}
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     {isAwaiting ? (
                       <span style={{
                         backgroundColor: 'rgba(245, 158, 11, 0.15)',
                         color: '#f59e0b',
                         border: '1px solid rgba(245, 158, 11, 0.4)',
-                        padding: '4px 8px',
+                        padding: '3px 7px',
                         borderRadius: '4px',
                         fontSize: '11px',
                         fontWeight: 'bold',
@@ -491,14 +525,14 @@ export default function OrdersPage() {
                         alignItems: 'center',
                         gap: '4px'
                       }}>
-                        ⏳ Unverified Slip
+                        ⏳ Slip Verification
                       </span>
                     ) : o.payment_status === 'failed' ? (
                       <span style={{
                         backgroundColor: 'rgba(239, 68, 68, 0.15)',
                         color: '#ef4444',
                         border: '1px solid rgba(239, 68, 68, 0.4)',
-                        padding: '4px 8px',
+                        padding: '3px 7px',
                         borderRadius: '4px',
                         fontSize: '11px',
                         fontWeight: 'bold',
@@ -506,7 +540,7 @@ export default function OrdersPage() {
                         alignItems: 'center',
                         gap: '4px'
                       }}>
-                        ✕ Payment Rejected
+                        ✕ Rejected
                       </span>
                     ) : (
                       <button 
@@ -517,7 +551,8 @@ export default function OrdersPage() {
                           color: o.payment_status === 'paid' ? '#000' : 'var(--white)',
                           padding: '4px 8px',
                           borderRadius: '4px',
-                          fontSize: '12px',
+                          fontSize: '11.5px',
+                          fontWeight: '600',
                           cursor: o.payment_status === 'paid' ? 'default' : 'pointer'
                         }}
                       >
@@ -525,34 +560,14 @@ export default function OrdersPage() {
                       </button>
                     )}
                   </td>
-                  <td>
-                    {o.reviews && o.reviews.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ color: 'var(--primary-gold)', fontWeight: 'bold', fontSize: '13px' }}>
-                          {'★'.repeat(o.reviews[0].rating || 5)}{'☆'.repeat(5 - (o.reviews[0].rating || 5))} ({o.reviews[0].rating}/5)
-                        </span>
-                        {o.reviews[0].comment && (
-                          <span 
-                            style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
-                            title={o.reviews[0].comment}
-                          >
-                            &quot;{o.reviews[0].comment}&quot;
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>
-                    )}
-                  </td>
-                  <td>{fmtTime(o.created_at)}</td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     {isAwaiting ? (
                       <Link
                         href="/payment-audit"
                         style={{
                           backgroundColor: '#f59e0b',
                           color: '#000',
-                          padding: '4px 10px',
+                          padding: '4px 9px',
                           borderRadius: '4px',
                           fontSize: '11px',
                           fontWeight: 'bold',
@@ -573,9 +588,9 @@ export default function OrdersPage() {
                           backgroundColor: 'transparent',
                           border: '1px solid var(--border-color)',
                           color: 'var(--text-light)',
-                          padding: '4px 8px',
+                          padding: '4px 6px',
                           borderRadius: '4px',
-                          fontSize: '12px',
+                          fontSize: '11.5px',
                           outline: 'none',
                           cursor: 'pointer'
                         }}
@@ -592,7 +607,7 @@ export default function OrdersPage() {
               );
             }) : (
               <tr>
-                <td colSpan="12" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>
+                <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '36px 16px' }}>
                   {filterTab === 'awaiting_audit' ? 'No orders awaiting payment audit! All clear.' : 'No orders found'}
                 </td>
               </tr>
