@@ -16,6 +16,14 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Normalize accidental double /api/api/ route prefixes from mobile clients
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api/api/')) {
+    req.url = req.url.replace('/api/api/', '/api/');
+  }
+  next();
+});
+
 // Set up Multer for memory storage
 const upload = multer({
   storage: multer.memoryStorage(),

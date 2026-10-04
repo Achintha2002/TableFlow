@@ -357,14 +357,68 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               'Cancellation Policy',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontFamily: 'Playfair Display',
+                fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Cancellations made less than 24 hours before the reservation time may be subject to a LKR 6000 per person cancellation fee.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppTheme.secondary.withValues(alpha: 0.7),
-                height: 1.5,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.timer_outlined, color: Colors.green, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        '10-Minute Grace Period:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Instant free cancellation is available in the app within 10 minutes of booking. The reserved table will immediately be released.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.secondary.withValues(alpha: 0.8),
+                      height: 1.4,
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.phone_in_talk_rounded, color: Colors.orange.shade800, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'After 10 Minutes (Hotline Cancellation):',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'To cancel or reschedule after 10 minutes, please contact our restaurant hotline at +94 11 234 5678.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.secondary.withValues(alpha: 0.8),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
             

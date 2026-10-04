@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
+import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
 import '../../widgets/guest_placeholder.dart';
 import 'package:intl/intl.dart';
@@ -21,12 +24,17 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _reservations = [];
   RealtimeChannel? _channel;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchReservations();
     _setupRealtime();
+    // Live countdown timer that refreshes the 10-minute cancellation badge every 30s
+    _countdownTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _setupRealtime() {
@@ -52,6 +60,7 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _channel?.unsubscribe();
     super.dispose();
   }
@@ -79,6 +88,11 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
   }
 
   void _confirmCancelReservation(Map<String, dynamic> res, int remainingMins) {
+    if (!_isWithin10Minutes(res)) {
+      _showHotlineCancellationDialog(res, _getMinutesElapsed(res));
+      return;
+    }
+
     final tableNumber = res['restaurant_tables']?['table_number'] ?? 'N/A';
     final date = DateTime.tryParse(res['reservation_date'] ?? '') ?? DateTime.now();
     final time = res['reservation_time']?.toString().substring(0, 5) ?? '';
@@ -138,6 +152,10 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
             ),
             onPressed: () async {
               Navigator.of(ctx).pop();
+              if (!_isWithin10Minutes(res)) {
+                _showHotlineCancellationDialog(res, _getMinutesElapsed(res));
+                return;
+              }
               await _executeCancellation(res);
             },
             child: const Text('Yes, Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -149,9 +167,17 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
 
   Future<void> _executeCancellation(Map<String, dynamic> res) async {
     try {
-      final token = Supabase.instance.client.auth.currentSession?.accessToken;
+      var session = Supabase.instance.client.auth.currentSession;
+      if (session == null || session.isExpired) {
+        try {
+          final refreshRes = await Supabase.instance.client.auth.refreshSession();
+          session = refreshRes.session;
+        } catch (_) {}
+      }
+      final token = session?.accessToken;
+
       final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/api/reservations/${res['id']}/cancel'),
+        Uri.parse('${ApiService.baseUrl}/reservations/${res['id']}/cancel'),
         headers: {
           if (token != null) 'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -161,6 +187,15 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
+        // If this cancelled table was selected in CartProvider, release it from the cart
+        try {
+          final cart = Provider.of<CartProvider>(context, listen: false);
+          final resTableId = res['table_id'] is int ? res['table_id'] : int.tryParse(res['table_id']?.toString() ?? '');
+          if (cart.selectedTableId != null && resTableId != null && cart.selectedTableId == resTableId) {
+            cart.clearTable();
+          }
+        } catch (_) {}
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Reservation cancelled successfully. Table has been released.'),
@@ -184,6 +219,42 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
         }
       }
     } catch (e) {
+      // Direct Supabase fallback if within 10 minutes and backend HTTP failed
+      if (_isWithin10Minutes(res)) {
+        try {
+          await Supabase.instance.client
+              .from('reservations')
+              .update({'status': 'cancelled'})
+              .eq('id', res['id']);
+          if (res['table_id'] != null) {
+            await Supabase.instance.client
+                .from('restaurant_tables')
+                .update({'status': 'available'})
+                .eq('id', res['table_id'])
+                .eq('status', 'reserved');
+          }
+          if (mounted) {
+            try {
+              final cart = Provider.of<CartProvider>(context, listen: false);
+              final resTableId = res['table_id'] is int ? res['table_id'] : int.tryParse(res['table_id']?.toString() ?? '');
+              if (cart.selectedTableId != null && resTableId != null && cart.selectedTableId == resTableId) {
+                cart.clearTable();
+              }
+            } catch (_) {}
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Reservation cancelled successfully. Table has been released.'),
+                backgroundColor: Colors.redAccent,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            _fetchReservations();
+          }
+          return;
+        } catch (_) {}
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to cancel: $e')),
@@ -617,7 +688,7 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                       try {
                         final token = Supabase.instance.client.auth.currentSession?.accessToken;
                         final response = await http.patch(
-                          Uri.parse('${ApiService.baseUrl}/api/reservations/${res['id']}'),
+                          Uri.parse('${ApiService.baseUrl}/reservations/${res['id']}'),
                           headers: {
                             'Authorization': 'Bearer $token',
                             'Content-Type': 'application/json',
