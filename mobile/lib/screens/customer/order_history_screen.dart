@@ -57,36 +57,56 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
 
     bool success = false;
     String? lastError;
+    final trimmedComment = comment.trim();
 
-    // 1. First attempt: Direct Supabase insert / upsert
+    // 1. Direct Supabase: check if review already exists for this order
     try {
-      final payload = {
-        'order_id': orderId,
-        'user_id': userId,
-        'rating': rating,
-        'comment': comment.trim(),
-      };
+      final existingReviews = await Supabase.instance.client
+          .from('reviews')
+          .select('id')
+          .eq('order_id', orderId);
 
-      try {
+      if (existingReviews.isNotEmpty) {
         await Supabase.instance.client
             .from('reviews')
-            .upsert(payload, onConflict: 'order_id');
+            .update({
+              'rating': rating,
+              'comment': trimmedComment,
+              'user_id': userId,
+            })
+            .eq('order_id', orderId);
         success = true;
-      } catch (upsertErr) {
-        // Fallback to plain insert
+      } else {
         await Supabase.instance.client
             .from('reviews')
-            .insert(payload);
+            .insert({
+              'order_id': orderId,
+              'user_id': userId,
+              'rating': rating,
+              'comment': trimmedComment,
+            });
         success = true;
       }
     } catch (e) {
       lastError = e.toString();
+      // Also try direct update if insert threw duplicate constraint
+      try {
+        await Supabase.instance.client
+            .from('reviews')
+            .update({
+              'rating': rating,
+              'comment': trimmedComment,
+              'user_id': userId,
+            })
+            .eq('order_id', orderId);
+        success = true;
+      } catch (_) {}
     }
 
-    // 2. Second attempt: Backend service API (bypasses RLS with service role)
+    // 2. Fallback to backend API (uses service role to bypass any RLS issue)
     if (!success) {
       try {
-        final uri = Uri.parse('${ApiService.baseUrl}/api/reviews');
+        final uri = Uri.parse('${ApiService.baseUrl}/reviews');
         final response = await http.post(
           uri,
           headers: {'Content-Type': 'application/json'},
@@ -94,7 +114,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
             'order_id': orderId,
             'user_id': userId,
             'rating': rating,
-            'comment': comment.trim(),
+            'comment': trimmedComment,
           }),
         );
 
@@ -102,7 +122,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
           success = true;
           lastError = null;
         } else {
-          lastError ??= 'API error status: ${response.statusCode}';
+          lastError ??= 'API response: ${response.statusCode}';
         }
       } catch (httpErr) {
         lastError ??= httpErr.toString();

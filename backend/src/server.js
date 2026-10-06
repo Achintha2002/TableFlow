@@ -1044,6 +1044,7 @@ app.get('/api/menu/customizations', async (req, res) => {
   }
 });
 
+
 // Submit or update guest order review (bypasses RLS with service role)
 app.post(['/api/reviews', '/reviews'], async (req, res) => {
   try {
@@ -1055,15 +1056,14 @@ app.post(['/api/reviews', '/reviews'], async (req, res) => {
     const numericRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
     const trimmedComment = comment ? String(comment).trim() : null;
 
-    // Check if review already exists for this order
-    const { data: existing } = await supabaseAdmin
+    // Check if reviews already exist for this order
+    const { data: existingList, error: checkErr } = await supabaseAdmin
       .from('reviews')
       .select('id')
-      .eq('order_id', order_id)
-      .maybeSingle();
+      .eq('order_id', order_id);
 
     let result;
-    if (existing && existing.id) {
+    if (existingList && existingList.length > 0) {
       result = await supabaseAdmin
         .from('reviews')
         .update({
@@ -1071,9 +1071,8 @@ app.post(['/api/reviews', '/reviews'], async (req, res) => {
           comment: trimmedComment,
           user_id: user_id || null,
         })
-        .eq('id', existing.id)
-        .select()
-        .single();
+        .eq('order_id', order_id)
+        .select();
     } else {
       result = await supabaseAdmin
         .from('reviews')
@@ -1083,12 +1082,11 @@ app.post(['/api/reviews', '/reviews'], async (req, res) => {
           rating: numericRating,
           comment: trimmedComment,
         })
-        .select()
-        .single();
+        .select();
     }
 
     if (result.error) {
-      console.error('Error inserting review into Supabase:', result.error);
+      console.error('Error saving review in Supabase:', result.error);
       return res.status(500).json({ error: result.error.message });
     }
 
