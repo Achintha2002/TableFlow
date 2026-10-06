@@ -225,10 +225,10 @@ class AppTheme {
       // Text Button
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF0000EE), // Classic blue link color for high contrast
+          foregroundColor: const Color(0xFF8B4513), // Bold warm espresso for clean high contrast
           textStyle: GoogleFonts.inter(
-            fontWeight: FontWeight.w800,
-            decoration: TextDecoration.underline,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
           ),
         ),
       ),

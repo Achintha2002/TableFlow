@@ -223,14 +223,37 @@ class _RestaurantStatusScreenState extends State<RestaurantStatusScreen> {
                             ),
                           ],
                         ),
-                        TextButton(
-                          onPressed: () => context.push(AppRoutes.queue),
-                          child: const Text(
-                            'See All',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: primaryColor,
+                        InkWell(
+                          onTap: () => context.push(AppRoutes.queue),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: primaryColor.withValues(alpha: 0.25),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'See All',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 10,
+                                  color: primaryColor,
+                                ),
+                              ],
                             ),
                           ),
                         ),

@@ -460,9 +460,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              TextButton(
-                onPressed: () => context.go('/menu'),
-                child: const Text('View All'),
+              InkWell(
+                onTap: () => context.go('/menu'),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppTheme.primary.withValues(alpha: 0.25),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'View All',
+                        style: TextStyle(
+                          color: AppTheme.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 11,
+                        color: AppTheme.primary,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),

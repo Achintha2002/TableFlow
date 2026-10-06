@@ -784,15 +784,20 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
 
           const SizedBox(height: 10),
           Center(
-            child: TextButton(
+            child: TextButton.icon(
               onPressed: _showManualEntryDialog,
-              child: Text(
+              icon: Icon(Icons.edit_note_rounded, size: 16, color: AppTheme.primary),
+              label: Text(
                 'Wrong table? Enter different table number',
                 style: GoogleFonts.inter(
                   fontSize: 13,
-                  color: Colors.grey.shade600,
-                  decoration: TextDecoration.underline,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.primary,
                 ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
             ),
           ),

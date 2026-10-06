@@ -463,9 +463,8 @@ class _BottomWaveCard extends StatelessWidget {
                                   text: 'Sign In',
                                   style: GoogleFonts.inter(
                                     fontSize: isCompact ? 12 : 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    decoration: TextDecoration.underline,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFFD4AF37),
                                   ),
                                 ),
                               ],
