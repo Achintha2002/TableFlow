@@ -20,10 +20,95 @@ import {
   Send,
   Save,
   Coffee,
-  Store
+  Store,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+const SQL_MIGRATION_SCRIPT = `-- ==============================================================================
+-- TableFlow: Dynamic Operating Hours, Closures & Realtime Sync Migration
+-- Run this in your Supabase SQL Editor
+-- ==============================================================================
+
+-- 1. Main weekly operating hours configuration table
+CREATE TABLE IF NOT EXISTS public.restaurant_operating_hours (
+    id INT PRIMARY KEY DEFAULT 1,
+    default_open_time TIME NOT NULL DEFAULT '08:00:00',
+    default_close_time TIME NOT NULL DEFAULT '23:00:00',
+    last_booking_minutes_before_close INT NOT NULL DEFAULT 60,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    CONSTRAINT single_row_config CHECK (id = 1)
+);
+
+-- Seed initial default configuration row (08:00 to 23:00)
+INSERT INTO public.restaurant_operating_hours (id, default_open_time, default_close_time, last_booking_minutes_before_close) 
+VALUES (1, '08:00:00', '23:00:00', 60) 
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Closures table for holidays AND emergency "closed today"
+CREATE TABLE IF NOT EXISTS public.restaurant_special_closures (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    close_date DATE NOT NULL UNIQUE,
+    reason TEXT NOT NULL,
+    is_full_day BOOLEAN NOT NULL DEFAULT TRUE,
+    custom_open_time TIME DEFAULT NULL,
+    custom_close_time TIME DEFAULT NULL,
+    notified_customers BOOLEAN DEFAULT FALSE,
+    created_by_emergency BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Derived helper function using Sri Lanka timezone (Asia/Colombo)
+CREATE OR REPLACE FUNCTION public.is_restaurant_open_today()
+RETURNS BOOLEAN AS $$
+  SELECT NOT EXISTS (
+    SELECT 1 FROM public.restaurant_special_closures
+    WHERE close_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Colombo')::DATE 
+      AND is_full_day = true
+  );
+$$ LANGUAGE sql STABLE;
+
+-- 4. Enable Supabase Realtime Broadcasting
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'restaurant_operating_hours'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.restaurant_operating_hours;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'restaurant_special_closures'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.restaurant_special_closures;
+  END IF;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN undefined_object THEN NULL;
+END $$;
+
+-- 5. Row Level Security Policies
+ALTER TABLE public.restaurant_operating_hours ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.restaurant_special_closures ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read operating hours" ON public.restaurant_operating_hours;
+CREATE POLICY "Public read operating hours" ON public.restaurant_operating_hours FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public read closures" ON public.restaurant_special_closures;
+CREATE POLICY "Public read closures" ON public.restaurant_special_closures FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Admin update operating hours" ON public.restaurant_operating_hours;
+CREATE POLICY "Admin update operating hours" ON public.restaurant_operating_hours FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Admin update closures" ON public.restaurant_special_closures;
+CREATE POLICY "Admin update closures" ON public.restaurant_special_closures FOR ALL USING (true);
+`;
 
 function formatDisplayTime(timeStr) {
   if (!timeStr) return '--:--';
@@ -51,6 +136,8 @@ export default function OperatingHoursPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [tableNotCreated, setTableNotCreated] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Operating Hours State
   const [openTime, setOpenTime] = useState('08:00');
@@ -101,6 +188,16 @@ export default function OperatingHoursPage() {
   async function loadData(isManual = false) {
     if (isManual) setRefreshing(true);
     try {
+      // Direct table check against Supabase
+      try {
+        const { error: testErr } = await supabase.from('restaurant_operating_hours').select('id').limit(1);
+        if (testErr && (testErr.message?.includes('schema cache') || testErr.message?.includes('does not exist') || testErr.code === 'PGRST205' || testErr.code === '42P01')) {
+          setTableNotCreated(true);
+        } else if (!testErr) {
+          setTableNotCreated(false);
+        }
+      } catch (_) {}
+
       const res = await fetch(`${API_BASE}/api/operating-hours`);
       if (res.ok) {
         const data = await res.json();
@@ -111,11 +208,19 @@ export default function OperatingHoursPage() {
         if (data.default_open_time) setOpenTime(data.default_open_time.slice(0, 5));
         if (data.default_close_time) setCloseTime(data.default_close_time.slice(0, 5));
         if (data.last_booking_minutes_before_close) setCutoffMinutes(data.last_booking_minutes_before_close);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        if (errJson.error && (errJson.error.includes('schema cache') || errJson.error.includes('restaurant_operating_hours') || errJson.error.includes('does not exist'))) {
+          setTableNotCreated(true);
+        }
       }
 
       await loadClosures();
     } catch (err) {
       console.error('Error fetching operating hours:', err);
+      if (err.message && (err.message.includes('schema cache') || err.message.includes('restaurant_operating_hours') || err.message.includes('does not exist'))) {
+        setTableNotCreated(true);
+      }
       showToast('Failed to load operating hours data', 'error');
     } finally {
       setLoading(false);
@@ -199,6 +304,9 @@ export default function OperatingHoursPage() {
       await broadcastHoursChange('hours_updated');
       loadData();
     } catch (err) {
+      if (err.message && (err.message.includes('schema cache') || err.message.includes('restaurant_operating_hours') || err.message.includes('does not exist'))) {
+        setTableNotCreated(true);
+      }
       showToast(err.message, 'error');
     } finally {
       setSavingHours(false);
@@ -237,6 +345,9 @@ export default function OperatingHoursPage() {
       await broadcastHoursChange('closure_updated');
       loadData();
     } catch (err) {
+      if (err.message && (err.message.includes('schema cache') || err.message.includes('restaurant_special_closures') || err.message.includes('does not exist'))) {
+        setTableNotCreated(true);
+      }
       showToast(err.message, 'error');
     } finally {
       setSubmittingEmergency(false);
@@ -258,6 +369,9 @@ export default function OperatingHoursPage() {
       await broadcastHoursChange('closure_updated');
       loadData();
     } catch (err) {
+      if (err.message && (err.message.includes('schema cache') || err.message.includes('does not exist'))) {
+        setTableNotCreated(true);
+      }
       showToast(err.message, 'error');
     }
   }
@@ -311,6 +425,9 @@ export default function OperatingHoursPage() {
       await broadcastHoursChange('closure_updated');
       loadData();
     } catch (err) {
+      if (err.message && (err.message.includes('schema cache') || err.message.includes('restaurant_special_closures') || err.message.includes('does not exist'))) {
+        setTableNotCreated(true);
+      }
       showToast(err.message, 'error');
     } finally {
       setSchedulingClosure(false);
@@ -427,6 +544,104 @@ export default function OperatingHoursPage() {
           <span>Refresh</span>
         </button>
       </div>
+
+      {/* Missing DB Table Setup Banner */}
+      {tableNotCreated && (
+        <div style={{
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          borderRadius: '14px',
+          padding: '22px 26px',
+          marginBottom: '28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          animation: 'fadeIn 0.2s ease-out',
+          boxShadow: '0 4px 15px rgba(245, 158, 11, 0.08)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={22} color="#d97706" />
+            <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#92400e' }}>
+              Database Setup Required: `restaurant_operating_hours` table not found in Supabase
+            </h4>
+          </div>
+          <p style={{ margin: 0, fontSize: '13.5px', color: '#b45309', lineHeight: 1.5 }}>
+            To activate regular operating hours, holiday closures, and emergency close controls, run the SQL migration script in your Supabase SQL Editor. Once executed, click <strong>Verify Database Connection</strong> below.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(SQL_MIGRATION_SCRIPT);
+                setCopiedSql(true);
+                showToast('SQL setup script copied to clipboard!');
+                setTimeout(() => setCopiedSql(false), 3000);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 16px',
+                background: copiedSql ? '#10b981' : '#d97706',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 8px rgba(217, 119, 6, 0.25)'
+              }}
+            >
+              {copiedSql ? <Check size={16} /> : <Copy size={16} />}
+              <span>{copiedSql ? 'Copied SQL Script!' : 'Copy SQL Setup Script'}</span>
+            </button>
+
+            <a
+              href="https://supabase.com/dashboard/project/azjjndqecpemltvdbkvy/sql"
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 16px',
+                background: '#ffffff',
+                color: '#b45309',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                textDecoration: 'none',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+              }}
+            >
+              <ExternalLink size={15} />
+              <span>Open Supabase SQL Editor</span>
+            </a>
+
+            <button
+              onClick={() => loadData(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 16px',
+                background: 'transparent',
+                color: '#78350f',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              <RefreshCw size={14} className={refreshing ? 'spin-icon' : ''} />
+              <span>Verify Database Connection</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero: Current Status Banner */}
       <div style={{

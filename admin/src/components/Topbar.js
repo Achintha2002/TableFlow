@@ -28,6 +28,8 @@ export default function Topbar() {
     title = 'Partner Sync'; subtitle = 'Live integration with delivery & booking partners';
   } else if (pathname === '/promotions') {
     title = 'Promotions & Vouchers'; subtitle = 'Discount codes, vouchers & customer promotions';
+  } else if (pathname === '/operating-hours') {
+    title = 'Operating Hours & Closures'; subtitle = 'Manage opening hours, holidays and customer announcements';
   }
 
   return (
