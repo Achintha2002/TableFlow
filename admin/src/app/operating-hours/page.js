@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import LuxuryTimePicker from '../../components/LuxuryTimePicker';
 import {
   Clock,
   Calendar,
@@ -573,84 +574,92 @@ export default function OperatingHoursPage() {
           </div>
 
           <form onSubmit={handleSaveHours} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
                   Opening Time
                 </label>
-                <input
-                  type="time"
+                <LuxuryTimePicker
                   value={openTime}
-                  onChange={e => setOpenTime(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    fontSize: '0.95rem',
-                    color: 'var(--text-primary)',
-                    background: 'var(--bg-surface)'
-                  }}
+                  onChange={setOpenTime}
+                  label="Restaurant Opens"
+                  presets={['07:00', '07:30', '08:00', '08:30', '09:00', '10:00']}
                 />
-                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  Formatted: {formatDisplayTime(openTime)}
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
+                  Formatted: <strong>{formatDisplayTime(openTime)}</strong>
                 </span>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
                   Closing Time
                 </label>
-                <input
-                  type="time"
+                <LuxuryTimePicker
                   value={closeTime}
-                  onChange={e => setCloseTime(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    fontSize: '0.95rem',
-                    color: 'var(--text-primary)',
-                    background: 'var(--bg-surface)'
-                  }}
+                  onChange={setCloseTime}
+                  label="Restaurant Closes"
+                  presets={['21:00', '22:00', '22:30', '23:00', '23:30', '00:00']}
                 />
-                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                  Formatted: {formatDisplayTime(closeTime)}
+                <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
+                  Formatted: <strong>{formatDisplayTime(closeTime)}</strong>
                 </span>
               </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
-                Last Booking Cutoff (Minutes before close)
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                Last Booking Cutoff Window
               </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <input
-                  type="number"
-                  min="0"
-                  max="240"
-                  step="15"
-                  value={cutoffMinutes}
-                  onChange={e => setCutoffMinutes(e.target.value)}
-                  style={{
-                    width: '120px',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    fontSize: '0.95rem',
-                    color: 'var(--text-primary)',
-                    background: 'var(--bg-surface)'
-                  }}
-                />
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  minutes (Last accepted booking: <strong>{lastBookingTimeFormatted}</strong>)
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {[30, 45, 60, 90, 120].map(mins => {
+                  const isCur = Number(cutoffMinutes) === mins;
+                  return (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setCutoffMinutes(mins)}
+                      style={{
+                        padding: '7px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid',
+                        borderColor: isCur ? 'var(--primary)' : 'var(--border)',
+                        background: isCur ? 'linear-gradient(135deg, #B87F5C, #9C6848)' : 'var(--bg-surface)',
+                        color: isCur ? '#ffffff' : 'var(--text-primary)',
+                        fontSize: '0.85rem',
+                        fontWeight: isCur ? 700 : 500,
+                        cursor: 'pointer',
+                        boxShadow: isCur ? '0 2px 8px rgba(184, 127, 92, 0.3)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {mins} mins
+                    </button>
+                  );
+                })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="240"
+                    step="5"
+                    value={cutoffMinutes}
+                    onChange={e => setCutoffMinutes(e.target.value)}
+                    style={{
+                      width: '75px',
+                      padding: '7px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      fontSize: '0.88rem',
+                      textAlign: 'center',
+                      color: 'var(--text-primary)',
+                      background: 'var(--bg-surface)'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>mins</span>
+                </div>
               </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                Prevents guests from booking reservations within {cutoffMinutes} minutes of restaurant closing.
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                Last accepted table booking for guests: <strong>{lastBookingTimeFormatted}</strong> ({cutoffMinutes}m before {formatDisplayTime(closeTime)} closing).
               </p>
             </div>
 
