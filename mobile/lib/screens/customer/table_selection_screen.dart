@@ -1,4 +1,4 @@
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:go_router/go_router.dart';
@@ -29,6 +29,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
   RealtimeChannel? _tablesChannel;
   RealtimeChannel? _reservationsChannel;
+  Timer? _liveSyncTimer;
 
   @override
   void initState() {
@@ -46,24 +47,37 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     }
     _fetchTables();
     _setupRealtime();
+
+    // 4-second auto-poll backup so table availability stays 100% in sync across multiple devices
+    _liveSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) {
+        _fetchTables(silent: true);
+      }
+    });
   }
 
   void _setupRealtime() {
     try {
-      _tablesChannel = Supabase.instance.client.channel('public:restaurant_tables')
+      _tablesChannel = Supabase.instance.client.channel('public:restaurant_tables_selection')
         .onPostgresChanges(
           event: PostgresChangeEvent.all, 
           schema: 'public', 
           table: 'restaurant_tables', 
-          callback: (payload) => _fetchTables(silent: true),
+          callback: (payload) {
+            debugPrint('[Realtime] Table status updated: $payload');
+            _fetchTables(silent: true);
+          },
         ).subscribe();
 
-      _reservationsChannel = Supabase.instance.client.channel('public:reservations')
+      _reservationsChannel = Supabase.instance.client.channel('public:reservations_selection')
         .onPostgresChanges(
           event: PostgresChangeEvent.all, 
           schema: 'public', 
           table: 'reservations', 
-          callback: (payload) => _fetchTables(silent: true),
+          callback: (payload) {
+            debugPrint('[Realtime] Reservation change detected: $payload');
+            _fetchTables(silent: true);
+          },
         ).subscribe();
     } catch (e) {
       debugPrint('Realtime channel subscription error: $e');
@@ -72,6 +86,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
   @override
   void dispose() {
+    _liveSyncTimer?.cancel();
     _tablesChannel?.unsubscribe();
     _reservationsChannel?.unsubscribe();
     super.dispose();
@@ -95,7 +110,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             .select('table_id, reservation_time, status')
             .eq('reservation_date', dateStr)
             .or('status.eq.pending,status.eq.confirmed')
-            .timeout(const Duration(seconds: 3));
+            .timeout(const Duration(seconds: 4));
         reservationsData = res;
       } catch (resErr) {
         debugPrint('Could not fetch reservations for $dateStr (RLS or Enum): $resErr');
@@ -106,18 +121,21 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         setState(() {
           _tables = data.map((t) {
             final tableId = t['id'];
-            bool isAvailable = t['status'] == 'available';
+            final rawStatus = (t['status'] ?? 'available').toString().toLowerCase();
+            bool isAvailable = rawStatus == 'available';
 
             if (isAvailable && reservationsData.isNotEmpty) {
               final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
               
               for (var res in reservationsData) {
-                if (res['table_id'] == tableId) {
+                final resTableId = res['table_id']?.toString();
+                if (resTableId != null && resTableId == tableId?.toString()) {
                   final resTimeStr = res['reservation_time']?.toString() ?? '';
                   final parts = resTimeStr.split(':');
                   if (parts.length >= 2) {
                     final resMinutes = (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
-                    if ((selectedMinutes - resMinutes).abs() < 60) {
+                    // Standard dining duration of 90 minutes
+                    if ((selectedMinutes - resMinutes).abs() < 90) {
                       isAvailable = false;
                       break;
                     }
@@ -146,8 +164,18 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           // Deselect if currently selected table became unavailable
           if (_selectedTableId != null) {
             final selected = _tables.firstWhere((t) => t['id'] == _selectedTableId, orElse: () => {});
-            if (selected.isEmpty || !selected['isAvailable']) {
+            if (selected.isEmpty || selected['isAvailable'] == false) {
+              final lostTable = _selectedTableId;
               _selectedTableId = null;
+              if (silent && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$lostTable was just reserved by another guest. Please pick an alternative table.'),
+                    backgroundColor: Colors.orange.shade800,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             }
           }
           
