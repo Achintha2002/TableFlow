@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import '../../core/theme.dart';
 import '../../core/constants.dart';
+import '../../core/routes.dart';
 import '../../services/api_service.dart';
 import '../../utils/auth_guard.dart';
 
@@ -329,7 +330,93 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     );
   }
 
+  static const int restaurantOpenHour = 10;   // 10:00 AM
+  static const int restaurantCloseHour = 23;  // 11:00 PM
+
+  bool get _isRestaurantOpen {
+    final now = DateTime.now();
+    return now.hour >= restaurantOpenHour && now.hour < restaurantCloseHour;
+  }
+
+  void _showClosedDialog() {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        decoration: const BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(28),
+            topRight: Radius.circular(28),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC48858).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.access_time_filled_rounded, color: Color(0xFFC48858), size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Restaurant is Currently Closed',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Operating hours are daily from 10:00 AM to 11:00 PM.\nThe live waitlist queue is open only during working hours.\n\nYou can book a table in advance for upcoming hours.',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.table_restaurant),
+              label: const Text('Reserve a Table in Advance', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: const Color(0xFFC48858),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.push(AppRoutes.tableSelection);
+              },
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close', style: TextStyle(color: Colors.grey)),
+            ),
+            SizedBox(height: MediaQuery.of(ctx).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _joinQueue() async {
+    if (!_isRestaurantOpen) {
+      _showClosedDialog();
+      return;
+    }
+
     var user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       final loggedIn = await AuthGuard.requireAuth(
@@ -496,24 +583,77 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
   }
 
   Widget _buildJoinQueueView() {
+    final isOpen = _isRestaurantOpen;
     return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Prominent Top CTA: Move "Join Queue" to Top with vibrant styling ──
+          // ── Operating Hours Status Indicator ──
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: BoxDecoration(
+              color: isOpen ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isOpen ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isOpen ? Icons.check_circle_rounded : Icons.schedule_rounded,
+                  size: 20,
+                  color: isOpen ? const Color(0xFF059669) : const Color(0xFFD97706),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        isOpen ? 'RESTAURANT IS OPEN' : 'RESTAURANT CURRENTLY CLOSED',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: isOpen ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        'Operating Hours: 10:00 AM – 11:00 PM',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isOpen ? const Color(0xFF047857) : const Color(0xFFB45309),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Prominent Top CTA ──
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFC48858), Color(0xFF9E6538)],
+              gradient: LinearGradient(
+                colors: isOpen
+                    ? [const Color(0xFFC48858), const Color(0xFF9E6538)]
+                    : [const Color(0xFF6B7280), const Color(0xFF4B5563)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFC48858).withValues(alpha: 0.45),
+                  color: (isOpen ? const Color(0xFFC48858) : const Color(0xFF4B5563)).withValues(alpha: 0.4),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -534,7 +674,11 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                           color: Colors.white.withValues(alpha: 0.22),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.people_alt_rounded, size: 28, color: Colors.white),
+                        child: Icon(
+                          isOpen ? Icons.people_alt_rounded : Icons.lock_clock_rounded,
+                          size: 28,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -542,9 +686,9 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text(
-                              'JOIN WAITLIST NOW',
-                              style: TextStyle(
+                            Text(
+                              isOpen ? 'JOIN WAITLIST NOW' : 'WAITLIST CLOSED',
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w900,
                                 color: Colors.white,
@@ -553,7 +697,9 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              '$_totalWaiting parties waiting • ~${_totalWaiting * 5} min turnaround',
+                              isOpen
+                                  ? '$_totalWaiting parties waiting • ~${_totalWaiting * 5} min turnaround'
+                                  : 'Opens daily at 10:00 AM • Tap to book a table',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,

@@ -36,13 +36,16 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     super.initState();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // If opening late at night (past 9 PM / 21:00), default to tomorrow at 12:00 PM
-    if (now.hour >= 21) {
+    // Operating Hours: 10:00 AM (10) - 11:00 PM (23). Last table booking allowed at 10:00 PM (22).
+    if (now.hour >= 22) {
       _selectedDate = today.add(const Duration(days: 1));
-      _selectedTime = const TimeOfDay(hour: 12, minute: 0);
+      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    } else if (now.hour < 10) {
+      _selectedDate = today;
+      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
     } else {
       _selectedDate = today;
-      final nextHour = (now.hour + 1).clamp(11, 22);
+      final nextHour = (now.hour + 1).clamp(10, 22);
       _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
     }
     _fetchTables();
@@ -232,10 +235,10 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       final currentMinutes = now.hour * 60 + now.minute;
       final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
       if (selectedMinutes <= currentMinutes) {
-        if (now.hour >= 21) {
+        if (now.hour >= 22) {
           setState(() {
             _selectedDate = today.add(const Duration(days: 1));
-            _selectedTime = const TimeOfDay(hour: 12, minute: 0);
+            _selectedTime = const TimeOfDay(hour: 10, minute: 0);
           });
           _fetchTables();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -244,7 +247,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                 children: [
                   Icon(Icons.info_outline, color: Colors.white),
                   SizedBox(width: 8),
-                  Expanded(child: Text("Dining hours for tonight have ended. Date switched to tomorrow at 12:00 PM. Please select your table.")),
+                  Expanded(child: Text("Operating hours for tonight have ended. Date switched to tomorrow at 10:00 AM. Please select your table.")),
                 ],
               ),
               backgroundColor: AppTheme.primary,
@@ -271,6 +274,31 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         );
         return;
       }
+    }
+
+    // Operating hours check: 10:00 AM (600 mins) to 10:00 PM (1320 mins) - Restaurant closes at 11:00 PM
+    final selectedTotalMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+    const openMinutes = 10 * 60; // 10:00 AM
+    const lastBookingMinutes = 22 * 60; // 10:00 PM (closing at 11:00 PM)
+
+    if (selectedTotalMinutes < openMinutes || selectedTotalMinutes > lastBookingMinutes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.schedule_rounded, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Table bookings are available only between 10:00 AM and 10:00 PM (Restaurant closes at 11:00 PM).'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
     }
 
     if (Supabase.instance.client.auth.currentUser == null) {
@@ -321,87 +349,212 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     final emailText = userEmail ?? Supabase.instance.client.auth.currentUser?.email ?? 'Your Account';
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                shape: BoxShape.circle,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 16,
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── 1. Top Amber Badge ──
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.amber.shade50,
+                ),
+                child: Center(
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Colors.amber.shade400, Colors.orange.shade700],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.shade300.withValues(alpha: 0.45),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.table_restaurant_rounded, color: Colors.white, size: 28),
+                  ),
+                ),
               ),
-              child: Icon(Icons.table_restaurant_rounded, color: Colors.amber.shade900, size: 24),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
+              const SizedBox(height: 18),
+
+              // ── 2. Title & Description ──
+              Text(
                 'Reservation Limit',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontFamily: 'Playfair Display',
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.secondary,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.shade300),
+              const SizedBox(height: 8),
+              Text(
+                'Each customer account is limited to a maximum of 2 active table reservations to ensure fair availability.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  height: 1.45,
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.person_outline, color: Colors.amber.shade900, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Max 2 Active Bookings for:\n$emailText',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              const SizedBox(height: 16),
+
+              // ── 3. Account Banner ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.person_outline_rounded, color: Colors.amber.shade900, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Account with 2 active tables:',
+                            style: TextStyle(fontSize: 11.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            emailText,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.secondary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── 4. Primary Button: My Bookings (Clay Gradient, Zero Black Borders) ──
+              Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFC48858), Color(0xFF9E6538)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFC48858).withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      context.push('/reservations');
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calendar_month_rounded, size: 19, color: Colors.white),
+                        SizedBox(width: 9),
+                        Text(
+                          'View My Bookings',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'The account ($emailText) currently has 2 active table reservations.\n\nEach account is strictly limited to 2 active tables at a time. If you want to reserve tables with another email address, tap "Switch Account" below.',
-              style: const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
-            ),
-          ],
+              const SizedBox(height: 10),
+
+              // ── 5. Secondary Button: Switch Account (Clean Neutral, NO Black Border) ──
+              Container(
+                width: double.infinity,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9FAFB),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE5E7EB), width: 1.2),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      await SupabaseService.signOut();
+                      if (context.mounted) {
+                        context.go('/login');
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.swap_horiz_rounded, size: 19, color: Color(0xFF4B5563)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Switch Account',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4B5563),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // ── 6. Close Action ──
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  'Dismiss',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close', style: TextStyle(color: Colors.grey)),
-          ),
-          OutlinedButton.icon(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await SupabaseService.signOut();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
-            icon: const Icon(Icons.swap_horiz, size: 16),
-            label: const Text('Switch Account'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              context.push('/reservations');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('My Bookings'),
-          ),
-        ],
       ),
     );
   }
@@ -902,13 +1055,18 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                           onPressed: isPastDate ? null : () {
                             setState(() {
                               _selectedDate = chosenDate;
-                              // If user selected today, adjust time if it has already passed
+                              // If user selected today, adjust time if it has already passed or is before 10 AM
                               if (chosenDate.isAtSameMomentAs(today)) {
                                 final currentMinutes = now.hour * 60 + now.minute;
                                 final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-                                if (selectedMinutes <= currentMinutes) {
-                                  final nextHour = (now.hour + 1).clamp(0, 23);
-                                  _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
+                                if (selectedMinutes <= currentMinutes || selectedMinutes < 10 * 60) {
+                                  final nextHour = now.hour + 1;
+                                  final safeHour = nextHour < 10 ? 10 : nextHour.clamp(10, 22);
+                                  _selectedTime = TimeOfDay(hour: safeHour, minute: 0);
+                                }
+                              } else {
+                                if (_selectedTime.hour < 10 || _selectedTime.hour > 22) {
+                                  _selectedTime = const TimeOfDay(hour: 12, minute: 0);
                                 }
                               }
                             });
@@ -995,9 +1153,18 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
     int initialHour = _selectedTime.hour;
     int initialMinute = (_selectedTime.minute ~/ 15) * 15;
+    if (initialHour < 10) {
+      initialHour = 10;
+      initialMinute = 0;
+    } else if (initialHour > 22) {
+      initialHour = 22;
+      initialMinute = 0;
+    }
+
     if (isToday) {
       if (initialHour * 60 + initialMinute <= currentMinutes) {
-        initialHour = (now.hour + 1).clamp(0, 23);
+        final nextHour = now.hour + 1;
+        initialHour = nextHour < 10 ? 10 : nextHour.clamp(10, 22);
         initialMinute = 0;
       }
     }
@@ -1012,7 +1179,20 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           builder: (context, setSheetState) {
             final pickedMinutes = tempTime.hour * 60 + tempTime.minute;
             final isPastTime = isToday && (pickedMinutes <= currentMinutes);
+            const openMinutes = 10 * 60; // 10:00 AM
+            const lastBookingMinutes = 22 * 60; // 10:00 PM (Closing at 11:00 PM)
+            final isOutsideHours = pickedMinutes < openMinutes || pickedMinutes > lastBookingMinutes;
+            final isInvalidTime = isPastTime || isOutsideHours;
             final timeFormat = DateFormat('h:mm a').format(tempTime);
+
+            String statusMessage;
+            if (isPastTime) {
+              statusMessage = '$timeFormat has already passed today. Cannot book past time.';
+            } else if (isOutsideHours) {
+              statusMessage = '$timeFormat is outside dining hours (10:00 AM – 10:00 PM). Closes at 11:00 PM.';
+            } else {
+              statusMessage = 'Selected: $timeFormat (Dining Hours: 10:00 AM – 11:00 PM)';
+            }
 
             return Container(
               height: 380,
@@ -1040,7 +1220,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                         ),
                         const Text('Select Time', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                         TextButton(
-                          onPressed: isPastTime ? null : () {
+                          onPressed: isInvalidTime ? null : () {
                             setState(() => _selectedTime = TimeOfDay(hour: tempTime.hour, minute: tempTime.minute));
                             _fetchTables();
                             Navigator.pop(context);
@@ -1050,7 +1230,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold, 
                               fontSize: 16,
-                              color: isPastTime ? Colors.grey.shade400 : AppTheme.primary,
+                              color: isInvalidTime ? Colors.grey.shade400 : AppTheme.primary,
                             ),
                           ),
                         ),
@@ -1058,35 +1238,33 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     ),
                   ),
                   const Divider(height: 1),
-                  // Real-time Past Time Warning Indicator
+                  // Real-time Past Time & Operating Hours Warning Indicator
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isPastTime ? Colors.red.shade50 : Colors.green.shade50,
+                      color: isInvalidTime ? Colors.red.shade50 : Colors.green.shade50,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isPastTime ? Colors.red.shade200 : Colors.green.shade200,
+                        color: isInvalidTime ? Colors.red.shade200 : Colors.green.shade200,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          isPastTime ? Icons.error_outline : Icons.check_circle_outline,
+                          isInvalidTime ? Icons.error_outline : Icons.check_circle_outline,
                           size: 18,
-                          color: isPastTime ? Colors.red.shade700 : Colors.green.shade700,
+                          color: isInvalidTime ? Colors.red.shade700 : Colors.green.shade700,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            isPastTime
-                                ? '$timeFormat has already passed today. Cannot book past time.'
-                                : 'Selected Time: $timeFormat (Valid for booking)',
+                            statusMessage,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isPastTime ? Colors.red.shade800 : Colors.green.shade800,
+                              color: isInvalidTime ? Colors.red.shade800 : Colors.green.shade800,
                             ),
                           ),
                         ),

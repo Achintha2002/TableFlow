@@ -129,74 +129,226 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Icon(Icons.check_circle, color: Colors.green, size: 50),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Reservation Confirmed',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontFamily: 'Playfair Display',
+          builder: (context) => Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            elevation: 16,
+            backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ── 1. Elegant Glow Success Badge ──
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF34D399), Color(0xFF059669)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x3310B981),
+                              blurRadius: 14,
+                              offset: Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.check_rounded, color: Colors.white, size: 32),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Table ${widget.tableId} is booked for ${date.day}/${date.month}/${date.year} at ${widget.time}.\nThis table is now auto-selected in your Cart for ordering.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(height: 1.5),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  const SizedBox(height: 18),
+
+                  // ── 2. Title & Description ──
+                  Text(
+                    'Reservation Confirmed',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontFamily: 'Playfair Display',
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.secondary,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.table_restaurant, size: 16, color: Colors.green),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Table #$tableNum auto-linked to Cart!',
-                          style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600),
-                          textAlign: TextAlign.center,
+                  const SizedBox(height: 8),
+                  Text(
+                    'Table ${widget.tableId} is confirmed for your dining experience. This table is also auto-selected in your cart.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // ── 3. Structured Booking Details Card ──
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFAF7F2),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFEADBCE), width: 1),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.table_restaurant_rounded, size: 17, color: AppTheme.primary),
+                                const SizedBox(width: 8),
+                                Text('Reserved Table', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                              ],
+                            ),
+                            Text(
+                              'Table ${widget.tableId}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: AppTheme.secondary),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 18, thickness: 0.8, color: Color(0xFFEADBCE)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.event_available_rounded, size: 17, color: AppTheme.primary),
+                                const SizedBox(width: 8),
+                                Text('Date & Time', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                              ],
+                            ),
+                            Text(
+                              '${date.day}/${date.month}/${date.year} • ${widget.time}',
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppTheme.secondary),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── 4. Cart Link Pill Badge ──
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFA7F3D0)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.shopping_bag_outlined, size: 16, color: Color(0xFF059669)),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Table #$tableNum auto-linked to Cart!',
+                            style: const TextStyle(fontSize: 12.5, color: Color(0xFF065F46), fontWeight: FontWeight.w700),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+
+                  // ── 5. Primary Action Button: Browse Menu (Rich Terracotta Gradient, Zero Dark Borders) ──
+                  Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFC48858), Color(0xFF9E6538)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFC48858).withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          context.go('/menu');
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.restaurant_menu_rounded, size: 19, color: Colors.white),
+                            const SizedBox(width: 9),
+                            Text(
+                              'Browse Menu (Table #$tableNum)',
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 10),
+
+                  // ── 6. Secondary Action Button: Back to Home (Clean Modern Neutral, NO Black Border) ──
+                  Container(
+                    width: double.infinity,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE5E7EB), width: 1.2),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          context.go('/home');
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: const Center(
+                          child: Text(
+                            'Back to Home',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF4B5563),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            actions: [
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  context.go('/menu');
-                },
-                icon: const Icon(Icons.restaurant_menu, size: 18),
-                label: Text('Browse Menu (Table #$tableNum)'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  context.go('/home');
-                },
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                ),
-                child: const Text('Back to Home'),
-              ),
-            ],
           ),
         );
       }
@@ -218,87 +370,212 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
     final emailText = userEmail ?? Supabase.instance.client.auth.currentUser?.email ?? 'Your Account';
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade100,
-                shape: BoxShape.circle,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 16,
+        backgroundColor: Colors.white,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── 1. Top Amber Badge ──
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.amber.shade50,
+                ),
+                child: Center(
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Colors.amber.shade400, Colors.orange.shade700],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.shade300.withValues(alpha: 0.45),
+                          blurRadius: 14,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.table_restaurant_rounded, color: Colors.white, size: 28),
+                  ),
+                ),
               ),
-              child: Icon(Icons.table_restaurant_rounded, color: Colors.amber.shade900, size: 24),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
+              const SizedBox(height: 18),
+
+              // ── 2. Title & Description ──
+              Text(
                 'Reservation Limit',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontFamily: 'Playfair Display',
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.secondary,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.shade300),
+              const SizedBox(height: 8),
+              Text(
+                'Each customer account is limited to a maximum of 2 active table reservations to ensure fair availability.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  height: 1.45,
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.person_outline, color: Colors.amber.shade900, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Max 2 Active Bookings for:\n$emailText',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              const SizedBox(height: 16),
+
+              // ── 3. Account Banner ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.person_outline_rounded, color: Colors.amber.shade900, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Account with 2 active tables:',
+                            style: TextStyle(fontSize: 11.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            emailText,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.secondary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── 4. Primary Button: My Bookings (Clay Gradient, Zero Black Borders) ──
+              Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFC48858), Color(0xFF9E6538)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFC48858).withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      context.push('/reservations');
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calendar_month_rounded, size: 19, color: Colors.white),
+                        SizedBox(width: 9),
+                        Text(
+                          'View My Bookings',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'The account ($emailText) already has 2 active table reservations.\n\nEach account is strictly limited to 2 active tables at a time. If you wish to make a booking under a different email account, tap "Switch Account" below.',
-              style: const TextStyle(fontSize: 13, height: 1.45, color: Colors.black87),
-            ),
-          ],
+              const SizedBox(height: 10),
+
+              // ── 5. Secondary Button: Switch Account (Clean Neutral, NO Black Border) ──
+              Container(
+                width: double.infinity,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9FAFB),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE5E7EB), width: 1.2),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      await SupabaseService.signOut();
+                      if (context.mounted) {
+                        context.go('/login');
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.swap_horiz_rounded, size: 19, color: Color(0xFF4B5563)),
+                        SizedBox(width: 8),
+                        Text(
+                          'Switch Account',
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4B5563),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // ── 6. Close Action ──
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  'Dismiss',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close', style: TextStyle(color: Colors.grey)),
-          ),
-          OutlinedButton.icon(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await SupabaseService.signOut();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
-            icon: const Icon(Icons.swap_horiz, size: 16),
-            label: const Text('Switch Account'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              context.push('/reservations');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('My Bookings'),
-          ),
-        ],
       ),
     );
   }

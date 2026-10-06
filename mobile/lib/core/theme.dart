@@ -91,15 +91,15 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: secondary,
-          side: const BorderSide(color: secondary, width: 1.5),
+          side: const BorderSide(color: Color(0xFFD1D5DB), width: 1.2),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
           ),
           textStyle: GoogleFonts.inter(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
+            letterSpacing: 0.5,
           ),
         ),
       ),

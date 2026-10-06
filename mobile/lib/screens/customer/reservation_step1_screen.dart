@@ -22,6 +22,25 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
     'The Terrace Garden'
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    final today = DateUtils.dateOnly(now);
+    // Operating Hours: 10:00 AM – 11:00 PM (Last booking at 10:00 PM)
+    if (now.hour >= 22) {
+      _selectedDate = today.add(const Duration(days: 1));
+      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    } else if (now.hour < 10) {
+      _selectedDate = today;
+      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    } else {
+      _selectedDate = today;
+      final nextHour = (now.hour + 1).clamp(10, 22);
+      _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
+    }
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final today = DateUtils.dateOnly(now);
@@ -48,7 +67,18 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
       },
     );
     if (picked != null) {
-      setState(() => _selectedDate = picked);
+      setState(() {
+        _selectedDate = picked;
+        if (picked.isAtSameMomentAs(today)) {
+          final currentMinutes = now.hour * 60 + now.minute;
+          final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+          if (selectedMinutes <= currentMinutes || selectedMinutes < 10 * 60) {
+            final nextHour = now.hour + 1;
+            final safeHour = nextHour < 10 ? 10 : nextHour.clamp(10, 22);
+            _selectedTime = TimeOfDay(hour: safeHour, minute: 0);
+          }
+        }
+      });
     }
   }
 
@@ -70,6 +100,30 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
       },
     );
     if (picked != null) {
+      if (!mounted) return;
+      final pickedMinutes = picked.hour * 60 + picked.minute;
+      const openMinutes = 10 * 60; // 10:00 AM
+      const lastBookingMinutes = 22 * 60; // 10:00 PM (closes at 11:00 PM)
+
+      if (pickedMinutes < openMinutes || pickedMinutes > lastBookingMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.schedule_rounded, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Table bookings are available only between 10:00 AM and 10:00 PM (Restaurant closes at 11:00 PM).'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
       setState(() => _selectedTime = picked);
     }
   }
@@ -117,6 +171,30 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
         );
         return;
       }
+    }
+
+    final selectedTotalMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
+    const openMinutes = 10 * 60;
+    const lastBookingMinutes = 22 * 60;
+
+    if (selectedTotalMinutes < openMinutes || selectedTotalMinutes > lastBookingMinutes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.schedule_rounded, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Table bookings are only available during dining hours (10:00 AM – 10:00 PM). Restaurant closes at 11:00 PM.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
     }
 
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
