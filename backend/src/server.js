@@ -1044,6 +1044,62 @@ app.get('/api/menu/customizations', async (req, res) => {
   }
 });
 
+// Submit or update guest order review (bypasses RLS with service role)
+app.post(['/api/reviews', '/reviews'], async (req, res) => {
+  try {
+    const { order_id, user_id, rating, comment } = req.body;
+    if (!order_id || !rating) {
+      return res.status(400).json({ error: 'order_id and rating are required' });
+    }
+
+    const numericRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+    const trimmedComment = comment ? String(comment).trim() : null;
+
+    // Check if review already exists for this order
+    const { data: existing } = await supabaseAdmin
+      .from('reviews')
+      .select('id')
+      .eq('order_id', order_id)
+      .maybeSingle();
+
+    let result;
+    if (existing && existing.id) {
+      result = await supabaseAdmin
+        .from('reviews')
+        .update({
+          rating: numericRating,
+          comment: trimmedComment,
+          user_id: user_id || null,
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+    } else {
+      result = await supabaseAdmin
+        .from('reviews')
+        .insert({
+          order_id,
+          user_id: user_id || null,
+          rating: numericRating,
+          comment: trimmedComment,
+        })
+        .select()
+        .single();
+    }
+
+    if (result.error) {
+      console.error('Error inserting review into Supabase:', result.error);
+      return res.status(500).json({ error: result.error.message });
+    }
+
+    console.log(`[Review] Successfully recorded review for order ${order_id} (${numericRating}★)`);
+    return res.json({ success: true, review: result.data });
+  } catch (error) {
+    console.error('Exception submitting review:', error);
+    return res.status(500).json({ error: error.message || 'Failed to submit review' });
+  }
+});
+
 // 1. Customer places an order (Hardened with Idempotency, Server Price Recomputation, and Validation)
 app.post('/api/orders', authMiddleware, async (req, res) => {
   try {
