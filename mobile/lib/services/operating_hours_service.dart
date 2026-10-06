@@ -28,6 +28,16 @@ class OperatingHoursService extends ChangeNotifier {
   Map<String, Map<String, dynamic>> get closuresByDate => _closuresByDate;
   bool get isLoaded => _isLoaded;
 
+  List<Map<String, dynamic>> get upcomingClosures {
+    final now = DateTime.now();
+    final todayKey = formatDateKey(now);
+    final list = _closuresByDate.values
+        .where((c) => (c['close_date']?.toString() ?? '').compareTo(todayKey) >= 0)
+        .toList();
+    list.sort((a, b) => (a['close_date'] ?? '').compareTo(b['close_date'] ?? ''));
+    return list;
+  }
+
   int get openMinutes => _openTime.hour * 60 + _openTime.minute;
   int get closeMinutes => _closeTime.hour * 60 + _closeTime.minute;
   int get lastBookingMinutes => (_closeTime.hour * 60 + _closeTime.minute) - _cutoffMinutes;

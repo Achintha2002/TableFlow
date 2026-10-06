@@ -3,8 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import '../../services/operating_hours_service.dart';
 import '../../utils/auth_guard.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
@@ -65,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildHeroSection(),
+            _buildOperatingHoursBanner(),
             const ActiveOrderCard(),
             const SizedBox(height: 16),
             _buildQuickActions(),
@@ -215,6 +219,116 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildOperatingHoursBanner() {
+    final svc = OperatingHoursService();
+    return ListenableBuilder(
+      listenable: svc,
+      builder: (context, _) {
+        if (!svc.isLoaded) return const SizedBox.shrink();
+
+        // 1. If closed today
+        if (!svc.isOpenToday) {
+          return Container(
+            margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1F0),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFFA39E)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.store_mall_directory_rounded, color: Color(0xFFCF1322), size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Restaurant Closed Today',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFCF1322),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        svc.todayClosureReason ?? 'TableFlow is closed for today.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // 2. If upcoming closure scheduled
+        final upcoming = svc.upcomingClosures;
+        if (upcoming.isNotEmpty) {
+          final nextClosure = upcoming.first;
+          final closeDateStr = nextClosure['close_date']?.toString() ?? '';
+          final reason = nextClosure['reason']?.toString() ?? 'Holiday';
+
+          DateTime? parsedDate;
+          try {
+            parsedDate = DateTime.parse(closeDateStr);
+          } catch (_) {}
+
+          final formattedDate = parsedDate != null ? DateFormat('EEE, MMM d').format(parsedDate) : closeDateStr;
+
+          return Container(
+            margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBE6),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFFFE58F)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.campaign_rounded, color: Color(0xFFD48806), size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF874D00)),
+                      children: [
+                        const TextSpan(text: 'Holiday Notice: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        TextSpan(text: 'Closed on $formattedDate for $reason.'),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
     );
   }
 
