@@ -226,6 +226,10 @@ export default function Sidebar() {
               <TicketPercent size={20} />
               Promotions & Vouchers
             </Link>
+            <Link href="/operating-hours" className={`nav-item ${isActive('/operating-hours')}`}>
+              <Clock size={20} />
+              Operating Hours &amp; Closures
+            </Link>
           </>
         )}
         

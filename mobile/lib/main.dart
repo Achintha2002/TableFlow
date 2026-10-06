@@ -7,6 +7,7 @@ import 'services/supabase_service.dart';
 import 'services/fcm_service.dart';
 import 'widgets/notification_wrapper.dart';
 
+import 'services/operating_hours_service.dart';
 import 'providers/settings_provider.dart';
 
 void main() async {
@@ -17,6 +18,9 @@ void main() async {
   
   // Initialize FCM service with platform guards
   await FCMService.initialize();
+
+  // Initialize Operating Hours service and realtime listener
+  OperatingHoursService().initialize();
   
   runApp(const TableFlowApp());
 }
@@ -30,6 +34,7 @@ class TableFlowApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => OperatingHoursService()),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {

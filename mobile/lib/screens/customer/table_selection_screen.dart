@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
+import '../../services/operating_hours_service.dart';
 import '../../utils/auth_guard.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -36,18 +37,22 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     super.initState();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // Operating Hours: 10:00 AM (10) - 11:00 PM (23). Last table booking allowed at 10:00 PM (22).
-    if (now.hour >= 22) {
+    final svc = OperatingHoursService();
+    final openH = svc.openTime.hour;
+    final lastH = svc.lastBookingMinutes ~/ 60;
+
+    if (now.hour >= lastH || !svc.isOpenToday || svc.isDateClosed(today)) {
       _selectedDate = today.add(const Duration(days: 1));
-      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
-    } else if (now.hour < 10) {
+      _selectedTime = TimeOfDay(hour: openH, minute: svc.openTime.minute);
+    } else if (now.hour < openH) {
       _selectedDate = today;
-      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+      _selectedTime = TimeOfDay(hour: openH, minute: svc.openTime.minute);
     } else {
       _selectedDate = today;
-      final nextHour = (now.hour + 1).clamp(10, 22);
+      final nextHour = (now.hour + 1).clamp(openH, lastH);
       _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
     }
+    OperatingHoursService().addListener(_onHoursUpdated);
     _fetchTables();
     _setupRealtime();
 
@@ -57,6 +62,10 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         _fetchTables(silent: true);
       }
     });
+  }
+
+  void _onHoursUpdated() {
+    if (mounted) setState(() {});
   }
 
   void _setupRealtime() {
@@ -89,6 +98,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
 
   @override
   void dispose() {
+    OperatingHoursService().removeListener(_onHoursUpdated);
     _liveSyncTimer?.cancel();
     _tablesChannel?.unsubscribe();
     _reservationsChannel?.unsubscribe();
@@ -238,7 +248,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
         if (now.hour >= 22) {
           setState(() {
             _selectedDate = today.add(const Duration(days: 1));
-            _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+            _selectedTime = const TimeOfDay(hour: 8, minute: 0);
           });
           _fetchTables();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -247,7 +257,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                 children: [
                   Icon(Icons.info_outline, color: Colors.white),
                   SizedBox(width: 8),
-                  Expanded(child: Text("Operating hours for tonight have ended. Date switched to tomorrow at 10:00 AM. Please select your table.")),
+                  Expanded(child: Text("Operating hours for tonight have ended. Date switched to tomorrow at 8:00 AM. Please select your table.")),
                 ],
               ),
               backgroundColor: AppTheme.primary,
@@ -276,20 +286,40 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       }
     }
 
-    // Operating hours check: 10:00 AM (600 mins) to 10:00 PM (1320 mins) - Restaurant closes at 11:00 PM
-    final selectedTotalMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-    const openMinutes = 10 * 60; // 10:00 AM
-    const lastBookingMinutes = 22 * 60; // 10:00 PM (closing at 11:00 PM)
+    final svc = OperatingHoursService();
 
-    if (selectedTotalMinutes < openMinutes || selectedTotalMinutes > lastBookingMinutes) {
+    // Check if the restaurant is closed on the selected date
+    if (svc.isDateClosed(_selectedDate)) {
+      final closure = svc.getClosureForDate(_selectedDate);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.schedule_rounded, color: Colors.white),
-              SizedBox(width: 8),
+              const Icon(Icons.event_busy, color: Colors.white),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text('Table bookings are available only between 10:00 AM and 10:00 PM (Restaurant closes at 11:00 PM).'),
+                child: Text('TableFlow is closed on this date (${closure?['reason'] ?? 'Holiday / Scheduled Closure'}). Please select another day.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    // Operating hours check
+    if (!svc.isTimeWithinOperatingHours(_selectedTime)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.schedule_rounded, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Table bookings are available only between ${svc.openTimeFormatted} and ${svc.lastBookingTimeFormatted} (Restaurant closes at ${svc.closeTimeFormatted}).'),
               ),
             ],
           ),
@@ -1024,6 +1054,10 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           builder: (context, setSheetState) {
             final chosenDate = DateTime(tempDate.year, tempDate.month, tempDate.day);
             final isPastDate = chosenDate.isBefore(today);
+            final svc = OperatingHoursService();
+            final isDateClosed = svc.isDateClosed(chosenDate);
+            final closure = svc.getClosureForDate(chosenDate);
+            final isInvalidDate = isPastDate || isDateClosed;
             final formattedDate = DateFormat('EEE, MMM d, yyyy').format(tempDate);
 
             return Container(
@@ -1052,21 +1086,21 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                         ),
                         const Text('Select Date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                         TextButton(
-                          onPressed: isPastDate ? null : () {
+                          onPressed: isInvalidDate ? null : () {
                             setState(() {
                               _selectedDate = chosenDate;
-                              // If user selected today, adjust time if it has already passed or is before 10 AM
+                              // If user selected today, adjust time if it has already passed or is before opening
                               if (chosenDate.isAtSameMomentAs(today)) {
                                 final currentMinutes = now.hour * 60 + now.minute;
                                 final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-                                if (selectedMinutes <= currentMinutes || selectedMinutes < 10 * 60) {
+                                if (selectedMinutes <= currentMinutes || selectedMinutes < svc.openMinutes) {
                                   final nextHour = now.hour + 1;
-                                  final safeHour = nextHour < 10 ? 10 : nextHour.clamp(10, 22);
+                                  final safeHour = nextHour < svc.openTime.hour ? svc.openTime.hour : nextHour.clamp(svc.openTime.hour, svc.lastBookingMinutes ~/ 60);
                                   _selectedTime = TimeOfDay(hour: safeHour, minute: 0);
                                 }
                               } else {
-                                if (_selectedTime.hour < 10 || _selectedTime.hour > 22) {
-                                  _selectedTime = const TimeOfDay(hour: 12, minute: 0);
+                                if (_selectedTime.hour < svc.openTime.hour || _selectedTime.hour > (svc.lastBookingMinutes ~/ 60)) {
+                                  _selectedTime = TimeOfDay(hour: svc.openTime.hour + 1, minute: 0);
                                 }
                               }
                             });
@@ -1078,7 +1112,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold, 
                               fontSize: 16,
-                              color: isPastDate ? Colors.grey.shade400 : AppTheme.primary,
+                              color: isInvalidDate ? Colors.grey.shade400 : AppTheme.primary,
                             ),
                           ),
                         ),
@@ -1086,35 +1120,37 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
                     ),
                   ),
                   const Divider(height: 1),
-                  // Real-time Past Date Warning Indicator
+                  // Real-time Past Date & Closure Warning Indicator
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isPastDate ? Colors.red.shade50 : Colors.green.shade50,
+                      color: isInvalidDate ? Colors.red.shade50 : Colors.green.shade50,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isPastDate ? Colors.red.shade200 : Colors.green.shade200,
+                        color: isInvalidDate ? Colors.red.shade200 : Colors.green.shade200,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
-                          isPastDate ? Icons.error_outline : Icons.check_circle_outline,
+                          isInvalidDate ? Icons.error_outline : Icons.check_circle_outline,
                           size: 18,
-                          color: isPastDate ? Colors.red.shade700 : Colors.green.shade700,
+                          color: isInvalidDate ? Colors.red.shade700 : Colors.green.shade700,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             isPastDate
                                 ? '$formattedDate is in the past. Cannot book past date.'
-                                : 'Selected Date: $formattedDate (Available)',
+                                : (isDateClosed
+                                    ? 'Restaurant Closed on $formattedDate (${closure?['reason'] ?? 'Holiday'})'
+                                    : 'Selected Date: $formattedDate (Available)'),
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: isPastDate ? Colors.red.shade800 : Colors.green.shade800,
+                              color: isInvalidDate ? Colors.red.shade800 : Colors.green.shade800,
                             ),
                           ),
                         ),
@@ -1150,21 +1186,25 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final isToday = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day).isAtSameMomentAs(today);
     final currentMinutes = now.hour * 60 + now.minute;
+    final svc = OperatingHoursService();
 
     int initialHour = _selectedTime.hour;
     int initialMinute = (_selectedTime.minute ~/ 15) * 15;
-    if (initialHour < 10) {
-      initialHour = 10;
-      initialMinute = 0;
-    } else if (initialHour > 22) {
-      initialHour = 22;
+    final minH = svc.openTime.hour;
+    final maxH = svc.lastBookingMinutes ~/ 60;
+
+    if (initialHour < minH) {
+      initialHour = minH;
+      initialMinute = svc.openTime.minute;
+    } else if (initialHour > maxH) {
+      initialHour = maxH;
       initialMinute = 0;
     }
 
     if (isToday) {
       if (initialHour * 60 + initialMinute <= currentMinutes) {
         final nextHour = now.hour + 1;
-        initialHour = nextHour < 10 ? 10 : nextHour.clamp(10, 22);
+        initialHour = nextHour < minH ? minH : nextHour.clamp(minH, maxH);
         initialMinute = 0;
       }
     }
@@ -1179,9 +1219,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           builder: (context, setSheetState) {
             final pickedMinutes = tempTime.hour * 60 + tempTime.minute;
             final isPastTime = isToday && (pickedMinutes <= currentMinutes);
-            const openMinutes = 10 * 60; // 10:00 AM
-            const lastBookingMinutes = 22 * 60; // 10:00 PM (Closing at 11:00 PM)
-            final isOutsideHours = pickedMinutes < openMinutes || pickedMinutes > lastBookingMinutes;
+            final isOutsideHours = !svc.isTimeWithinOperatingHours(TimeOfDay(hour: tempTime.hour, minute: tempTime.minute));
             final isInvalidTime = isPastTime || isOutsideHours;
             final timeFormat = DateFormat('h:mm a').format(tempTime);
 
@@ -1189,9 +1227,9 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
             if (isPastTime) {
               statusMessage = '$timeFormat has already passed today. Cannot book past time.';
             } else if (isOutsideHours) {
-              statusMessage = '$timeFormat is outside dining hours (10:00 AM – 10:00 PM). Closes at 11:00 PM.';
+              statusMessage = '$timeFormat is outside dining hours (${svc.openTimeFormatted} – ${svc.lastBookingTimeFormatted}). Closes at ${svc.closeTimeFormatted}.';
             } else {
-              statusMessage = 'Selected: $timeFormat (Dining Hours: 10:00 AM – 11:00 PM)';
+              statusMessage = 'Selected: $timeFormat (Dining Hours: ${svc.operatingHoursString})';
             }
 
             return Container(

@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/constants.dart';
 import '../../core/routes.dart';
 import '../../services/api_service.dart';
+import '../../services/operating_hours_service.dart';
 import '../../utils/auth_guard.dart';
 
 class QueueScreen extends StatefulWidget {
@@ -42,11 +43,17 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     
+    OperatingHoursService().addListener(_onHoursUpdated);
     _checkQueueStatus();
+  }
+
+  void _onHoursUpdated() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    OperatingHoursService().removeListener(_onHoursUpdated);
     _queueSubscription?.cancel();
     _pulseController.dispose();
     super.dispose();
@@ -330,15 +337,18 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
     );
   }
 
-  static const int restaurantOpenHour = 10;   // 10:00 AM
-  static const int restaurantCloseHour = 23;  // 11:00 PM
-
   bool get _isRestaurantOpen {
-    final now = DateTime.now();
-    return now.hour >= restaurantOpenHour && now.hour < restaurantCloseHour;
+    return OperatingHoursService().isCurrentlyOpen();
   }
 
   void _showClosedDialog() {
+    final svc = OperatingHoursService();
+    final isClosedToday = !svc.isOpenToday;
+    final title = isClosedToday ? 'Restaurant Closed Today' : 'Restaurant is Currently Closed';
+    final message = isClosedToday
+        ? 'TableFlow is closed for today (${svc.todayClosureReason ?? 'Special Occasion'}).\n\nOur doors will reopen tomorrow morning at ${svc.openTimeFormatted}.\nYou can book a table in advance for upcoming dates.'
+        : 'Operating hours are daily from ${svc.operatingHoursString}.\nThe live waitlist queue is open only during working hours.\n\nYou can book a table in advance for upcoming hours.';
+
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -370,17 +380,21 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                 color: const Color(0xFFC48858).withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.access_time_filled_rounded, color: Color(0xFFC48858), size: 36),
+              child: Icon(
+                isClosedToday ? Icons.store_mall_directory_rounded : Icons.access_time_filled_rounded,
+                color: const Color(0xFFC48858),
+                size: 36,
+              ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Restaurant is Currently Closed',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),
             Text(
-              'Operating hours are daily from 10:00 AM to 11:00 PM.\nThe live waitlist queue is open only during working hours.\n\nYou can book a table in advance for upcoming hours.',
+              message,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.4),
               textAlign: TextAlign.center,
             ),
@@ -573,7 +587,12 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                           [const SizedBox(height: 16), const Text('Checking table availability…', style: TextStyle(color: AppTheme.secondary))],
                       ],
                     )
-                  : _inQueue ? _buildInQueueView() : _buildJoinQueueView(),
+                  : _inQueue
+                      ? _buildInQueueView()
+                      : ListenableBuilder(
+                          listenable: OperatingHoursService(),
+                          builder: (context, _) => _buildJoinQueueView(),
+                        ),
               ),
             ),
           ),
@@ -605,9 +624,9 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
             child: Row(
               children: [
                 Icon(
-                  isOpen ? Icons.check_circle_rounded : Icons.schedule_rounded,
+                  isOpen ? Icons.check_circle_rounded : (OperatingHoursService().isOpenToday ? Icons.schedule_rounded : Icons.highlight_off_rounded),
                   size: 20,
-                  color: isOpen ? const Color(0xFF059669) : const Color(0xFFD97706),
+                  color: isOpen ? const Color(0xFF059669) : (!OperatingHoursService().isOpenToday ? const Color(0xFFDC2626) : const Color(0xFFD97706)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -616,20 +635,22 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        isOpen ? 'RESTAURANT IS OPEN' : 'RESTAURANT CURRENTLY CLOSED',
+                        !OperatingHoursService().isOpenToday
+                            ? 'CLOSED TODAY • ${(OperatingHoursService().todayClosureReason ?? 'DOORS CLOSED').toUpperCase()}'
+                            : (isOpen ? 'RESTAURANT IS OPEN' : 'RESTAURANT CURRENTLY CLOSED'),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: isOpen ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                          color: isOpen ? const Color(0xFF065F46) : (!OperatingHoursService().isOpenToday ? const Color(0xFF991B1B) : const Color(0xFF92400E)),
                           letterSpacing: 0.5,
                         ),
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        'Operating Hours: 10:00 AM – 11:00 PM',
+                        'Operating Hours: ${OperatingHoursService().operatingHoursString}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isOpen ? const Color(0xFF047857) : const Color(0xFFB45309),
+                          color: isOpen ? const Color(0xFF047857) : (!OperatingHoursService().isOpenToday ? const Color(0xFFB91C1C) : const Color(0xFFB45309)),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -647,13 +668,18 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
               gradient: LinearGradient(
                 colors: isOpen
                     ? [const Color(0xFFC48858), const Color(0xFF9E6538)]
-                    : [const Color(0xFF6B7280), const Color(0xFF4B5563)],
+                    : (!OperatingHoursService().isOpenToday
+                        ? [const Color(0xFF991B1B), const Color(0xFF7F1D1D)]
+                        : [const Color(0xFF6B7280), const Color(0xFF4B5563)]),
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: (isOpen ? const Color(0xFFC48858) : const Color(0xFF4B5563)).withValues(alpha: 0.4),
+                  color: (isOpen
+                          ? const Color(0xFFC48858)
+                          : (!OperatingHoursService().isOpenToday ? const Color(0xFF991B1B) : const Color(0xFF4B5563)))
+                      .withValues(alpha: 0.4),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -687,7 +713,9 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              isOpen ? 'JOIN WAITLIST NOW' : 'WAITLIST CLOSED',
+                              isOpen
+                                  ? 'JOIN WAITLIST NOW'
+                                  : (!OperatingHoursService().isOpenToday ? 'CLOSED FOR TODAY' : 'WAITLIST CLOSED'),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w900,
@@ -699,7 +727,9 @@ class _QueueScreenState extends State<QueueScreen> with SingleTickerProviderStat
                             Text(
                               isOpen
                                   ? '$_totalWaiting parties waiting • ~${_totalWaiting * 5} min turnaround'
-                                  : 'Opens daily at 10:00 AM • Tap to book a table',
+                                  : (!OperatingHoursService().isOpenToday
+                                      ? 'Reopens tomorrow at ${OperatingHoursService().openTimeFormatted} • Reserve in advance'
+                                      : 'Opens daily at ${OperatingHoursService().openTimeFormatted} • Tap to book a table'),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,

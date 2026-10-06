@@ -1045,6 +1045,334 @@ app.get('/api/menu/customizations', async (req, res) => {
 });
 
 
+// ==============================================================================
+// OPERATING HOURS & SPECIAL CLOSURES APIS
+// ==============================================================================
+
+function getColomboDateString() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Colombo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+// 1. Public GET /api/operating-hours
+app.get(['/api/operating-hours', '/operating-hours'], async (req, res) => {
+  try {
+    const todayStr = getColomboDateString();
+
+    let hoursConfig = {
+      default_open_time: '08:00:00',
+      default_close_time: '23:00:00',
+      last_booking_minutes_before_close: 60
+    };
+
+    try {
+      const { data: cfg } = await supabaseAdmin
+        .from('restaurant_operating_hours')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+      if (cfg) hoursConfig = cfg;
+    } catch (_) {}
+
+    let closureToday = null;
+    let upcomingClosures = [];
+    try {
+      const { data: closures } = await supabaseAdmin
+        .from('restaurant_special_closures')
+        .select('*')
+        .gte('close_date', todayStr)
+        .order('close_date', { ascending: true });
+
+      if (closures && closures.length > 0) {
+        upcomingClosures = closures;
+        closureToday = closures.find(c => c.close_date === todayStr) || null;
+      }
+    } catch (_) {}
+
+    const is_open_today = !closureToday || !closureToday.is_full_day;
+
+    res.json({
+      success: true,
+      today_date: todayStr,
+      is_open_today,
+      closure_today: closureToday,
+      default_open_time: hoursConfig.default_open_time || '08:00:00',
+      default_close_time: hoursConfig.default_close_time || '23:00:00',
+      last_booking_minutes_before_close: hoursConfig.last_booking_minutes_before_close || 60,
+      upcoming_closures: upcomingClosures
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Admin PUT /api/admin/operating-hours
+app.put(['/api/admin/operating-hours', '/admin/operating-hours'], async (req, res) => {
+  try {
+    const {
+      default_open_time,
+      default_close_time,
+      last_booking_minutes_before_close = 60,
+      send_notification = false,
+      notification_message
+    } = req.body;
+
+    if (!default_open_time || !default_close_time) {
+      return res.status(400).json({ error: 'default_open_time and default_close_time are required' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('restaurant_operating_hours')
+      .upsert({
+        id: 1,
+        default_open_time,
+        default_close_time,
+        last_booking_minutes_before_close: Number(last_booking_minutes_before_close) || 60,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (send_notification) {
+      const title = '🕒 TableFlow Hours Update';
+      const body = notification_message || `Our dining hours are now updated: ${default_open_time.slice(0, 5)} to ${default_close_time.slice(0, 5)}.`;
+      try {
+        await fcmService.sendToTopic('all-customers', {
+          title,
+          body,
+          data: { type: 'hours_updated', timestamp: new Date().toISOString() }
+        });
+      } catch (_) {}
+    }
+
+    try {
+      const ch = supabaseAdmin.channel('restaurant_operating_hours_sync');
+      await ch.send({
+        type: 'broadcast',
+        event: 'hours_updated',
+        payload: { default_open_time, default_close_time, timestamp: Date.now() }
+      });
+    } catch (_) {}
+
+    res.json({ success: true, message: 'Operating hours updated successfully', data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Admin GET /api/admin/closures
+app.get(['/api/admin/closures', '/admin/closures'], async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('restaurant_special_closures')
+      .select('*')
+      .order('close_date', { ascending: true });
+    if (error) throw error;
+    res.json({ success: true, closures: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Admin POST /api/admin/closures/emergency-close-today
+app.post(['/api/admin/closures/emergency-close-today', '/admin/closures/emergency-close-today'], async (req, res) => {
+  try {
+    const { reason = 'Emergency Closure', send_notification = true, notification_message } = req.body;
+    const todayStr = getColomboDateString();
+
+    const { data: closure, error: cErr } = await supabaseAdmin
+      .from('restaurant_special_closures')
+      .upsert({
+        close_date: todayStr,
+        reason: reason.trim(),
+        is_full_day: true,
+        created_by_emergency: true,
+        notified_customers: send_notification,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'close_date' })
+      .select()
+      .single();
+
+    if (cErr) throw cErr;
+
+    const { data: conflicting } = await supabaseAdmin
+      .from('reservations')
+      .select('id, user_id, reservation_time')
+      .eq('reservation_date', todayStr)
+      .in('status', ['pending', 'confirmed']);
+
+    let affectedCount = 0;
+    if (conflicting && conflicting.length > 0) {
+      affectedCount = conflicting.length;
+      for (const resv of conflicting) {
+        await supabaseAdmin
+          .from('reservations')
+          .update({
+            status: 'cancelled',
+            admin_reply: `Cancelled due to emergency restaurant closure today: ${reason.trim()}`
+          })
+          .eq('id', resv.id);
+      }
+    }
+
+    if (send_notification) {
+      const title = '⚠️ Notice: TableFlow Closed Today';
+      const body = notification_message || `TableFlow is closed today (${reason.trim()}). Normal hours will resume tomorrow.`;
+      try {
+        await fcmService.sendToTopic('all-customers', {
+          title,
+          body,
+          data: { type: 'emergency_closure', date: todayStr, reason: reason.trim() }
+        });
+      } catch (_) {}
+    }
+
+    try {
+      const ch = supabaseAdmin.channel('restaurant_operating_hours_sync');
+      await ch.send({
+        type: 'broadcast',
+        event: 'closure_updated',
+        payload: { action: 'emergency_close', timestamp: Date.now() }
+      });
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: `Restaurant marked as closed for today (${todayStr}).`,
+      affected_reservations: affectedCount,
+      closure
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Admin POST /api/admin/closures
+app.post(['/api/admin/closures', '/admin/closures'], async (req, res) => {
+  try {
+    const {
+      close_date,
+      reason,
+      is_full_day = true,
+      custom_open_time,
+      custom_close_time,
+      auto_cancel_conflicts = false,
+      send_notification = false,
+      notification_message
+    } = req.body;
+
+    if (!close_date || !reason) {
+      return res.status(400).json({ error: 'close_date and reason are required' });
+    }
+
+    const { data: conflicting } = await supabaseAdmin
+      .from('reservations')
+      .select('id, user_id, reservation_time, pax, users(full_name)')
+      .eq('reservation_date', close_date)
+      .in('status', ['pending', 'confirmed']);
+
+    if (conflicting && conflicting.length > 0 && !auto_cancel_conflicts) {
+      return res.json({
+        has_conflicts: true,
+        conflicting_count: conflicting.length,
+        conflicts: conflicting,
+        message: `Found ${conflicting.length} confirmed/pending reservation(s) on ${close_date}. Confirm to auto-cancel them.`
+      });
+    }
+
+    const { data: closure, error: cErr } = await supabaseAdmin
+      .from('restaurant_special_closures')
+      .upsert({
+        close_date,
+        reason: reason.trim(),
+        is_full_day: Boolean(is_full_day),
+        custom_open_time: custom_open_time || null,
+        custom_close_time: custom_close_time || null,
+        notified_customers: Boolean(send_notification),
+        created_by_emergency: false,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'close_date' })
+      .select()
+      .single();
+
+    if (cErr) throw cErr;
+
+    if (conflicting && conflicting.length > 0 && auto_cancel_conflicts) {
+      for (const resv of conflicting) {
+        await supabaseAdmin
+          .from('reservations')
+          .update({
+            status: 'cancelled',
+            admin_reply: `Cancelled due to scheduled restaurant closure on ${close_date}: ${reason.trim()}`
+          })
+          .eq('id', resv.id);
+      }
+    }
+
+    if (send_notification) {
+      const title = `📅 Notice: TableFlow Holiday Closure (${close_date})`;
+      const body = notification_message || `TableFlow will be closed on ${close_date} for ${reason.trim()}. Advance reservations for other days remain open!`;
+      try {
+        await fcmService.sendToTopic('all-customers', {
+          title,
+          body,
+          data: { type: 'holiday_closure', date: close_date, reason: reason.trim() }
+        });
+      } catch (_) {}
+    }
+
+    try {
+      const ch = supabaseAdmin.channel('restaurant_operating_hours_sync');
+      await ch.send({
+        type: 'broadcast',
+        event: 'closure_updated',
+        payload: { action: 'schedule_closure', close_date, timestamp: Date.now() }
+      });
+    } catch (_) {}
+
+    res.json({
+      success: true,
+      message: 'Closure date saved successfully',
+      closure,
+      cancelled_reservations: conflicting ? conflicting.length : 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Admin DELETE /api/admin/closures/:id
+app.delete(['/api/admin/closures/:id', '/admin/closures/:id'], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabaseAdmin
+      .from('restaurant_special_closures')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    try {
+      const ch = supabaseAdmin.channel('restaurant_operating_hours_sync');
+      await ch.send({
+        type: 'broadcast',
+        event: 'closure_updated',
+        payload: { action: 'delete_closure', id, timestamp: Date.now() }
+      });
+    } catch (_) {}
+
+    res.json({ success: true, message: 'Closure date removed successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Submit or update guest order review (bypasses RLS with service role)
 app.post(['/api/reviews', '/reviews'], async (req, res) => {
   try {
@@ -1111,6 +1439,19 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       coupon_code,
       redeem_points = 0
     } = req.body;
+
+    // Check if restaurant is closed today
+    const todayStr = getColomboDateString();
+    const { data: closureToday } = await supabaseAdmin
+      .from('restaurant_special_closures')
+      .select('reason')
+      .eq('close_date', todayStr)
+      .eq('is_full_day', true)
+      .maybeSingle();
+
+    if (closureToday) {
+      return res.status(400).json({ error: `Restaurant is closed today: ${closureToday.reason}` });
+    }
 
     // Idempotency check: prevent duplicate submissions
     const idempotencyKey = req.headers['idempotency-key'] || req.body.idempotency_key;
@@ -1978,6 +2319,18 @@ app.patch('/api/queue/:id/status', async (req, res) => {
 app.post('/api/queue/walk-in', async (req, res) => {
   try {
     const { guest_name, phone_number, pax, estimated_wait_time_mins } = req.body;
+
+    const todayStr = getColomboDateString();
+    const { data: closureToday } = await supabaseAdmin
+      .from('restaurant_special_closures')
+      .select('reason')
+      .eq('close_date', todayStr)
+      .eq('is_full_day', true)
+      .maybeSingle();
+
+    if (closureToday) {
+      return res.status(400).json({ error: `Restaurant waitlist is closed today: ${closureToday.reason}` });
+    }
 
     const numPax = parseInt(pax) || 2;
     const estWait = estimated_wait_time_mins ? parseInt(estimated_wait_time_mins) : Math.max(10, numPax * 5);

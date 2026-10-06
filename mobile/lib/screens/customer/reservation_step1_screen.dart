@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/routes.dart';
+import '../../services/operating_hours_service.dart';
 
 class ReservationStep1Screen extends StatefulWidget {
   const ReservationStep1Screen({super.key});
@@ -27,23 +28,38 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
     super.initState();
     final now = DateTime.now();
     final today = DateUtils.dateOnly(now);
-    // Operating Hours: 10:00 AM – 11:00 PM (Last booking at 10:00 PM)
-    if (now.hour >= 22) {
+    final svc = OperatingHoursService();
+    final openH = svc.openTime.hour;
+    final lastH = svc.lastBookingMinutes ~/ 60;
+
+    if (now.hour >= lastH || !svc.isOpenToday) {
       _selectedDate = today.add(const Duration(days: 1));
-      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
-    } else if (now.hour < 10) {
+      _selectedTime = TimeOfDay(hour: openH, minute: svc.openTime.minute);
+    } else if (now.hour < openH) {
       _selectedDate = today;
-      _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+      _selectedTime = TimeOfDay(hour: openH, minute: svc.openTime.minute);
     } else {
       _selectedDate = today;
-      final nextHour = (now.hour + 1).clamp(10, 22);
+      final nextHour = (now.hour + 1).clamp(openH, lastH);
       _selectedTime = TimeOfDay(hour: nextHour, minute: 0);
     }
+    OperatingHoursService().addListener(_onHoursUpdated);
+  }
+
+  void _onHoursUpdated() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    OperatingHoursService().removeListener(_onHoursUpdated);
+    super.dispose();
   }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final today = DateUtils.dateOnly(now);
+    final svc = OperatingHoursService();
     DateTime initial = DateUtils.dateOnly(_selectedDate);
     if (initial.isBefore(today)) {
       initial = today;
@@ -53,6 +69,9 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
       initialDate: initial,
       firstDate: today,
       lastDate: today.add(const Duration(days: 60)),
+      selectableDayPredicate: (DateTime day) {
+        return !svc.isDateClosed(day);
+      },
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -72,9 +91,9 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
         if (picked.isAtSameMomentAs(today)) {
           final currentMinutes = now.hour * 60 + now.minute;
           final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-          if (selectedMinutes <= currentMinutes || selectedMinutes < 10 * 60) {
+          if (selectedMinutes <= currentMinutes || selectedMinutes < svc.openMinutes) {
             final nextHour = now.hour + 1;
-            final safeHour = nextHour < 10 ? 10 : nextHour.clamp(10, 22);
+            final safeHour = nextHour < svc.openTime.hour ? svc.openTime.hour : nextHour.clamp(svc.openTime.hour, svc.lastBookingMinutes ~/ 60);
             _selectedTime = TimeOfDay(hour: safeHour, minute: 0);
           }
         }
@@ -83,6 +102,7 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
   }
 
   Future<void> _pickTime() async {
+    final svc = OperatingHoursService();
     final picked = await showTimePicker(
       context: context,
       initialTime: _selectedTime,
@@ -101,19 +121,16 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
     );
     if (picked != null) {
       if (!mounted) return;
-      final pickedMinutes = picked.hour * 60 + picked.minute;
-      const openMinutes = 10 * 60; // 10:00 AM
-      const lastBookingMinutes = 22 * 60; // 10:00 PM (closes at 11:00 PM)
 
-      if (pickedMinutes < openMinutes || pickedMinutes > lastBookingMinutes) {
+      if (!svc.isTimeWithinOperatingHours(picked)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.schedule_rounded, color: Colors.white),
-                SizedBox(width: 8),
+                const Icon(Icons.schedule_rounded, color: Colors.white),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Table bookings are available only between 10:00 AM and 10:00 PM (Restaurant closes at 11:00 PM).'),
+                  child: Text('Table bookings are available only between ${svc.openTimeFormatted} and ${svc.lastBookingTimeFormatted} (Restaurant closes at ${svc.closeTimeFormatted}).'),
                 ),
               ],
             ),
@@ -151,6 +168,29 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
       return;
     }
 
+    final svc = OperatingHoursService();
+
+    if (svc.isDateClosed(_selectedDate)) {
+      final closure = svc.getClosureForDate(_selectedDate);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.event_busy, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('TableFlow is closed on this date (${closure?['reason'] ?? 'Holiday / Scheduled Closure'}). Please select another day.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
     if (bookingDate.isAtSameMomentAs(today)) {
       final currentMinutes = now.hour * 60 + now.minute;
       final selectedMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
@@ -173,19 +213,15 @@ class _ReservationStep1ScreenState extends State<ReservationStep1Screen> {
       }
     }
 
-    final selectedTotalMinutes = _selectedTime.hour * 60 + _selectedTime.minute;
-    const openMinutes = 10 * 60;
-    const lastBookingMinutes = 22 * 60;
-
-    if (selectedTotalMinutes < openMinutes || selectedTotalMinutes > lastBookingMinutes) {
+    if (!svc.isTimeWithinOperatingHours(_selectedTime)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.schedule_rounded, color: Colors.white),
-              SizedBox(width: 8),
+              const Icon(Icons.schedule_rounded, color: Colors.white),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text('Table bookings are only available during dining hours (10:00 AM – 10:00 PM). Restaurant closes at 11:00 PM.'),
+                child: Text('Table bookings are only available during dining hours (${svc.openTimeFormatted} – ${svc.lastBookingTimeFormatted}). Restaurant closes at ${svc.closeTimeFormatted}.'),
               ),
             ],
           ),

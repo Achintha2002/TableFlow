@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/operating_hours_service.dart';
 import '../../widgets/guest_placeholder.dart';
 import 'package:intl/intl.dart';
 
@@ -428,28 +429,28 @@ class _ReservationHistoryScreenState extends State<ReservationHistoryScreen> {
                     child: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 22),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Restaurant Reservations Hotline',
                           style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
                         ),
-                        SizedBox(height: 3),
+                        const SizedBox(height: 3),
                         Text(
                           hotline,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: AppTheme.primary,
                             letterSpacing: 0.5,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          'Available Daily: 8:00 AM - 11:00 PM',
-                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                          'Available Daily: ${OperatingHoursService().operatingHoursString}',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
                         ),
                       ],
                     ),
