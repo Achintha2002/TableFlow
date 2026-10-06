@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
@@ -70,7 +70,15 @@ class AppRoutes {
   static const partnerSync = '/partner-sync';
   static const table = '/table';
 
+  static final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+  static final GlobalKey<NavigatorState> shellHomeKey = GlobalKey<NavigatorState>(debugLabel: 'home');
+  static final GlobalKey<NavigatorState> shellMenuKey = GlobalKey<NavigatorState>(debugLabel: 'menu');
+  static final GlobalKey<NavigatorState> shellTableKey = GlobalKey<NavigatorState>(debugLabel: 'table');
+  static final GlobalKey<NavigatorState> shellQueueKey = GlobalKey<NavigatorState>(debugLabel: 'queue');
+  static final GlobalKey<NavigatorState> shellProfileKey = GlobalKey<NavigatorState>(debugLabel: 'profile');
+
   static final router = GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: splash,
     refreshListenable: GoRouterRefreshStream(Supabase.instance.client.auth.onAuthStateChange),
     redirect: (context, state) async {
@@ -131,19 +139,20 @@ class AppRoutes {
       return null;
     },
     routes: [
-      GoRoute(path: splash, builder: (context, state) => const SplashScreen()),
-      GoRoute(path: onboarding, builder: (context, state) => const OnboardingScreen()),
-      GoRoute(path: login, builder: (context, state) => const LoginScreen()),
-      GoRoute(path: register, builder: (context, state) => const RegisterScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: splash, builder: (context, state) => const SplashScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: onboarding, builder: (context, state) => const OnboardingScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: login, builder: (context, state) => const LoginScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: register, builder: (context, state) => const RegisterScreen()),
       
       // Screens that are NOT in the bottom navigation bar
-      GoRoute(path: cart, builder: (context, state) => const CartScreen()),
-      GoRoute(path: orderHistory, builder: (context, state) => const OrderHistoryScreen()),
-      GoRoute(path: reservations, builder: (context, state) => const ReservationHistoryScreen()),
-      GoRoute(path: loyalty, builder: (context, state) => const LoyaltyScreen()),
-      GoRoute(path: myVouchers, builder: (context, state) => const MyVouchersScreen()),
-      GoRoute(path: qrCheckin, builder: (context, state) => const QrCheckinScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: cart, builder: (context, state) => const CartScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: orderHistory, builder: (context, state) => const OrderHistoryScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: reservations, builder: (context, state) => const ReservationHistoryScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: loyalty, builder: (context, state) => const LoyaltyScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: myVouchers, builder: (context, state) => const MyVouchersScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: qrCheckin, builder: (context, state) => const QrCheckinScreen()),
       GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
         path: table,
         builder: (context, state) {
           final token = state.uri.queryParameters['token'];
@@ -159,6 +168,7 @@ class AppRoutes {
         },
       ),
       GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
         path: orderTracker,
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>? ?? {};
@@ -166,12 +176,13 @@ class AppRoutes {
           return LiveOrderTrackerScreen(orderId: queryOrderId ?? extra['orderId']?.toString());
         },
       ),
-      GoRoute(path: waiterFloor, builder: (context, state) => const WaiterFloorScreen()),
-      GoRoute(path: staffHub, builder: (context, state) => const StaffHubScreen()),
-      GoRoute(path: manageQueue, builder: (context, state) => const ManageQueueScreen()),
-      GoRoute(path: tableStatusMonitor, builder: (context, state) => const TableStatusMonitorScreen()),
-      GoRoute(path: partnerSync, builder: (context, state) => const PartnerSyncScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: waiterFloor, builder: (context, state) => const WaiterFloorScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: staffHub, builder: (context, state) => const StaffHubScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: manageQueue, builder: (context, state) => const ManageQueueScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: tableStatusMonitor, builder: (context, state) => const TableStatusMonitorScreen()),
+      GoRoute(parentNavigatorKey: rootNavigatorKey, path: partnerSync, builder: (context, state) => const PartnerSyncScreen()),
       GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
         path: reservationDetails,
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>? ?? {};
@@ -191,11 +202,26 @@ class AppRoutes {
           return MainShell(navigationShell: navigationShell);
         },
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: home, builder: (context, state) => const HomeScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: menu, builder: (context, state) => const MenuScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: tableSelection, builder: (context, state) => const TableSelectionScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: queue, builder: (context, state) => const QueueScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: profile, builder: (context, state) => const ProfileScreen())]),
+          StatefulShellBranch(
+            navigatorKey: shellHomeKey,
+            routes: [GoRoute(path: home, builder: (context, state) => const HomeScreen())],
+          ),
+          StatefulShellBranch(
+            navigatorKey: shellMenuKey,
+            routes: [GoRoute(path: menu, builder: (context, state) => const MenuScreen())],
+          ),
+          StatefulShellBranch(
+            navigatorKey: shellTableKey,
+            routes: [GoRoute(path: tableSelection, builder: (context, state) => const TableSelectionScreen())],
+          ),
+          StatefulShellBranch(
+            navigatorKey: shellQueueKey,
+            routes: [GoRoute(path: queue, builder: (context, state) => const QueueScreen())],
+          ),
+          StatefulShellBranch(
+            navigatorKey: shellProfileKey,
+            routes: [GoRoute(path: profile, builder: (context, state) => const ProfileScreen())],
+          ),
         ],
       ),
     ],

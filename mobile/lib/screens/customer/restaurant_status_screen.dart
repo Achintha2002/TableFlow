@@ -224,7 +224,7 @@ class _RestaurantStatusScreenState extends State<RestaurantStatusScreen> {
                           ],
                         ),
                         InkWell(
-                          onTap: () => context.push(AppRoutes.queue),
+                          onTap: () => context.go(AppRoutes.queue),
                           borderRadius: BorderRadius.circular(20),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),

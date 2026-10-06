@@ -645,7 +645,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       actionLabel = 'View Queue';
       onAction = () {
         Navigator.of(context).pop();
-        context.push('/queue');
+        context.go('/queue');
       };
     }
 
