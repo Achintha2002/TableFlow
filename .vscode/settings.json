@@ -1,0 +1,6 @@
+{
+  "git.autoRepositoryDetection": "subFolders",
+  "git.ignoredRepositories": [
+    "/Users/achinthaedirisinghe/Desktop/NFC_Card_Project"
+  ]
+}
