@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
+import '../core/constants.dart';
 import '../core/routes.dart';
 
 /// Top-level background message handler for FCM (required by Flutter)
@@ -128,7 +129,7 @@ class FCMService {
         : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android');
 
     try {
-      final backendUrl = Uri.parse('http://localhost:3000/api/notifications/fcm-token');
+      final backendUrl = Uri.parse('${AppConstants.backendUrl}/api/notifications/fcm-token');
       final session = Supabase.instance.client.auth.currentSession;
       await http.post(
         backendUrl,
@@ -159,7 +160,7 @@ class FCMService {
   static Future<void> deregisterToken() async {
     if (_currentToken == null) return;
     try {
-      final backendUrl = Uri.parse('http://localhost:3000/api/notifications/fcm-token');
+      final backendUrl = Uri.parse('${AppConstants.backendUrl}/api/notifications/fcm-token');
       await http.delete(
         backendUrl,
         headers: {'Content-Type': 'application/json'},

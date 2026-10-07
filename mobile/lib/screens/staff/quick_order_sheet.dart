@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 
@@ -128,7 +129,7 @@ class _QuickOrderSheetState extends State<QuickOrderSheet> {
       final tableId = widget.table['id'];
 
       final response = await http.post(
-        Uri.parse('http://localhost:3000/api/staff/orders'),
+        Uri.parse('${AppConstants.backendUrl}/api/staff/orders'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',

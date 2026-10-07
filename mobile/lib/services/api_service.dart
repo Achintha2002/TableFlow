@@ -1,16 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import '../core/constants.dart';
 import 'supabase_service.dart';
 
 class ApiService {
-  static String get baseUrl {
-    if (kIsWeb) return 'http://localhost:3000/api';
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:3000/api';
-    }
-    return 'http://localhost:3000/api';
-  }
+  static String get baseUrl => '${AppConstants.backendUrl}/api';
 
   /// Helper to get headers with the Supabase JWT token
   static Future<Map<String, String>> _getHeaders({String? idempotencyKey}) async {

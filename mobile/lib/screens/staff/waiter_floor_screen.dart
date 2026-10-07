@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/constants.dart';
 import '../../core/theme.dart';
 import '../../services/supabase_service.dart';
 import 'quick_order_sheet.dart';
@@ -88,7 +89,7 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
       List<Map<String, dynamic>> requests = [];
       try {
         final res = await http.get(
-          Uri.parse('http://localhost:3000/api/service-requests'),
+          Uri.parse('${AppConstants.backendUrl}/api/service-requests'),
           headers: {
             if (token != null) 'Authorization': 'Bearer $token',
           },
@@ -172,7 +173,7 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
       final token = session?.accessToken;
 
       final res = await http.patch(
-        Uri.parse('http://localhost:3000/api/service-requests/$requestId/attend'),
+        Uri.parse('${AppConstants.backendUrl}/api/service-requests/$requestId/attend'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
@@ -217,7 +218,7 @@ class _WaiterFloorScreenState extends State<WaiterFloorScreen> {
       final token = session?.accessToken;
 
       final res = await http.patch(
-        Uri.parse('http://localhost:3000/api/tables/$tableId/status'),
+        Uri.parse('${AppConstants.backendUrl}/api/tables/$tableId/status'),
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',

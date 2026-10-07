@@ -105,7 +105,7 @@ class OperatingHoursService extends ChangeNotifier {
     try {
       // 1. Try fetching from public backend endpoint first
       final uri = Uri.parse('${ApiService.baseUrl}/operating-hours');
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
+      final res = await http.get(uri).timeout(const Duration(seconds: 12));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
