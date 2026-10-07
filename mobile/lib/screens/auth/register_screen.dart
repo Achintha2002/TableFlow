@@ -137,15 +137,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
 
-      await SupabaseService.signUp(
+      final authRes = await SupabaseService.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         fullName: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         avatarUrl: avatarUrl,
       );
-      // Navigate to Onboarding for new users
-      if (mounted) context.go('/onboarding');
+      try {
+        await SupabaseService.markOnboardingSeen(authRes.user?.id);
+      } catch (_) {}
+      if (mounted) context.go('/home');
     } on DatabaseConnectionException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

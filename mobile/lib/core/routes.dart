@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/supabase_service.dart';
 import '../screens/customer/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/onboarding_screen.dart';
@@ -118,22 +117,18 @@ class AppRoutes {
         return login;
       }
 
-      // If logged in and on login/register screens, route to redirect param or onboarding/home
+      // If logged in and on login/register screens, route to redirect param or home
       if (isAuth && isLoginOrRegister) {
         final redirectParam = state.uri.queryParameters['redirect'];
         if (redirectParam != null && redirectParam.isNotEmpty) {
           return redirectParam;
         }
-        final hasSeen = await SupabaseService.hasUserSeenOnboarding();
-        return hasSeen ? home : onboarding;
+        return home;
       }
 
-      // If logged in and on onboarding screen, check if they already finished it
+      // If logged in and on onboarding screen, redirect to home
       if (isAuth && isOnboarding) {
-        final hasSeen = await SupabaseService.hasUserSeenOnboarding();
-        if (hasSeen) {
-          return home;
-        }
+        return home;
       }
 
       return null;

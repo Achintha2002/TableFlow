@@ -19,19 +19,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _postAuthSuccess(String? userId) async {
     if (!mounted) return;
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop(true);
-      return;
-    }
+    try {
+      await SupabaseService.markOnboardingSeen(userId);
+    } catch (_) {}
+    if (!mounted) return;
     final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
     if (redirect != null && redirect.isNotEmpty) {
       context.go(redirect);
       return;
     }
-    final hasSeen = await SupabaseService.hasUserSeenOnboarding(userId);
-    if (mounted) {
-      context.go(hasSeen ? '/home' : '/onboarding');
-    }
+    context.go('/home');
   }
 
   void _handleLogin() async {
