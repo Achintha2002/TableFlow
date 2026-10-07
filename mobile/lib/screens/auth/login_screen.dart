@@ -47,15 +47,19 @@ class _LoginScreenState extends State<LoginScreen> {
     } on DatabaseConnectionException catch (e) {
       setState(() => _errorMessage = e.message);
     } on AuthException catch (e) {
-      final isInvalid = e.message.toLowerCase().contains('invalid') ||
-          e.message.toLowerCase().contains('credential') ||
-          e.statusCode == '400';
-      final msg = isInvalid
-          ? 'Invalid login credentials. Please check your email and password.'
-          : e.message;
-      setState(() => _errorMessage = msg);
+      if (e.message.toLowerCase().contains('confirm') || e.statusCode == '422') {
+        setState(() => _errorMessage = 'Email not confirmed. Please confirm your email or disable confirmation in Supabase.');
+      } else {
+        final isInvalid = e.message.toLowerCase().contains('invalid') ||
+            e.message.toLowerCase().contains('credential') ||
+            e.statusCode == '400';
+        final msg = isInvalid
+            ? 'Invalid login credentials. Please check your email and password.'
+            : e.message;
+        setState(() => _errorMessage = msg);
+      }
     } catch (e) {
-      setState(() => _errorMessage = 'Invalid login credentials. Please try again.');
+      setState(() => _errorMessage = 'Login failed: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

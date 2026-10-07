@@ -33,7 +33,7 @@ class SupabaseService {
           .from('restaurant_tables')
           .select('id')
           .limit(1)
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 10));
       return true;
     } catch (_) {
       try {
@@ -41,7 +41,7 @@ class SupabaseService {
             .from('menu_items')
             .select('id')
             .limit(1)
-            .timeout(const Duration(seconds: 4));
+            .timeout(const Duration(seconds: 10));
         return true;
       } catch (_) {
         return false;
@@ -122,18 +122,11 @@ class SupabaseService {
     return response;
   }
 
-  /// Sign in with email and password with database connectivity check
+  /// Sign in with email and password
   static Future<AuthResponse> signIn({
     required String email,
     required String password,
   }) async {
-    final isConnected = await isDatabaseConnected();
-    if (!isConnected) {
-      throw const DatabaseConnectionException(
-        'Database connection failed. Please check your internet or database connection.',
-      );
-    }
-
     return await _client.auth.signInWithPassword(
       email: email,
       password: password,

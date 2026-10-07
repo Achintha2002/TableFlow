@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -32,11 +33,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   DateTime? _scheduledDeletionAt;
   
   bool _promoEmails = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchProfileData();
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (mounted) _fetchProfileData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchProfileData() async {
