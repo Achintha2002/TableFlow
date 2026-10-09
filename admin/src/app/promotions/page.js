@@ -23,7 +23,10 @@ import {
   DollarSign,
   ShieldCheck,
   CheckCircle2,
-  Ban
+  Ban,
+  Send,
+  Users,
+  UserCheck
 } from 'lucide-react';
 
 export default function PromotionsPage() {
@@ -65,9 +68,70 @@ export default function PromotionsPage() {
   const [couponToDelete, setCouponToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Broadcast Modal
+  const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
+  const [broadcastCoupon, setBroadcastCoupon] = useState(null);
+  const [broadcastAudience, setBroadcastAudience] = useState('customers');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastPreview, setBroadcastPreview] = useState(null); // { recipient_count, recipients }
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState(null); // result after send
+
   function showToast(message, type = 'success') {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  }
+
+  // Open Broadcast Modal
+  async function handleOpenBroadcast(coupon) {
+    setBroadcastCoupon(coupon);
+    setBroadcastAudience('customers');
+    setBroadcastMessage('');
+    setBroadcastPreview(null);
+    setBroadcastResult(null);
+    setBroadcastModalOpen(true);
+    // Auto-load preview for default audience
+    await loadBroadcastPreview(coupon.id, 'customers');
+  }
+
+  async function loadBroadcastPreview(couponId, audience) {
+    setPreviewLoading(true);
+    setBroadcastPreview(null);
+    try {
+      const res = await fetch(`/api/admin/coupons/${couponId}/broadcast/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audience })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Preview failed');
+      setBroadcastPreview(json);
+    } catch (err) {
+      showToast('Preview error: ' + err.message, 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function confirmBroadcast() {
+    if (!broadcastCoupon) return;
+    setBroadcasting(true);
+    try {
+      const res = await fetch(`/api/admin/coupons/${broadcastCoupon.id}/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audience: broadcastAudience, message: broadcastMessage })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Broadcast failed');
+      setBroadcastResult(json);
+      showToast(json.message, 'success');
+    } catch (err) {
+      showToast('Broadcast failed: ' + err.message, 'error');
+    } finally {
+      setBroadcasting(false);
+    }
   }
 
   // Fetch Coupons
@@ -896,6 +960,28 @@ ON CONFLICT (code) DO NOTHING;`;
                       {/* Actions */}
                       <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                          {/* Send to Users */}
+                          <button
+                            onClick={() => handleOpenBroadcast(coupon)}
+                            title="Send to Users"
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(184,127,92,0.4)',
+                              background: '#fff7ed',
+                              color: '#B87F5C',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '11px',
+                              fontWeight: 700
+                            }}
+                          >
+                            <Send size={13} />
+                            Send
+                          </button>
+
                           <button
                             onClick={() => handleOpenEdit(coupon)}
                             title="Edit Voucher"
@@ -1370,6 +1456,380 @@ ON CONFLICT (code) DO NOTHING;`;
                 {deleting ? 'Deleting...' : 'Confirm Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================
+           BROADCAST MODAL
+      ============================== */}
+      {broadcastModalOpen && broadcastCoupon && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '20px',
+            width: '100%',
+            maxWidth: '560px',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            maxHeight: '90vh'
+          }}>
+
+            {/* Modal Header */}
+            <div style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid #f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #fff7ed 0%, #fff 100%)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #B87F5C 0%, #9c6848 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  boxShadow: '0 4px 12px rgba(184,127,92,0.35)'
+                }}>
+                  <Send size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    Send Promo Code to Users
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#64748b', margin: '2px 0 0 0' }}>
+                    Code <strong style={{ fontFamily: 'monospace', color: '#B87F5C' }}>{broadcastCoupon.code}</strong> will be added to recipient wallets
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setBroadcastModalOpen(false); setBroadcastResult(null); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+              {broadcastResult ? (
+                /* SUCCESS RESULT */
+                <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #dcfce7, #bbf7d0)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px',
+                    color: '#16a34a'
+                  }}>
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h4 style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+                    Broadcast Complete!
+                  </h4>
+                  <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: 1.6 }}>
+                    {broadcastResult.message}
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                    <div style={{
+                      padding: '14px',
+                      borderRadius: '12px',
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0'
+                    }}>
+                      <div style={{ fontSize: '24px', fontWeight: 800, color: '#16a34a' }}>{broadcastResult.delivered}</div>
+                      <div style={{ fontSize: '12px', color: '#15803d', fontWeight: 600 }}>Delivered</div>
+                    </div>
+                    <div style={{
+                      padding: '14px',
+                      borderRadius: '12px',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0'
+                    }}>
+                      <div style={{ fontSize: '24px', fontWeight: 800, color: '#64748b' }}>{broadcastResult.skipped}</div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Already Had It</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setBroadcastModalOpen(false); setBroadcastResult(null); }}
+                    style={{
+                      padding: '11px 28px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #B87F5C 0%, #9c6848 100%)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                /* BROADCAST FORM */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                  {/* Audience Selector */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '8px' }}>
+                      TARGET AUDIENCE
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBroadcastAudience('customers');
+                          loadBroadcastPreview(broadcastCoupon.id, 'customers');
+                        }}
+                        style={{
+                          padding: '14px',
+                          borderRadius: '12px',
+                          border: broadcastAudience === 'customers' ? '2px solid #B87F5C' : '1px solid #e2e8f0',
+                          background: broadcastAudience === 'customers' ? '#fff7ed' : '#f8fafc',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <UserCheck size={22} color={broadcastAudience === 'customers' ? '#B87F5C' : '#94a3b8'} />
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: broadcastAudience === 'customers' ? '#B87F5C' : '#64748b' }}>
+                          Customers Only
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>role = customer</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBroadcastAudience('all');
+                          loadBroadcastPreview(broadcastCoupon.id, 'all');
+                        }}
+                        style={{
+                          padding: '14px',
+                          borderRadius: '12px',
+                          border: broadcastAudience === 'all' ? '2px solid #B87F5C' : '1px solid #e2e8f0',
+                          background: broadcastAudience === 'all' ? '#fff7ed' : '#f8fafc',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Users size={22} color={broadcastAudience === 'all' ? '#B87F5C' : '#94a3b8'} />
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: broadcastAudience === 'all' ? '#B87F5C' : '#64748b' }}>
+                          All Users
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>including staff</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Preview Badge */}
+                  <div style={{
+                    padding: '14px 16px',
+                    borderRadius: '12px',
+                    background: previewLoading ? '#f8fafc' : '#f0fdf4',
+                    border: `1px solid ${previewLoading ? '#e2e8f0' : '#bbf7d0'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    {previewLoading ? (
+                      <>
+                        <RefreshCw size={16} color="#94a3b8" style={{ animation: 'spin 1s linear infinite' }} />
+                        <span style={{ fontSize: '13px', color: '#64748b' }}>Loading recipient preview…</span>
+                      </>
+                    ) : broadcastPreview ? (
+                      <>
+                        <CheckCircle2 size={18} color="#16a34a" />
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#15803d' }}>
+                            {broadcastPreview.recipient_count} recipient{broadcastPreview.recipient_count !== 1 ? 's' : ''} will receive this code
+                          </span>
+                          {broadcastPreview.recipient_count === 0 && (
+                            <p style={{ fontSize: '11px', color: '#d97706', margin: '2px 0 0 0' }}>
+                              No users match the selected audience. Try switching to "All Users".
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
+                  {/* Custom Notification Message */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#374151', marginBottom: '6px' }}>
+                      NOTIFICATION MESSAGE <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional — leave blank for auto)</span>
+                    </label>
+                    <textarea
+                      value={broadcastMessage}
+                      onChange={e => setBroadcastMessage(e.target.value)}
+                      rows={3}
+                      placeholder={`Use code ${broadcastCoupon.code} on your next order${broadcastCoupon.description ? ` — ${broadcastCoupon.description}` : ''}.`}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '13px',
+                        color: '#374151',
+                        resize: 'vertical',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        lineHeight: 1.5,
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  {/* Coupon Summary */}
+                  <div style={{
+                    padding: '14px 16px',
+                    borderRadius: '12px',
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #B87F5C 0%, #9c6848 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      flexShrink: 0
+                    }}>
+                      <Tag size={18} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                        {broadcastCoupon.code}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#92400e', marginTop: '2px' }}>
+                        {broadcastCoupon.discount_percent > 0 ? `${broadcastCoupon.discount_percent}% off` : `LKR ${parseFloat(broadcastCoupon.discount_amount).toFixed(0)} off`}
+                        {broadcastCoupon.min_order_amount > 0 && ` · min LKR ${Number(broadcastCoupon.min_order_amount).toLocaleString()}`}
+                        {broadcastCoupon.valid_until && ` · expires ${new Date(broadcastCoupon.valid_until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                      </div>
+                    </div>
+                    <span style={{
+                      padding: '3px 10px',
+                      borderRadius: '20px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      background: broadcastCoupon.is_active ? '#dcfce7' : '#fee2e2',
+                      color: broadcastCoupon.is_active ? '#15803d' : '#dc2626'
+                    }}>
+                      {broadcastCoupon.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+
+                  {!broadcastCoupon.is_active && (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      fontSize: '12px',
+                      color: '#dc2626',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <AlertTriangle size={14} />
+                      This coupon is currently <strong>inactive</strong>. Users will receive it in their wallets but it won't be redeemable until you activate it.
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {!broadcastResult && (
+              <div style={{
+                padding: '16px 24px',
+                borderTop: '1px solid #f1f5f9',
+                display: 'flex',
+                gap: '10px',
+                justifyContent: 'flex-end',
+                background: '#f8fafc'
+              }}>
+                <button
+                  onClick={() => { setBroadcastModalOpen(false); setBroadcastResult(null); }}
+                  disabled={broadcasting}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    background: '#ffffff',
+                    color: '#64748b',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBroadcast}
+                  disabled={broadcasting || previewLoading || (broadcastPreview && broadcastPreview.recipient_count === 0)}
+                  style={{
+                    padding: '10px 22px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: (broadcasting || previewLoading || (broadcastPreview && broadcastPreview.recipient_count === 0))
+                      ? '#cbd5e1'
+                      : 'linear-gradient(135deg, #B87F5C 0%, #9c6848 100%)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: (broadcasting || previewLoading || (broadcastPreview && broadcastPreview.recipient_count === 0)) ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: broadcasting ? 'none' : '0 4px 14px rgba(184,127,92,0.4)',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <Send size={14} />
+                  {broadcasting
+                    ? 'Sending…'
+                    : `Send to ${broadcastPreview ? broadcastPreview.recipient_count : '…'} User${(broadcastPreview?.recipient_count !== 1) ? 's' : ''}`
+                  }
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

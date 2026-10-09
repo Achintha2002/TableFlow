@@ -3391,6 +3391,174 @@ app.delete('/api/admin/coupons/:id', async (req, res) => {
 });
 
 // ==========================================
+// Admin Promo Code Broadcast
+// ==========================================
+
+// POST /api/admin/coupons/:id/broadcast/preview
+// Returns the list of recipient users (dry-run, no writes)
+app.post('/api/admin/coupons/:id/broadcast/preview', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { audience = 'customers' } = req.body; // 'all' | 'customers'
+
+    // Validate coupon exists and is active
+    const { data: coupon, error: couponErr } = await supabaseAdmin
+      .from('coupons')
+      .select('id, code, is_active, valid_until, discount_percent, discount_amount, description')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (couponErr || !coupon) {
+      return res.status(404).json({ error: 'Coupon not found.' });
+    }
+
+    // Fetch target users
+    let query = supabaseAdmin
+      .from('users')
+      .select('id, full_name, email, role')
+      .order('created_at', { ascending: false });
+
+    if (audience === 'customers') {
+      query = query.eq('role', 'customer');
+    }
+    // 'all' sends to every user including staff
+
+    const { data: users, error: usersErr } = await query;
+    if (usersErr) throw usersErr;
+
+    const recipients = (users || []).map(u => ({
+      id: u.id,
+      full_name: u.full_name || 'User',
+      email: u.email || '',
+      role: u.role
+    }));
+
+    res.json({
+      success: true,
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        is_active: coupon.is_active,
+        valid_until: coupon.valid_until,
+        discount_percent: coupon.discount_percent,
+        discount_amount: coupon.discount_amount,
+        description: coupon.description
+      },
+      audience,
+      recipient_count: recipients.length,
+      recipients
+    });
+  } catch (err) {
+    console.error('[Broadcast Preview] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/coupons/:id/broadcast
+// Delivers promo code to user wallets + sends in-app/push notifications
+app.post('/api/admin/coupons/:id/broadcast', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { audience = 'customers', message } = req.body; // audience: 'all' | 'customers'
+
+    // 1. Validate coupon
+    const { data: coupon, error: couponErr } = await supabaseAdmin
+      .from('coupons')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (couponErr || !coupon) {
+      return res.status(404).json({ error: 'Coupon not found.' });
+    }
+
+    const discountLabel = coupon.discount_percent > 0
+      ? `${coupon.discount_percent}% OFF`
+      : `LKR ${parseFloat(coupon.discount_amount).toFixed(0)} OFF`;
+
+    const notifTitle = `🎟️ Exclusive Offer: ${discountLabel}!`;
+    const notifBody = message?.trim() ||
+      `Use code ${coupon.code} on your next order${coupon.description ? ` — ${coupon.description}` : ''}.`;
+
+    // 2. Fetch target users
+    let query = supabaseAdmin
+      .from('users')
+      .select('id, full_name, email, role')
+      .order('created_at', { ascending: false });
+
+    if (audience === 'customers') {
+      query = query.eq('role', 'customer');
+    }
+
+    const { data: users, error: usersErr } = await query;
+    if (usersErr) throw usersErr;
+    if (!users || users.length === 0) {
+      return res.json({ success: true, delivered: 0, skipped: 0, message: 'No matching users found.' });
+    }
+
+    let delivered = 0;
+    let skipped = 0;
+
+    for (const user of users) {
+      try {
+        // 3a. Idempotent wallet insert — skip if user already has this code
+        const { data: existing } = await supabaseAdmin
+          .from('user_vouchers')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('coupon_code', coupon.code)
+          .maybeSingle();
+
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        await supabaseAdmin
+          .from('user_vouchers')
+          .insert({
+            user_id: user.id,
+            coupon_code: coupon.code,
+            source: 'admin_broadcast'
+          });
+
+        // 3b. In-app notification + FCM push
+        await fcmService.sendToUser(user.id, {
+          title: notifTitle,
+          body: notifBody,
+          type: 'promo',
+          data: {
+            coupon_code: coupon.code,
+            discount_label: discountLabel,
+            screen: 'vouchers'
+          }
+        });
+
+        delivered++;
+      } catch (userErr) {
+        console.error(`[Broadcast] Failed for user ${user.id}:`, userErr.message);
+        skipped++;
+      }
+    }
+
+    console.log(`[Broadcast] Coupon ${coupon.code} → ${delivered} delivered, ${skipped} skipped`);
+
+    res.json({
+      success: true,
+      coupon_code: coupon.code,
+      audience,
+      total_users: users.length,
+      delivered,
+      skipped,
+      message: `Promo code "${coupon.code}" sent to ${delivered} user${delivered !== 1 ? 's' : ''}.`
+    });
+  } catch (err) {
+    console.error('[Broadcast] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // Service Requests (Call Waiter / Water / Bill)
 // ==========================================
 app.post('/api/service-requests', async (req, res) => {
