@@ -29,6 +29,8 @@ import {
   UserCheck
 } from 'lucide-react';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 export default function PromotionsPage() {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +101,7 @@ export default function PromotionsPage() {
     setPreviewLoading(true);
     setBroadcastPreview(null);
     try {
-      const res = await fetch(`/api/admin/coupons/${couponId}/broadcast/preview`, {
+      const res = await fetch(`${API_BASE}/api/admin/coupons/${couponId}/broadcast/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audience })
@@ -118,7 +120,7 @@ export default function PromotionsPage() {
     if (!broadcastCoupon) return;
     setBroadcasting(true);
     try {
-      const res = await fetch(`/api/admin/coupons/${broadcastCoupon.id}/broadcast`, {
+      const res = await fetch(`${API_BASE}/api/admin/coupons/${broadcastCoupon.id}/broadcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audience: broadcastAudience, message: broadcastMessage })
