@@ -23,20 +23,15 @@ export async function DELETE(req, { params }) {
       } catch (_) {}
     }
 
-    // Check if target user is Super Admin or Admin
-    const { data: targetUser } = await supabaseAdmin
-      .from('users')
-      .select('id, role, email')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (targetUser) {
-      if (targetUser.role === 'super_admin') {
-        return NextResponse.json({ error: 'Super Admin accounts cannot be deleted.' }, { status: 403 });
-      }
-      if (targetUser.role === 'admin' && callerRole !== 'super_admin') {
-        return NextResponse.json({ error: 'Admin accounts can only be deleted by a Super Admin.' }, { status: 403 });
-      }
+    // Prevent self-deletion if caller id matches
+    if (callerRole && req.headers.get('authorization')) {
+      try {
+        const token = req.headers.get('authorization').replace('Bearer ', '');
+        const { data: { user: callerUser } } = await supabaseAdmin.auth.getUser(token);
+        if (callerUser && callerUser.id === id) {
+          return NextResponse.json({ error: 'You cannot delete your own account.' }, { status: 400 });
+        }
+      } catch (_) {}
     }
 
     // Preserve financial & business audit compliance

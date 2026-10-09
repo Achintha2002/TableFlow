@@ -256,11 +256,8 @@ export default function Sidebar() {
       </nav>
       <div className="sidebar-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-          <div className="sidebar-footer-avatar" style={{
-            background: profile.rawRole === 'super_admin' ? 'linear-gradient(135deg, #d4af37, #f59e0b)' : 'var(--primary)',
-            boxShadow: profile.rawRole === 'super_admin' ? '0 0 10px rgba(212, 175, 55, 0.5)' : 'none'
-          }}>
-            {profile.rawRole === 'super_admin' ? '👑' : profile.name.charAt(0).toUpperCase()}
+          <div className="sidebar-footer-avatar" style={{ background: 'var(--primary)' }}>
+            {profile.name.charAt(0).toUpperCase()}
           </div>
           <div className="sidebar-footer-info" style={{ overflow: 'hidden' }}>
             <p style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</p>

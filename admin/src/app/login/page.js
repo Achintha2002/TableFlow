@@ -9,13 +9,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const router = useRouter();
-
-  useEffect(() => {
-    // Proactively ensure superadmin account is ready in Supabase
-    fetch('/api/setup-super', { method: 'POST' }).catch(() => {});
-  }, []);
-
   async function handleLogin(e) {
     e.preventDefault();
     setLoading(true);
@@ -23,25 +16,10 @@ export default function LoginPage() {
 
     try {
       const cleanEmail = email.trim();
-      let { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: password,
       });
-
-      // If super admin login failed, attempt explicit auto-provision and retry
-      if (error && cleanEmail.toLowerCase() === 'superadmin@tableflow.com') {
-        try {
-          const setupRes = await fetch('/api/setup-super', { method: 'POST' });
-          if (setupRes.ok) {
-            const retry = await supabase.auth.signInWithPassword({
-              email: cleanEmail,
-              password: password,
-            });
-            data = retry.data;
-            error = retry.error;
-          }
-        } catch (_) {}
-      }
 
       if (error) {
         const isInvalid = error.message?.toLowerCase().includes('invalid') || 

@@ -609,22 +609,7 @@ app.delete('/api/admin/users/:id', async (req, res) => {
       return res.status(400).json({ error: 'You cannot delete your own account.' });
     }
 
-    // 1. Check if the target user is a Super Admin or Admin
-    const { data: targetUser } = await supabaseAdmin
-      .from('users')
-      .select('id, role, email')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (targetUser) {
-      if (targetUser.role === 'super_admin') {
-        return res.status(403).json({ error: 'Super Admin accounts cannot be deleted.' });
-      }
-
-      if (targetUser.role === 'admin' && callerRole !== 'super_admin') {
-        return res.status(403).json({ error: 'Admin accounts can only be deleted by a Super Admin.' });
-      }
-    }
+    // Prevent deleting self handled above
 
     // 2. Preserve financial & business audit compliance (Set user_id = NULL on orders, reservations, transactions)
     try { await supabaseAdmin.from('orders').update({ user_id: null }).eq('user_id', userId); } catch (_) {}
@@ -714,20 +699,7 @@ app.patch('/api/admin/update-role', async (req, res) => {
       return res.status(404).json({ error: 'Target user not found' });
     }
 
-    // Super Admin role cannot be demoted
-    if (targetUser.role === 'super_admin') {
-      return res.status(403).json({ error: 'Super Admin role cannot be modified.' });
-    }
 
-    // Changing an Admin requires Super Admin
-    if (targetUser.role === 'admin' && callerRole !== 'super_admin') {
-      return res.status(403).json({ error: 'Only a Super Admin can change the role of an Admin account.' });
-    }
-
-    // Promoting to Super Admin requires Super Admin
-    if (newRole === 'super_admin' && callerRole !== 'super_admin') {
-      return res.status(403).json({ error: 'Only a Super Admin can assign the Super Admin role.' });
-    }
 
     // Update public.users
     const { error: dbError } = await supabaseAdmin
