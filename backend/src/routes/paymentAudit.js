@@ -166,7 +166,7 @@ module.exports = function(supabaseAdmin) {
             .from('orders')
             .select('id, status, payment_status, special_notes')
             .ilike('special_notes', `%[Bank Transfer Ref: ${cleanRef}%`)
-            .not('status', 'in', '("cancelled","payment_rejected")')
+            .not('status', 'in', '(cancelled,payment_rejected)')
             .limit(10);
 
           if (noteOrders && noteOrders.length > 0) {

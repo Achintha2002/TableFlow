@@ -61,17 +61,19 @@ export default function Sidebar() {
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, status, payment_status, special_notes')
-          .not('status', 'in', '("cancelled","served","completed","payment_rejected")')
-          .not('payment_status', 'eq', 'paid')
-          .not('payment_status', 'eq', 'failed');
+          .select('id, status, payment_status, special_notes, created_at')
+          .order('created_at', { ascending: false })
+          .limit(200);
 
         if (!error && data) {
           const pending = data.filter(o => {
+            if (['cancelled', 'served', 'completed', 'payment_rejected'].includes(o.status)) return false;
+            if (o.payment_status === 'paid' || o.payment_status === 'failed') return false;
+
             const notes = (o.special_notes || '').toLowerCase();
             if (notes.includes('[rejected:') || notes.includes('payment rejected') || notes.includes('payment_rejected')) return false;
-            return (o.payment_method === 'bank_transfer') || 
-                   o.status === 'payment_pending' || 
+
+            return o.status === 'payment_pending' || 
                    notes.includes('bank transfer') || 
                    notes.includes('[bank transfer ref:');
           });
