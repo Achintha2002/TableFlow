@@ -1620,21 +1620,47 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
         const isNotExpired = !coupon.valid_until || new Date(coupon.valid_until) > new Date();
         const meetsMinAmount = serverSubtotal >= (coupon.min_order_amount || 0);
 
-        // Check user redemption limit
-        const { count: userRedemptions } = await supabaseAdmin
-          .from('coupon_redemptions')
-          .select('*', { count: 'exact', head: true })
-          .eq('coupon_id', coupon.id)
-          .eq('user_id', req.user.id);
+        if (!isNotExpired) {
+          return res.status(400).json({ error: 'This promo code has expired.' });
+        }
+        if (!meetsMinAmount) {
+          return res.status(400).json({
+            error: `Minimum order amount of LKR ${coupon.min_order_amount} required for this code.`
+          });
+        }
 
-        if (isNotExpired && meetsMinAmount && (userRedemptions || 0) < (coupon.max_uses_per_user || 1)) {
-          couponRecord = coupon;
-          if (coupon.discount_percent > 0) {
-            couponDiscount = (serverSubtotal * coupon.discount_percent) / 100;
-          } else if (coupon.discount_amount > 0) {
-            couponDiscount = Math.min(coupon.discount_amount, serverSubtotal);
+        // Check user one-time use limit in user_vouchers wallet
+        if (req.user?.id) {
+          const { data: userVoucher } = await supabaseAdmin
+            .from('user_vouchers')
+            .select('*')
+            .eq('user_id', req.user.id)
+            .eq('coupon_code', coupon.code)
+            .maybeSingle();
+
+          if (userVoucher && userVoucher.used_at) {
+            return res.status(400).json({ error: 'This voucher has already been redeemed on a previous order.' });
+          }
+
+          const { count: userRedemptions } = await supabaseAdmin
+            .from('coupon_redemptions')
+            .select('*', { count: 'exact', head: true })
+            .eq('coupon_id', coupon.id)
+            .eq('user_id', req.user.id);
+
+          if ((userRedemptions || 0) >= (coupon.max_uses_per_user || 1)) {
+            return res.status(400).json({ error: 'You have already used this promo code.' });
           }
         }
+
+        couponRecord = coupon;
+        if (coupon.discount_percent > 0) {
+          couponDiscount = (serverSubtotal * coupon.discount_percent) / 100;
+        } else if (coupon.discount_amount > 0) {
+          couponDiscount = Math.min(coupon.discount_amount, serverSubtotal);
+        }
+      } else {
+        return res.status(400).json({ error: 'Invalid or inactive promo code.' });
       }
     }
 
@@ -2903,6 +2929,15 @@ app.post('/api/coupons/validate', async (req, res) => {
     const { code, subtotal, user_id } = req.body;
     if (!code) return res.status(400).json({ error: 'Coupon code required' });
 
+    let effectiveUserId = user_id;
+    if (!effectiveUserId && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      try {
+        const token = req.headers.authorization.split(' ')[1];
+        const { data: { user } } = await supabase.auth.getUser(token);
+        if (user) effectiveUserId = user.id;
+      } catch (_) {}
+    }
+
     const { data: coupon, error } = await supabaseAdmin
       .from('coupons')
       .select('*')
@@ -2925,12 +2960,12 @@ app.post('/api/coupons/validate', async (req, res) => {
       });
     }
 
-    if (user_id) {
+    if (effectiveUserId) {
       // 1. One-time-use enforcement on user_vouchers wallet
       const { data: userVoucher } = await supabaseAdmin
         .from('user_vouchers')
         .select('*')
-        .eq('user_id', user_id)
+        .eq('user_id', effectiveUserId)
         .eq('coupon_code', coupon.code)
         .maybeSingle();
 
@@ -2942,7 +2977,7 @@ app.post('/api/coupons/validate', async (req, res) => {
         .from('coupon_redemptions')
         .select('*', { count: 'exact', head: true })
         .eq('coupon_id', coupon.id)
-        .eq('user_id', user_id);
+        .eq('user_id', effectiveUserId);
 
       if ((userUses || 0) >= (coupon.max_uses_per_user || 1)) {
         return res.status(400).json({ error: 'You have already used this promo code.' });

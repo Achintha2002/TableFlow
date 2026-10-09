@@ -621,6 +621,47 @@ module.exports = function(supabaseAdmin) {
         slipUrl = signedData?.signedUrl || null;
       } catch (_) {}
 
+      // 7. Record coupon redemption & mark user_vouchers as used
+      if (couponRecord && newOrder) {
+        try {
+          await supabaseAdmin.from('coupon_redemptions').insert({
+            coupon_id: couponRecord.id,
+            user_id: req.user.id,
+            order_id: newOrder.id
+          });
+
+          await supabaseAdmin
+            .from('user_vouchers')
+            .update({
+              used_at: new Date().toISOString(),
+              used_order_id: newOrder.id
+            })
+            .eq('user_id', req.user.id)
+            .eq('coupon_code', couponRecord.code);
+        } catch (couponErr) {
+          console.warn('[paymentAudit] Coupon redemption recording notice:', couponErr.message);
+        }
+      }
+
+      // 8. Loyalty Points Deduction if applied
+      if (pointsDiscount > 0 && newOrder) {
+        try {
+          const { error: rpcErr } = await supabaseAdmin.rpc('redeem_loyalty_points', {
+            p_user_id: req.user.id,
+            p_points: pointsDiscount,
+            p_order_id: newOrder.id
+          });
+          if (rpcErr) throw rpcErr;
+        } catch (e) {
+          try {
+            const { data: u } = await supabaseAdmin.from('users').select('loyalty_points').eq('id', req.user.id).single();
+            if (u) {
+              await supabaseAdmin.from('users').update({ loyalty_points: Math.max(0, u.loyalty_points - pointsDiscount) }).eq('id', req.user.id);
+            }
+          } catch (_) {}
+        }
+      }
+
       res.status(201).json({
         success: true,
         message: 'Order placed successfully! Your payment slip has been submitted for staff verification.',
