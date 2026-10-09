@@ -793,7 +793,18 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
         final code = voucher['code'] ?? '';
         final disc = voucher['discount_percent'] ?? 10;
         final desc = voucher['description'] ?? 'Exclusive TableFlow Member Voucher';
-        final isSilver = voucher['source'] == 'silver_tier_welcome' || code == 'WELCOME10';
+        final source = (voucher['source'] ?? '').toString();
+        final isSilver = source == 'silver_tier_welcome' || code == 'WELCOME10';
+        final isBroadcast = source == 'admin_broadcast' || source == 'broadcast';
+        final String badgeLabel = isSilver
+            ? '★ Silver Gift'
+            : (isBroadcast ? '🎁 Promo Gift' : '⚡ Task Reward');
+        final Color badgeBg = isSilver
+            ? const Color(0xFFFEF3C7)
+            : (isBroadcast ? const Color(0xFFEDE9FE) : const Color(0xFFD1FAE5));
+        final Color badgeFg = isSilver
+            ? const Color(0xFFB45309)
+            : (isBroadcast ? const Color(0xFF6D28D9) : const Color(0xFF065F46));
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -872,30 +883,32 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                code,
-                                style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.2,
-                                  color: AppTheme.secondary,
+                              Expanded(
+                                child: Text(
+                                  code,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8,
+                                    color: AppTheme.secondary,
+                                  ),
                                 ),
                               ),
-                              const Spacer(),
+                              const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                                 decoration: BoxDecoration(
-                                  color: isSilver
-                                      ? const Color(0xFFFEF3C7)
-                                      : const Color(0xFFD1FAE5),
+                                  color: badgeBg,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  isSilver ? '★ Silver Gift' : '⚡ Task Reward',
+                                  badgeLabel,
                                   style: TextStyle(
-                                    color: isSilver ? const Color(0xFFB45309) : const Color(0xFF065F46),
-                                    fontSize: 10,
+                                    color: badgeFg,
+                                    fontSize: 9.5,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
