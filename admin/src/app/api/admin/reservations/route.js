@@ -52,6 +52,24 @@ export async function POST(req) {
       }
     }
 
+    // Validation: Phone Number & Email format
+    if (phone_number && phone_number.trim()) {
+      const trimmedPhone = phone_number.trim();
+      const validPhoneChars = /^[\d\+\s\-\(\)]+$/.test(trimmedPhone);
+      const digitsOnly = trimmedPhone.replace(/\D/g, '');
+      if (!validPhoneChars || digitsOnly.length < 9 || digitsOnly.length > 15) {
+        return NextResponse.json({ error: 'Invalid phone number format. Please provide a valid phone number with 9 to 15 digits (e.g. +94 77 123 4567).' }, { status: 400 });
+      }
+    }
+
+    if (email && email.trim()) {
+      const trimmedEmail = email.trim();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return NextResponse.json({ error: 'Invalid email address format (e.g. guest@example.com).' }, { status: 400 });
+      }
+    }
+
     // 1. Find or create user for the guest
     let userId = null;
     const cleanName = customer_name.trim();

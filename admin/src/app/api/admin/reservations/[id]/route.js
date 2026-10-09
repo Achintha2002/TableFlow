@@ -62,6 +62,24 @@ export async function PUT(req, { params }) {
       }
     }
 
+    // Validation: Phone Number & Email format
+    if (phone_number !== undefined && phone_number !== null && phone_number.trim() !== '') {
+      const trimmedPhone = phone_number.trim();
+      const validPhoneChars = /^[\d\+\s\-\(\)]+$/.test(trimmedPhone);
+      const digitsOnly = trimmedPhone.replace(/\D/g, '');
+      if (!validPhoneChars || digitsOnly.length < 9 || digitsOnly.length > 15) {
+        return NextResponse.json({ error: 'Invalid phone number format. Please provide a valid phone number with 9 to 15 digits (e.g. +94 77 123 4567).' }, { status: 400 });
+      }
+    }
+
+    if (email !== undefined && email !== null && email.trim() !== '') {
+      const trimmedEmail = email.trim();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        return NextResponse.json({ error: 'Invalid email address format (e.g. guest@example.com).' }, { status: 400 });
+      }
+    }
+
     // 1. Update user profile if customer_name, phone, or email is provided
     if (existing.user_id && (customer_name || phone_number !== undefined || email !== undefined)) {
       const userUpdates = {};

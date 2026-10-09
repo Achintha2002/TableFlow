@@ -44,6 +44,19 @@ function getCurrentTimeString() {
   return `${hours}:${minutes}`;
 }
 
+function isValidPhoneNumber(phone) {
+  if (!phone || !phone.trim()) return false;
+  const trimmed = phone.trim();
+  if (!/^[\d\+\s\-\(\)]+$/.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, '');
+  return digits.length >= 9 && digits.length <= 15;
+}
+
+function isValidEmail(email) {
+  if (!email || !email.trim()) return false;
+  return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email.trim());
+}
+
 function getElapsedMinutes(createdAt, currentTime) {
   if (!createdAt) return 999;
   const now = currentTime || Date.now();
@@ -246,6 +259,14 @@ export default function ReservationsPage() {
       showToast('Please enter customer / guest name', true);
       return;
     }
+    if (newResData.phone_number && newResData.phone_number.trim() && !isValidPhoneNumber(newResData.phone_number)) {
+      showToast('Please enter a valid phone number (at least 9 digits, e.g. +94 77 123 4567)', true);
+      return;
+    }
+    if (newResData.email && newResData.email.trim() && !isValidEmail(newResData.email)) {
+      showToast('Please enter a valid email address (e.g. guest@example.com)', true);
+      return;
+    }
     if (!newResData.reservation_date || !newResData.reservation_time) {
       showToast('Please pick a date and time', true);
       return;
@@ -310,6 +331,14 @@ export default function ReservationsPage() {
     if (!editingRes) return;
     if (!editFormData.customer_name.trim()) {
       showToast('Please enter customer / guest name', true);
+      return;
+    }
+    if (editFormData.phone_number && editFormData.phone_number.trim() && !isValidPhoneNumber(editFormData.phone_number)) {
+      showToast('Please enter a valid phone number (at least 9 digits, e.g. +94 77 123 4567 or 0771234567)', true);
+      return;
+    }
+    if (editFormData.email && editFormData.email.trim() && !isValidEmail(editFormData.email)) {
+      showToast('Please enter a valid email address (e.g. guest@example.com)', true);
       return;
     }
 
@@ -1572,11 +1601,16 @@ export default function ReservationsPage() {
                       width: '100%',
                       padding: '9px 12px',
                       borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
+                      border: newResData.phone_number && !isValidPhoneNumber(newResData.phone_number) ? '1px solid #ef4444' : '1px solid #cbd5e1',
                       fontSize: '13px',
                       outline: 'none'
                     }}
                   />
+                  {newResData.phone_number && !isValidPhoneNumber(newResData.phone_number) && (
+                    <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '3px', display: 'block' }}>
+                      Invalid phone number (9-15 digits required)
+                    </span>
+                  )}
                 </div>
 
                 {/* Email */}
@@ -1593,11 +1627,16 @@ export default function ReservationsPage() {
                       width: '100%',
                       padding: '9px 12px',
                       borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
+                      border: newResData.email && !isValidEmail(newResData.email) ? '1px solid #ef4444' : '1px solid #cbd5e1',
                       fontSize: '13px',
                       outline: 'none'
                     }}
                   />
+                  {newResData.email && !isValidEmail(newResData.email) && (
+                    <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '3px', display: 'block' }}>
+                      Invalid email format (e.g. guest@example.com)
+                    </span>
+                  )}
                 </div>
 
                 {/* Date */}
@@ -1902,37 +1941,49 @@ export default function ReservationsPage() {
                   </label>
                   <input
                     type="tel"
+                    placeholder="e.g. +94 77 123 4567"
                     value={editFormData.phone_number}
                     onChange={(e) => setEditFormData({ ...editFormData, phone_number: e.target.value })}
                     style={{
                       width: '100%',
                       padding: '9px 12px',
                       borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
+                      border: editFormData.phone_number && !isValidPhoneNumber(editFormData.phone_number) ? '1px solid #ef4444' : '1px solid #cbd5e1',
                       fontSize: '13px',
                       outline: 'none'
                     }}
                   />
+                  {editFormData.phone_number && !isValidPhoneNumber(editFormData.phone_number) && (
+                    <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '3px', display: 'block' }}>
+                      Invalid phone number (9-15 digits required)
+                    </span>
+                  )}
                 </div>
 
                 {/* Email */}
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '5px' }}>
-                    Email Address
+                    Email Address (Optional)
                   </label>
                   <input
                     type="email"
+                    placeholder="e.g. guest@example.com"
                     value={editFormData.email}
                     onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
                     style={{
                       width: '100%',
                       padding: '9px 12px',
                       borderRadius: '8px',
-                      border: '1px solid #cbd5e1',
+                      border: editFormData.email && !isValidEmail(editFormData.email) ? '1px solid #ef4444' : '1px solid #cbd5e1',
                       fontSize: '13px',
                       outline: 'none'
                     }}
                   />
+                  {editFormData.email && !isValidEmail(editFormData.email) && (
+                    <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '3px', display: 'block' }}>
+                      Invalid email format (e.g. guest@example.com)
+                    </span>
+                  )}
                 </div>
 
                 {/* Date */}
