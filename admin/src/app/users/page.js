@@ -332,20 +332,7 @@ export default function UsersPage() {
                           {a.email}
                         </p>
                       </div>
-                      {isSA ? (
-                        <span style={{
-                          background: 'rgba(212, 175, 55, 0.18)',
-                          color: '#d4af37',
-                          border: '1px solid rgba(212, 175, 55, 0.4)',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          fontWeight: '800',
-                          fontSize: '10.5px',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          👑 SUPER ADMIN
-                        </span>
-                      ) : (
+                      {!isSA && (
                         badge(a.role === 'admin' ? 'success' : 'primary', a.role.charAt(0).toUpperCase() + a.role.slice(1))
                       )}
                     </div>

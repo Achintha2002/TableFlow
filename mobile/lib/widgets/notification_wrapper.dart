@@ -19,8 +19,8 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
   StreamSubscription? _orderSub;
   StreamSubscription? _authSub;
   StreamSubscription? _fcmSub;
-  String? _lastNotifiedQueueId;
-  String? _lastNotifiedOrderId;
+  final Set<String> _notifiedQueueIds = {};
+  final Set<String> _notifiedOrderIds = {};
 
   @override
   void initState() {
@@ -64,8 +64,9 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
           (data) {
             if (data.isEmpty) return;
             for (var entry in data) {
-              if (entry['status'] == 'notified' && entry['id'] != _lastNotifiedQueueId) {
-                _lastNotifiedQueueId = entry['id'] as String?;
+              final id = entry['id']?.toString();
+              if (entry['status'] == 'notified' && id != null && !_notifiedQueueIds.contains(id)) {
+                _notifiedQueueIds.add(id);
                 _showTurnAlert(entry);
               }
             }
@@ -86,9 +87,9 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
             if (data.isEmpty) return;
             for (var order in data) {
               final status = order['status'] as String?;
-              final orderId = order['id'] as String?;
-              if (status == 'ready' && orderId != null && orderId != _lastNotifiedOrderId) {
-                _lastNotifiedOrderId = orderId;
+              final orderId = order['id']?.toString();
+              if (status == 'ready' && orderId != null && !_notifiedOrderIds.contains(orderId)) {
+                _notifiedOrderIds.add(orderId);
                 _showOrderReadyAlert(order);
               }
             }
@@ -104,16 +105,22 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
     _queueSub = null;
     _orderSub?.cancel();
     _orderSub = null;
+    _notifiedQueueIds.clear();
+    _notifiedOrderIds.clear();
   }
 
   void _showTurnAlert(Map<String, dynamic> entry) {
     if (!mounted) return;
-    final pax = entry['pax'] ?? entry['party_size'] ?? 2;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final navContext = AppRoutes.rootNavigatorKey.currentContext;
+      if (navContext == null) return;
+      final pax = entry['pax'] ?? entry['party_size'] ?? 2;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
+      showDialog(
+        context: navContext,
+        barrierDismissible: false,
+        builder: (ctx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           contentPadding: EdgeInsets.zero,
@@ -226,6 +233,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
         );
       },
     );
+    });
   }
 
   static Widget _buildAlertStep(String num, String text) {
@@ -252,10 +260,14 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
 
   void _showOrderReadyAlert(Map<String, dynamic> order) {
     if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final navContext = AppRoutes.rootNavigatorKey.currentContext;
+      if (navContext == null) return;
 
-    showDialog(
-      context: context,
-      builder: (ctx) {
+      showDialog(
+        context: navContext,
+        builder: (ctx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           contentPadding: EdgeInsets.zero,
@@ -340,12 +352,18 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
         );
       },
     );
+    });
   }
 
   void _showInAppBanner(String title, String body, Map<String, dynamic> data, String type) {
     if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetContext = AppRoutes.rootNavigatorKey.currentContext ?? context;
+      final messenger = ScaffoldMessenger.maybeOf(targetContext);
+      if (messenger == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
@@ -382,6 +400,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
         duration: const Duration(seconds: 4),
       ),
     );
+    });
   }
 
   @override
