@@ -29,6 +29,21 @@ import {
 
 const RESTAURANT_HOTLINE = '+94 11 234 5678';
 
+function getTodayDateString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getCurrentTimeString() {
+  const d = new Date();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 function getElapsedMinutes(createdAt, currentTime) {
   if (!createdAt) return 999;
   const now = currentTime || Date.now();
@@ -215,7 +230,7 @@ export default function ReservationsPage() {
       customer_name: '',
       phone_number: '',
       email: '',
-      reservation_date: new Date().toISOString().split('T')[0],
+      reservation_date: getTodayDateString(),
       reservation_time: '19:00',
       pax: 2,
       table_id: '',
@@ -234,6 +249,19 @@ export default function ReservationsPage() {
     if (!newResData.reservation_date || !newResData.reservation_time) {
       showToast('Please pick a date and time', true);
       return;
+    }
+
+    const todayStr = getTodayDateString();
+    if (newResData.reservation_date < todayStr) {
+      showToast('Cannot make a reservation for a past date. Please pick today or a future date.', true);
+      return;
+    }
+    if (newResData.reservation_date === todayStr) {
+      const nowTimeStr = getCurrentTimeString();
+      if (newResData.reservation_time < nowTimeStr) {
+        showToast('Cannot make a reservation for a past time today. Please pick an upcoming time.', true);
+        return;
+      }
     }
 
     try {
@@ -283,6 +311,19 @@ export default function ReservationsPage() {
     if (!editFormData.customer_name.trim()) {
       showToast('Please enter customer / guest name', true);
       return;
+    }
+
+    const todayStr = getTodayDateString();
+    if (editFormData.reservation_date < todayStr) {
+      showToast('Cannot update reservation to a past date. Please pick today or a future date.', true);
+      return;
+    }
+    if (editFormData.reservation_date === todayStr) {
+      const nowTimeStr = getCurrentTimeString();
+      if (editFormData.reservation_time < nowTimeStr) {
+        showToast('Cannot update reservation to a past time today. Please pick an upcoming time.', true);
+        return;
+      }
     }
 
     try {
@@ -1567,6 +1608,7 @@ export default function ReservationsPage() {
                   <input
                     type="date"
                     required
+                    min={getTodayDateString()}
                     value={newResData.reservation_date}
                     onChange={(e) => setNewResData({ ...newResData, reservation_date: e.target.value })}
                     style={{
@@ -1901,6 +1943,7 @@ export default function ReservationsPage() {
                   <input
                     type="date"
                     required
+                    min={getTodayDateString()}
                     value={editFormData.reservation_date}
                     onChange={(e) => setEditFormData({ ...editFormData, reservation_date: e.target.value })}
                     style={{

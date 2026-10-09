@@ -39,6 +39,19 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Reservation date and time are required' }, { status: 400 });
     }
 
+    // Validation: prevent booking past dates or past time today
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (reservation_date < todayStr) {
+      return NextResponse.json({ error: 'Cannot create a reservation for a past date. Please pick today or a future date.' }, { status: 400 });
+    }
+    if (reservation_date === todayStr) {
+      const nowTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (reservation_time < nowTimeStr) {
+        return NextResponse.json({ error: 'Cannot create a reservation for a past time today. Please pick an upcoming time.' }, { status: 400 });
+      }
+    }
+
     // 1. Find or create user for the guest
     let userId = null;
     const cleanName = customer_name.trim();

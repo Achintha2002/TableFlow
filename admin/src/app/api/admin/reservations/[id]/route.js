@@ -47,6 +47,21 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Reservation not found' }, { status: 404 });
     }
 
+    // Validation: prevent updating to past dates or past time today
+    if (reservation_date) {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (reservation_date < todayStr) {
+        return NextResponse.json({ error: 'Cannot update reservation to a past date. Please pick today or a future date.' }, { status: 400 });
+      }
+      if (reservation_date === todayStr && reservation_time) {
+        const nowTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        if (reservation_time < nowTimeStr) {
+          return NextResponse.json({ error: 'Cannot update reservation to a past time today. Please pick an upcoming time.' }, { status: 400 });
+        }
+      }
+    }
+
     // 1. Update user profile if customer_name, phone, or email is provided
     if (existing.user_id && (customer_name || phone_number !== undefined || email !== undefined)) {
       const userUpdates = {};
