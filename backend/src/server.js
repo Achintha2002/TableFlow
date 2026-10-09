@@ -2911,10 +2911,69 @@ app.post('/api/tables/verify-qr', async (req, res) => {
 
     if (error || !table) return res.status(404).json({ error: 'Table not found' });
 
+    // Determine requesting user if available
+    let effectiveUserId = req.body.user_id;
+    if (!effectiveUserId && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      try {
+        const authToken = req.headers.authorization.split(' ')[1];
+        const { data: authUser } = await supabase.auth.getUser(authToken);
+        if (authUser?.user?.id) effectiveUserId = authUser.user.id;
+      } catch (_) {}
+    }
+
+    // Helper for today's date YYYY-MM-DD
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    // Query active reservations for this table today
+    const { data: reservations } = await supabaseAdmin
+      .from('reservations')
+      .select('id, user_id, reservation_date, reservation_time, pax, status')
+      .eq('table_id', table.id)
+      .eq('reservation_date', todayStr)
+      .in('status', ['confirmed', 'pending']);
+
+    const isOccupied = table.status === 'occupied';
+    const isMaintenance = table.status === 'maintenance';
+
+    let hasOtherPartyReservation = false;
+    let isOwnReservation = false;
+    if (reservations && reservations.length > 0) {
+      for (const resv of reservations) {
+        if (effectiveUserId && resv.user_id === effectiveUserId) {
+          isOwnReservation = true;
+        } else {
+          hasOtherPartyReservation = true;
+        }
+      }
+    }
+
+    const isMarkedReserved = table.status === 'reserved' && !isOwnReservation;
+    const isBooked = hasOtherPartyReservation || isMarkedReserved;
+    const isAvailable = !isOccupied && !isMaintenance && !isBooked;
+
+    let unavailableReason = null;
+    let message = 'Table is available for dining and ordering.';
+    if (isOccupied) {
+      unavailableReason = 'occupied';
+      message = `Table #${table.table_number} is currently unavailable (already occupied). Please try another table.`;
+    } else if (isBooked) {
+      unavailableReason = 'booked';
+      message = `Table #${table.table_number} is currently unavailable (already booked). Please try another table.`;
+    } else if (isMaintenance) {
+      unavailableReason = 'maintenance';
+      message = `Table #${table.table_number} is currently unavailable (maintenance). Please try another table.`;
+    }
+
     res.json({
       valid: true,
       table,
-      isOccupied: table.status === 'occupied'
+      isAvailable,
+      isOccupied,
+      isBooked,
+      isOwnReservation,
+      unavailableReason,
+      message
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

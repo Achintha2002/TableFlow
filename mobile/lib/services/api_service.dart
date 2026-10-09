@@ -38,6 +38,7 @@ class ApiService {
     String? rawCode,
     int? tableNumber,
     int? tableId,
+    String? userId,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -46,6 +47,7 @@ class ApiService {
       if (rawCode != null && rawCode.isNotEmpty) body['rawCode'] = rawCode;
       if (tableNumber != null) body['tableNumber'] = tableNumber;
       if (tableId != null) body['tableId'] = tableId;
+      if (userId != null && userId.isNotEmpty) body['user_id'] = userId;
 
       final response = await http.post(
         Uri.parse('$baseUrl/tables/verify-qr'),

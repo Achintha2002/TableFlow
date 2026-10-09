@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/supabase_service.dart';
 
 class TableLandingScreen extends StatefulWidget {
   final String? token;
@@ -26,7 +27,10 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, dynamic>? _tableData;
+  bool _isAvailable = true;
   bool _isOccupied = false;
+  String? _unavailableReason;
+  String? _unavailableMessage;
   bool _isCallingWaiter = false;
 
   @override
@@ -92,6 +96,7 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
         token: token,
         tableNumber: tableNumber,
         tableId: tableId,
+        userId: SupabaseService.currentUser?.id,
       );
 
       if (!mounted) return;
@@ -101,11 +106,37 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
         throw Exception('Table information could not be retrieved.');
       }
 
+      final isAvailable = result['isAvailable'] == true;
+      final isOccupied = result['isOccupied'] == true;
+      final reason = result['unavailableReason'] as String?;
+      final msg = result['message'] as String?;
+
       setState(() {
         _tableData = table;
-        _isOccupied = result['isOccupied'] == true;
+        _isAvailable = isAvailable;
+        _isOccupied = isOccupied;
+        _unavailableReason = reason;
+        _unavailableMessage = msg;
         _isLoading = false;
       });
+
+      if (!isAvailable) {
+        final currentTableId = (_tableData!['id'] as num).toInt();
+        final currentTableNum = (_tableData!['table_number'] as num).toInt();
+        final cart = context.read<CartProvider>();
+        if (cart.selectedTableId == currentTableId) {
+          cart.clearTable();
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showUnavailableDialog(
+              tableNumber: currentTableNum,
+              message: msg,
+            );
+          }
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -115,10 +146,129 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
     }
   }
 
+  void _showUnavailableDialog({required int tableNumber, String? message}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: const Color(0xFF1E1713),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.do_not_disturb_on_rounded, color: Colors.redAccent, size: 26),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Table Unavailable',
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message ?? 'Table #$tableNumber is currently unavailable (already booked or occupied). Please try another table.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.white.withValues(alpha: 0.85),
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded, color: Colors.amber, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Please scan another table QR code or select an available table from the floor layout.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/table-selection');
+                  },
+                  child: const Text('View Tables', style: TextStyle(fontSize: 13)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    context.push('/qr-checkin');
+                  },
+                  child: const Text('Scan Again', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _proceedToMenu() {
     if (_tableData == null) return;
     final tableId = (_tableData!['id'] as num).toInt();
     final tableNumber = (_tableData!['table_number'] as num).toInt();
+
+    if (!_isAvailable) {
+      _showUnavailableDialog(
+        tableNumber: tableNumber,
+        message: _unavailableMessage,
+      );
+      return;
+    }
 
     // Link table to CartProvider
     context.read<CartProvider>().setTable(tableId, tableNumber);
@@ -637,12 +787,16 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: _isOccupied
-                        ? Colors.amber.shade900.withValues(alpha: 0.35)
-                        : Colors.green.shade900.withValues(alpha: 0.35),
+                    color: !_isAvailable
+                        ? Colors.red.shade900.withValues(alpha: 0.35)
+                        : (_isOccupied
+                            ? Colors.amber.shade900.withValues(alpha: 0.35)
+                            : Colors.green.shade900.withValues(alpha: 0.35)),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: _isOccupied ? Colors.amber.shade400 : Colors.green.shade400,
+                      color: !_isAvailable
+                          ? Colors.red.shade400
+                          : (_isOccupied ? Colors.amber.shade400 : Colors.green.shade400),
                       width: 1,
                     ),
                   ),
@@ -654,16 +808,26 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
                         height: 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: _isOccupied ? Colors.amber.shade400 : Colors.green.shade400,
+                          color: !_isAvailable
+                              ? Colors.red.shade400
+                              : (_isOccupied ? Colors.amber.shade400 : Colors.green.shade400),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _isOccupied ? 'Active Dine-In Session' : 'Ready for Dine-In & Ordering',
+                        !_isAvailable
+                            ? (_unavailableReason == 'occupied'
+                                ? 'Table Currently Occupied'
+                                : (_unavailableReason == 'maintenance'
+                                    ? 'Table Under Maintenance'
+                                    : 'Table Already Booked'))
+                            : (_isOccupied ? 'Active Dine-In Session' : 'Ready for Dine-In & Ordering'),
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _isOccupied ? Colors.amber.shade200 : Colors.green.shade200,
+                          color: !_isAvailable
+                              ? Colors.red.shade200
+                              : (_isOccupied ? Colors.amber.shade200 : Colors.green.shade200),
                         ),
                       ),
                     ],
@@ -701,36 +865,141 @@ class _TableLandingScreenState extends State<TableLandingScreen> {
             value: 'Orders are sent straight to the chef display system for Table #$tableNumber',
             isFullWidth: true,
           ),
+          if (!_isAvailable) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFF321616),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.red.shade400.withValues(alpha: 0.7), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade600.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.do_not_disturb_on_rounded, color: Colors.redAccent, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Table #$tableNumber is Unavailable',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _unavailableMessage ?? 'This table is already booked or occupied by another guest. Please scan or select another available table.',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: Colors.white.withValues(alpha: 0.8),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 28),
 
-          // ── PRIMARY ACTION: BROWSE MENU & ORDER ────────────────
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              elevation: 4,
-              shadowColor: AppTheme.primary.withValues(alpha: 0.4),
-            ),
-            onPressed: _proceedToMenu,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.restaurant_menu_rounded, size: 22),
-                const SizedBox(width: 10),
-                Text(
-                  'Browse Menu & Order Food',
-                  style: GoogleFonts.outfit(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
+          // ── PRIMARY ACTION ────────────────────────────────────
+          if (_isAvailable) ...[
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                elevation: 4,
+                shadowColor: AppTheme.primary.withValues(alpha: 0.4),
+              ),
+              onPressed: _proceedToMenu,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.restaurant_menu_rounded, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Browse Menu & Order Food',
+                    style: GoogleFonts.outfit(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward_rounded, size: 20),
-              ],
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_rounded, size: 20),
+                ],
+              ),
             ),
-          ),
+          ] else ...[
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD9534F),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                elevation: 4,
+                shadowColor: Colors.red.withValues(alpha: 0.4),
+              ),
+              onPressed: () => context.push('/qr-checkin'),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.qr_code_scanner_rounded, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Try Another Table (Scan Again)',
+                    style: GoogleFonts.outfit(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_rounded, size: 20),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary,
+                side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.5), width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                backgroundColor: Colors.white,
+              ),
+              onPressed: () => context.push('/table-selection'),
+              icon: const Icon(Icons.table_restaurant_outlined, size: 20),
+              label: Text(
+                'Choose from Available Tables',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           // ── SECONDARY ACTION: CALL WAITER ──────────────────────
