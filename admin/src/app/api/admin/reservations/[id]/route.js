@@ -62,13 +62,12 @@ export async function PUT(req, { params }) {
       }
     }
 
-    // Validation: Phone Number & Email format
+    // Validation: Phone Number (10 digits) & Email format
     if (phone_number !== undefined && phone_number !== null && phone_number.trim() !== '') {
       const trimmedPhone = phone_number.trim();
-      const validPhoneChars = /^[\d\+\s\-\(\)]+$/.test(trimmedPhone);
       const digitsOnly = trimmedPhone.replace(/\D/g, '');
-      if (!validPhoneChars || digitsOnly.length < 9 || digitsOnly.length > 15) {
-        return NextResponse.json({ error: 'Invalid phone number format. Please provide a valid phone number with 9 to 15 digits (e.g. +94 77 123 4567).' }, { status: 400 });
+      if (digitsOnly.length !== 10) {
+        return NextResponse.json({ error: 'Invalid phone number. Phone number must be exactly 10 digits (e.g. 0771234567).' }, { status: 400 });
       }
     }
 
