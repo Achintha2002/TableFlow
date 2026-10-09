@@ -160,7 +160,7 @@ class SupabaseService {
 
     const webClientId =
         '878569392531-9uv232dv0r3h7n4aflmt3joncj5f43hs.apps.googleusercontent.com';
-    // TODO: Replace with your actual iOS Client ID from Google Cloud Console (if supporting iOS)
+    // Note: Replace with actual iOS Client ID from Google Cloud Console if supporting iOS builds
     const iosClientId = 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
 
     if (!_isGoogleSignInInitialized) {
