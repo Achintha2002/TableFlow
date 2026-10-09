@@ -46,10 +46,8 @@ function getCurrentTimeString() {
 
 function isValidPhoneNumber(phone) {
   if (!phone || !phone.trim()) return false;
-  const trimmed = phone.trim();
-  if (!/^[\d\+\s\-\(\)]+$/.test(trimmed)) return false;
-  const digits = trimmed.replace(/\D/g, '');
-  return digits.length >= 9 && digits.length <= 15;
+  const digits = phone.trim().replace(/\D/g, '');
+  return digits.length === 10;
 }
 
 function isValidEmail(email) {
@@ -260,7 +258,7 @@ export default function ReservationsPage() {
       return;
     }
     if (newResData.phone_number && newResData.phone_number.trim() && !isValidPhoneNumber(newResData.phone_number)) {
-      showToast('Please enter a valid phone number (at least 9 digits, e.g. +94 77 123 4567)', true);
+      showToast('Please enter a valid 10-digit phone number (e.g. 0771234567)', true);
       return;
     }
     if (newResData.email && newResData.email.trim() && !isValidEmail(newResData.email)) {
@@ -334,7 +332,7 @@ export default function ReservationsPage() {
       return;
     }
     if (editFormData.phone_number && editFormData.phone_number.trim() && !isValidPhoneNumber(editFormData.phone_number)) {
-      showToast('Please enter a valid phone number (at least 9 digits, e.g. +94 77 123 4567 or 0771234567)', true);
+      showToast('Please enter a valid 10-digit phone number (e.g. 0771234567)', true);
       return;
     }
     if (editFormData.email && editFormData.email.trim() && !isValidEmail(editFormData.email)) {
@@ -1594,9 +1592,13 @@ export default function ReservationsPage() {
                   </label>
                   <input
                     type="tel"
-                    placeholder="e.g. +94 77 123 4567"
+                    maxLength={10}
+                    placeholder="e.g. 0771234567"
                     value={newResData.phone_number}
-                    onChange={(e) => setNewResData({ ...newResData, phone_number: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setNewResData({ ...newResData, phone_number: val });
+                    }}
                     style={{
                       width: '100%',
                       padding: '9px 12px',
@@ -1608,7 +1610,7 @@ export default function ReservationsPage() {
                   />
                   {newResData.phone_number && !isValidPhoneNumber(newResData.phone_number) && (
                     <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '3px', display: 'block' }}>
-                      Invalid phone number (9-15 digits required)
+                      Phone number must be exactly 10 digits ({newResData.phone_number.length}/10)
                     </span>
                   )}
                 </div>
@@ -1941,9 +1943,13 @@ export default function ReservationsPage() {
                   </label>
                   <input
                     type="tel"
-                    placeholder="e.g. +94 77 123 4567"
+                    maxLength={10}
+                    placeholder="e.g. 0771234567"
                     value={editFormData.phone_number}
-                    onChange={(e) => setEditFormData({ ...editFormData, phone_number: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setEditFormData({ ...editFormData, phone_number: val });
+                    }}
                     style={{
                       width: '100%',
                       padding: '9px 12px',
@@ -1955,7 +1961,7 @@ export default function ReservationsPage() {
                   />
                   {editFormData.phone_number && !isValidPhoneNumber(editFormData.phone_number) && (
                     <span style={{ fontSize: '11px', color: '#ef4444', marginTop: '3px', display: 'block' }}>
-                      Invalid phone number (9-15 digits required)
+                      Phone number must be exactly 10 digits ({editFormData.phone_number.length}/10)
                     </span>
                   )}
                 </div>
