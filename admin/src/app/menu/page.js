@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import { API_BASE } from '../../lib/api';
 import {
   UtensilsCrossed,
   Plus,
@@ -271,7 +272,7 @@ export default function MenuPage() {
           finalImageUrl = result.url;
         } else {
           // Fallback to backend upload if admin route fails
-          const backendRes = await fetch('http://localhost:3000/api/admin/upload-image', {
+          const backendRes = await fetch(`${API_BASE}/api/admin/upload-image`, {
             method: 'POST',
             body: uploadData,
           });

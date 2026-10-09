@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { API_BASE } from '../lib/api';
 import Link from 'next/link';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -72,7 +73,7 @@ export default function Dashboard() {
         supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
         supabase.from('orders').select('*', { count: 'exact', head: true }).in('status', ['pending', 'preparing']),
         supabase.from('reservations').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
-        fetch('http://localhost:3000/api/admin/users').then(res => res.json()).catch(() => []),
+        fetch(`${API_BASE}/api/admin/users`).then(res => res.json()).catch(() => []),
         fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] }))
       ]);
 

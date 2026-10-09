@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-
-const API_BASE = 'http://localhost:3000';
+import { API_BASE } from '../../lib/api';
 
 function playNotificationSound() {
   try {

@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase, getSafeSession } from '../lib/supabase';
+import { API_BASE } from '../lib/api';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 
@@ -58,7 +59,7 @@ export default function AuthGuard({ children }) {
           try {
             const controller = new AbortController();
             const tid = setTimeout(() => controller.abort(), 2500);
-            const res = await fetch('http://localhost:3000/api/admin/my-role', {
+            const res = await fetch(`${API_BASE}/api/admin/my-role`, {
               headers: {
                 'Authorization': `Bearer ${session.access_token}`
               },

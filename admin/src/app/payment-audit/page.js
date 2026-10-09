@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
+import { API_BASE } from '../../lib/api';
 import { 
   FileCheck, 
   CheckCircle2, 
@@ -396,7 +397,7 @@ export default function PaymentAuditPage() {
       let success = false;
       if (token) {
         try {
-          const res = await fetch(`http://localhost:3000/api/admin/orders/${orderId}/verify`, {
+          const res = await fetch(`${API_BASE}/api/admin/orders/${orderId}/verify`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -454,7 +455,7 @@ export default function PaymentAuditPage() {
       let success = false;
       if (token) {
         try {
-          const res = await fetch(`http://localhost:3000/api/admin/orders/${rejectingOrder.id}/verify`, {
+          const res = await fetch(`${API_BASE}/api/admin/orders/${rejectingOrder.id}/verify`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',

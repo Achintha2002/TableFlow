@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { API_BASE } from '../../lib/api';
 
 // Helper to get token
 function getToken() {
@@ -131,7 +132,7 @@ export default function KDS() {
 
   async function fetchOrders() {
     const token = await getToken();
-    const res = await fetch('http://localhost:3000/api/kitchen/orders', {
+    const res = await fetch(`${API_BASE}/api/kitchen/orders`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (res.ok) {
@@ -216,7 +217,7 @@ export default function KDS() {
       const token = await getToken();
       let ok = false;
       if (token) {
-        const res = await fetch(`http://localhost:3000/api/kitchen/orders/${id}/status`, {
+        const res = await fetch(`${API_BASE}/api/kitchen/orders/${id}/status`, {
           method: 'PATCH',
           headers: { 
             'Authorization': `Bearer ${token}`,

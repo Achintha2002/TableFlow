@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LayoutDashboard, Users, Grid, Receipt, CalendarDays, UtensilsCrossed, ShieldCheck, LogOut, FileCheck, Share2, Clock, TicketPercent } from 'lucide-react';
 import { supabase, getSafeSession } from '../lib/supabase';
+import { API_BASE } from '../lib/api';
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -37,7 +38,7 @@ export default function Sidebar() {
         try {
           const controller = new AbortController();
           const tid = setTimeout(() => controller.abort(), 2500);
-          const res = await fetch('http://localhost:3000/api/admin/my-role', {
+          const res = await fetch(`${API_BASE}/api/admin/my-role`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` },
             signal: controller.signal
           });

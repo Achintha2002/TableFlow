@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { supabase, getSafeSession } from '../../lib/supabase';
+import { API_BASE } from '../../lib/api';
 import Topbar from '../../components/Topbar';
 
 function badge(type, text) {
@@ -46,7 +47,7 @@ export default function UsersPage() {
         try {
           const controller = new AbortController();
           const tid = setTimeout(() => controller.abort(), 2500);
-          const res = await fetch('http://localhost:3000/api/admin/my-role', {
+          const res = await fetch(`${API_BASE}/api/admin/my-role`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` },
             signal: controller.signal
           });
@@ -65,7 +66,7 @@ export default function UsersPage() {
   async function loadUsers() {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/api/admin/users');
+      const res = await fetch(`${API_BASE}/api/admin/users`);
       if (res.ok) {
         const data = await res.json();
         setUsers(data || []);
@@ -84,7 +85,7 @@ export default function UsersPage() {
 
     try {
       const session = await getSafeSession(1500);
-      const res = await fetch('http://localhost:3000/api/admin/update-role', {
+      const res = await fetch(`${API_BASE}/api/admin/update-role`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +106,7 @@ export default function UsersPage() {
 
   async function handleSyncUsers() {
     try {
-      const res = await fetch('http://localhost:3000/api/admin/sync-users', { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/admin/sync-users`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         alert(data.message);
@@ -122,7 +123,7 @@ export default function UsersPage() {
     e.preventDefault();
     setFormLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/api/admin/create-staff', {
+      const res = await fetch(`${API_BASE}/api/admin/create-staff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newStaff)
@@ -156,7 +157,7 @@ export default function UsersPage() {
     
     try {
       const session = await getSafeSession(1500);
-      const res = await fetch(`http://localhost:3000/api/admin/users/${userId}`, {
+      const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': session ? `Bearer ${session.access_token}` : ''

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from 'react';
-
-const API_BASE = 'http://localhost:3000';
+import { API_BASE } from '../../lib/api';
 
 export default function PartnerSyncPage() {
   const [settings, setSettings] = useState(null);
