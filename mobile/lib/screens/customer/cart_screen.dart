@@ -1440,7 +1440,10 @@ class _CartScreenState extends State<CartScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Total Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const Expanded(
+                    child: Text('Total Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     'LKR ${cart.grandTotal.toStringAsFixed(2)}',
                     style: const TextStyle(color: AppTheme.primary, fontSize: 20, fontWeight: FontWeight.bold),
@@ -1642,9 +1645,13 @@ class _CartScreenState extends State<CartScreen> {
                 children: [
                   const Icon(Icons.local_offer, size: 15, color: Colors.green),
                   const SizedBox(width: 8),
-                  Text(
-                    'Code "${cart.couponCode}" applied: -LKR ${cart.couponDiscount.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11.5),
+                  Expanded(
+                    child: Text(
+                      'Code "${cart.couponCode}" applied: -LKR ${cart.couponDiscount.toStringAsFixed(2)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11.5),
+                    ),
                   ),
                 ],
               ),
@@ -2238,10 +2245,15 @@ class _CartScreenState extends State<CartScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: isDiscount ? Colors.green : Colors.black87, fontSize: 13),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: isDiscount ? Colors.green : Colors.black87, fontSize: 13),
+            ),
           ),
+          const SizedBox(width: 8),
           Text(
             value,
             style: TextStyle(
