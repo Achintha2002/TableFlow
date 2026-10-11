@@ -37,9 +37,20 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
     });
 
     // Re-bind subscriptions on auth changes
-    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
       if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.tokenRefreshed) {
         _listenToRealtimeEvents();
+        final currentUser = data.session?.user;
+        if (currentUser != null && data.event == AuthChangeEvent.signedIn) {
+          try {
+            await Supabase.instance.client.from('users').upsert({
+              'id': currentUser.id,
+              'email': currentUser.email,
+              'full_name': currentUser.userMetadata?['full_name'] ?? currentUser.userMetadata?['name'] ?? 'Customer',
+              'role': 'customer',
+            }).timeout(const Duration(seconds: 4));
+          } catch (_) {}
+        }
       } else if (data.event == AuthChangeEvent.signedOut) {
         _cancelSubscriptions();
         FCMService.deregisterToken();

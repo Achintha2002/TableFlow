@@ -16,6 +16,25 @@ function fmtTime(iso) {
   });
 }
 
+function formatRealTime(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+
+  if (diffSecs < 45) return 'Just now';
+  const diffMins = Math.floor(diffSecs / 60);
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+
+  return date.toLocaleString('en-US', {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -30,7 +49,25 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadCurrentProfile();
-    loadUsers();
+    loadUsers(true);
+
+    // Live Realtime listener on users table
+    const channelId = Math.random().toString(36).substring(2, 9);
+    const usersChannel = supabase.channel(`admin_users_live_${channelId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        loadUsers(false);
+      })
+      .subscribe();
+
+    // Auto-poll every 5 seconds so any new login is instantly promoted to top
+    const interval = setInterval(() => {
+      loadUsers(false);
+    }, 5000);
+
+    return () => {
+      supabase.removeChannel(usersChannel);
+      clearInterval(interval);
+    };
   }, []);
 
   async function loadCurrentProfile() {
@@ -63,8 +100,8 @@ export default function UsersPage() {
     }
   }
 
-  async function loadUsers() {
-    setLoading(true);
+  async function loadUsers(showSpinner = true) {
+    if (showSpinner) setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/admin/users`);
       if (res.ok) {
@@ -73,8 +110,9 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error(error);
+    } finally {
+      if (showSpinner) setLoading(false);
     }
-    setLoading(false);
   }
 
   async function updateUserRole(userId, newRole, targetRole) {
@@ -284,8 +322,12 @@ export default function UsersPage() {
 
             {/* All Users Section */}
             <div className="full-data-card">
-              <div className="data-card-header">
+              <div className="data-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3>All Registered Users ({users.length})</h3>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#16a34a', fontWeight: 600 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }} />
+                  Live Syncing
+                </span>
               </div>
               <div className="table-responsive">
                 <table className="data-table">
@@ -294,6 +336,7 @@ export default function UsersPage() {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Phone</th>
+                      <th>Last Active / Login</th>
                       <th>Joined</th>
                       <th>Role</th>
                       <th>Actions</th>
@@ -303,15 +346,47 @@ export default function UsersPage() {
                     {users.length > 0 ? users.filter(u => u.email?.toLowerCase() !== 'superadmin@tableflow.com' && u.role !== 'super_admin').map(u => {
                       const isSelf = u.id === currentUser?.id || (currentUser?.email && u.email?.toLowerCase() === currentUser.email.toLowerCase());
                       const canEditRole = !isSelf;
+                      const lastTime = new Date(u.last_sign_in_at || 0).getTime();
+                      const isRecentLogin = (Date.now() - lastTime) < (30 * 60 * 1000); // Active in last 30 mins
 
                       return (
                         <tr key={u.id}>
                           <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-                            {u.full_name || '—'}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span>{u.full_name || '—'}</span>
+                              {isRecentLogin && (
+                                <span style={{ 
+                                  fontSize: 10, 
+                                  padding: '2px 6px', 
+                                  background: 'rgba(34, 197, 94, 0.15)', 
+                                  color: '#16a34a', 
+                                  borderRadius: 4, 
+                                  fontWeight: 700,
+                                  letterSpacing: 0.5,
+                                  textTransform: 'uppercase'
+                                }}>
+                                  Active
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td>{u.email}</td>
                           <td>{u.phone_number || '—'}</td>
-                          <td>{fmtTime(u.created_at)}</td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 600, color: isRecentLogin ? '#16a34a' : 'var(--text-primary)', fontSize: 13 }}>
+                                {formatRealTime(u.last_sign_in_at)}
+                              </span>
+                              {u.last_sign_in_at && (
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  {fmtTime(u.last_sign_in_at)}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                            {fmtTime(u.created_at)}
+                          </td>
                           <td>
                             <select 
                               className="role-select" 
