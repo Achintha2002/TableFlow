@@ -60,12 +60,18 @@ export async function GET() {
       }
     }
 
-    // 4. Attach last_sign_in_at to each user profile
+    // 4. Attach last_sign_in_at and extract Google profile metadata (name, email)
     const mergedUsers = publicUsers.map(u => {
       const au = authMap.get(u.id) || (u.email ? authMap.get(u.email.toLowerCase()) : null);
       const lastLogin = au?.last_sign_in_at || u.last_sign_in_at || u.created_at;
+      const googleName = au?.user_metadata?.full_name || au?.user_metadata?.name;
+      const finalName = (u.full_name && u.full_name !== 'Customer' && u.full_name !== 'Valued Guest') 
+        ? u.full_name 
+        : (googleName || u.full_name || 'Customer');
+
       return {
         ...u,
+        full_name: finalName,
         last_sign_in_at: lastLogin
       };
     });
