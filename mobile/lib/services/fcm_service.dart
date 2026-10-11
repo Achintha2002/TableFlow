@@ -27,24 +27,17 @@ class FCMService {
   static Future<void> initialize() async {
     if (_initialized) return;
 
+    if (kIsWeb) {
+      debugPrint("FCMService: Web platform detected — using Supabase Realtime alerts for notifications.");
+      _initialized = true;
+      return;
+    }
+
     try {
       // 1. Initialize Firebase Core safely
       try {
         if (Firebase.apps.isEmpty) {
-          if (kIsWeb) {
-            await Firebase.initializeApp(
-              options: const FirebaseOptions(
-                apiKey: "AIzaSyDummyKeyForTableFlowWebNotifications",
-                authDomain: "tableflow.firebaseapp.com",
-                projectId: "tableflow",
-                storageBucket: "tableflow.appspot.com",
-                messagingSenderId: "878569392531",
-                appId: "1:878569392531:web:abcdef123456",
-              ),
-            );
-          } else {
-            await Firebase.initializeApp();
-          }
+          await Firebase.initializeApp();
         }
       } catch (coreErr) {
         debugPrint("FCMService: Firebase.initializeApp info: $coreErr");
