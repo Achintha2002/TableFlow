@@ -103,7 +103,10 @@ export default function UsersPage() {
   async function loadUsers(showSpinner = true) {
     if (showSpinner) setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/users`);
+      let res = await fetch('/api/admin/users');
+      if (!res.ok) {
+        res = await fetch(`${API_BASE}/api/admin/users`);
+      }
       if (res.ok) {
         const data = await res.json();
         setUsers(data || []);

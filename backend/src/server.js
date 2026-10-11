@@ -559,9 +559,45 @@ app.get('/api/admin/users', async (req, res) => {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY is required' });
     }
-    const { data, error } = await supabaseAdmin.from('users').select('*').order('created_at', { ascending: false });
+
+    let authUsers = [];
+    try {
+      const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      authUsers = users || [];
+    } catch (_) {}
+
+    const { data: dbUsers, error } = await supabaseAdmin.from('users').select('*');
     if (error) throw error;
-    res.json(data);
+
+    const publicUsers = dbUsers || [];
+    const authMap = new Map();
+    for (const au of authUsers) {
+      authMap.set(au.id, au);
+      if (au.email) authMap.set(au.email.toLowerCase(), au);
+    }
+
+    const merged = publicUsers.map(u => {
+      const au = authMap.get(u.id) || (u.email ? authMap.get(u.email.toLowerCase()) : null);
+      const lastLogin = au?.last_sign_in_at || u.last_sign_in_at || u.created_at;
+      const googleName = au?.user_metadata?.full_name || au?.user_metadata?.name;
+      const finalName = (u.full_name && u.full_name !== 'Customer' && u.full_name !== 'Valued Guest')
+        ? u.full_name
+        : (googleName || u.full_name || 'Customer');
+
+      return {
+        ...u,
+        full_name: finalName,
+        last_sign_in_at: lastLogin
+      };
+    });
+
+    merged.sort((a, b) => {
+      const tA = new Date(a.last_sign_in_at || a.created_at || 0).getTime();
+      const tB = new Date(b.last_sign_in_at || b.created_at || 0).getTime();
+      return tB - tA;
+    });
+
+    res.json(merged);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
