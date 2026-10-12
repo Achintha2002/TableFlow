@@ -170,6 +170,22 @@ class ApiService {
 
   /// Fetch user's discount tasks & progress
   static Future<List<Map<String, dynamic>>> fetchMyTasks() async {
+    final user = SupabaseService.client.auth.currentUser;
+    if (user != null) {
+      try {
+        final data = await SupabaseService.client
+            .from('user_discount_tasks')
+            .select('*')
+            .eq('user_id', user.id);
+
+        if (data.isNotEmpty) {
+          return List<Map<String, dynamic>>.from(data);
+        }
+      } catch (e) {
+        debugPrint('Direct fetch user_discount_tasks error: $e');
+      }
+    }
+
     try {
       final headers = await _getHeaders();
       final response = await http.get(
@@ -183,16 +199,8 @@ class ApiService {
       }
       throw Exception('Failed to load tasks');
     } catch (e) {
-      debugPrint('Fetch My Tasks HTTP Error: $e, falling back to Supabase');
-      final user = SupabaseService.client.auth.currentUser;
-      if (user == null) return [];
-
-      final data = await SupabaseService.client
-          .from('user_discount_tasks')
-          .select('*')
-          .eq('user_id', user.id);
-
-      return List<Map<String, dynamic>>.from(data);
+      debugPrint('Fetch My Tasks HTTP Error: $e');
+      return [];
     }
   }
 

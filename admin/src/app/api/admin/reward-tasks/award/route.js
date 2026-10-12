@@ -35,17 +35,16 @@ export async function POST(req) {
     if (user_id && user_id !== 'all') {
       targetUserIds = [user_id];
     } else {
-      // Fetch recent customer IDs
-      const { data: customers } = await supabaseAdmin
+      // Fetch all registered users regardless of role (customers, staff, admins testing the app)
+      const { data: allUsers } = await supabaseAdmin
         .from('users')
         .select('id')
-        .eq('role', 'customer')
-        .limit(50);
-      targetUserIds = (customers || []).map(c => c.id);
+        .limit(200);
+      targetUserIds = (allUsers || []).map(u => u.id);
     }
 
     if (targetUserIds.length === 0) {
-      return NextResponse.json({ error: 'No customers found to award task' }, { status: 404 });
+      return NextResponse.json({ error: 'No users found to award task' }, { status: 404 });
     }
 
     let updatedCount = 0;
@@ -83,18 +82,15 @@ export async function POST(req) {
         updated_at: new Date().toISOString()
       };
 
-      if (userTask?.id) {
-        await supabaseAdmin
-          .from('user_discount_tasks')
-          .update(upsertData)
-          .eq('id', userTask.id);
-      } else {
-        await supabaseAdmin
-          .from('user_discount_tasks')
-          .insert(upsertData);
-      }
+      const { error: upsertErr } = await supabaseAdmin
+        .from('user_discount_tasks')
+        .upsert(upsertData, { onConflict: 'user_id,task_key' });
 
-      updatedCount++;
+      if (!upsertErr) {
+        updatedCount++;
+      } else {
+        console.error(`Upsert error for user ${uid}:`, upsertErr);
+      }
 
       // If newly completed, send in-app notification
       if (willComplete && !userTask?.is_completed) {

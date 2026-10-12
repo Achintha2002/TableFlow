@@ -56,6 +56,19 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
           ),
           callback: (payload) {
             debugPrint('⚡ [Realtime] user_discount_tasks update: ${payload.eventType}');
+            if (payload.newRecord.isNotEmpty) {
+              final updatedKey = payload.newRecord['task_key'];
+              if (mounted) {
+                setState(() {
+                  final exists = _tasks.any((t) => t['task_key'] == updatedKey);
+                  if (exists) {
+                    _tasks = _tasks.map((t) => t['task_key'] == updatedKey ? {...t, ...payload.newRecord} : t).toList();
+                  } else {
+                    _tasks = [..._tasks, payload.newRecord];
+                  }
+                });
+              }
+            }
             _loadData();
 
             if (payload.eventType == PostgresChangeEvent.update) {

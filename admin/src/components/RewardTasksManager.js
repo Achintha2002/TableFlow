@@ -154,8 +154,8 @@ export default function RewardTasksManager({ showToast }) {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, full_name, email')
-        .eq('role', 'customer')
+        .select('id, full_name, email, role')
+        .order('created_at', { ascending: false })
         .limit(100);
       if (!error && data) {
         setCustomers(data);
@@ -1351,10 +1351,10 @@ CREATE POLICY "Service role manage reward_tasks" ON public.reward_tasks FOR ALL 
                     background: '#ffffff'
                   }}
                 >
-                  <option value="all">🌟 All Active Customers ({customers.length || 'All'})</option>
+                  <option value="all">🌟 All Registered Users ({customers.length || 'All'})</option>
                   {customers.map(c => (
                     <option key={c.id} value={c.id}>
-                      👤 {c.full_name || 'Customer'} ({c.email || c.id.slice(0, 8)})
+                      👤 {c.role ? `[${c.role.toUpperCase()}] ` : ''}{c.full_name || 'User'} ({c.email || c.id.slice(0, 8)})
                     </option>
                   ))}
                 </select>
