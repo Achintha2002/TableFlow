@@ -170,6 +170,25 @@ class ApiService {
 
   /// Fetch user's discount tasks & progress
   static Future<List<Map<String, dynamic>>> fetchMyTasks() async {
+    // 1. Sync with backend API to dynamically evaluate newly placed orders
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/vouchers/my-tasks'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['tasks'] != null && (data['tasks'] as List).isNotEmpty) {
+          return List<Map<String, dynamic>>.from(data['tasks']);
+        }
+      }
+    } catch (e) {
+      debugPrint('Fetch My Tasks HTTP Notice: $e');
+    }
+
+    // 2. Direct Supabase query as fallback
     final user = SupabaseService.client.auth.currentUser;
     if (user != null) {
       try {
@@ -186,22 +205,7 @@ class ApiService {
       }
     }
 
-    try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/vouchers/my-tasks'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['tasks'] ?? []);
-      }
-      throw Exception('Failed to load tasks');
-    } catch (e) {
-      debugPrint('Fetch My Tasks HTTP Error: $e');
-      return [];
-    }
+    return [];
   }
 
   /// Claim 10% voucher for a completed task
