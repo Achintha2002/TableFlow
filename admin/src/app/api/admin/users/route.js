@@ -12,8 +12,11 @@ export async function GET() {
       authUsers = users || [];
       for (const u of authUsers) {
         if (u.email?.toLowerCase() === targetEmail || u.user_metadata?.role === 'super_admin') {
-          await supabaseAdmin.auth.admin.deleteUser(u.id).catch(() => {});
+          try {
+            await supabaseAdmin.auth.admin.deleteUser(u.id);
+          } catch (_) {}
         }
+      }
       try {
         await supabaseAdmin.from('users').delete().eq('email', targetEmail);
         await supabaseAdmin.from('users').delete().eq('role', 'super_admin');
