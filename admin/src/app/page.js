@@ -81,21 +81,37 @@ export default function Dashboard() {
       const customerCount = safeUsers.filter(u => u.role === 'customer').length;
       const adminCount = safeUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').length;
 
-      const { data: oData } = await supabase
-        .from('orders')
-        .select('id, status, total_amount, subtotal, discount_amount, special_notes, created_at')
-        .order('created_at', { ascending: false })
-        .limit(5);
+      let recentOrdersList = [];
+      try {
+        const { data: oData, error: oErr } = await supabase
+          .from('orders')
+          .select('id, status, total_amount, subtotal, discount_amount, special_notes, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (!oErr && oData && oData.length > 0) {
+          recentOrdersList = oData;
+        }
+      } catch (_) {}
+
+      if (recentOrdersList.length === 0) {
+        try {
+          const apiOrdersRes = await fetch('/api/admin/orders?limit=5').then(r => r.json()).catch(() => null);
+          if (apiOrdersRes?.orders && apiOrdersRes.orders.length > 0) {
+            recentOrdersList = apiOrdersRes.orders;
+          }
+        } catch (_) {}
+      }
+
       const { data: qData } = await supabase.from('queue_entries').select('id, pax, status, joined_at').order('joined_at', { ascending: false }).limit(5);
 
       setStats({ 
         queue: queueCount || 0, 
-        orders: orderCount || 0, 
+        orders: orderCount || (recentOrdersList.length), 
         reservations: reservCount || 0, 
         customers: customerCount || 0,
         admins: adminCount || 0
       });
-      setRecentOrders(oData || []);
+      setRecentOrders(recentOrdersList);
       setRecentQueue(qData || []);
       setAnalytics(analyticsRes);
       setLoading(false);

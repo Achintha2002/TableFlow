@@ -137,6 +137,17 @@ export default function OrdersPage() {
         .order('created_at', { ascending: false });
       data = fallback.data;
     }
+
+    if (!data || data.length === 0) {
+      try {
+        const apiRes = await fetch('/api/admin/orders');
+        const json = await apiRes.json();
+        if (json.orders && json.orders.length > 0) {
+          data = json.orders;
+        }
+      } catch (_) {}
+    }
+
     setOrders(data || []);
     setLoading(false);
   }
