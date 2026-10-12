@@ -2106,10 +2106,10 @@ async function handleOrderServedTasks(userId, orderId) {
       }
     } catch (_) {}
 
-    // 2. Fetch order details & items
+    // 2. Fetch order details & items with created_at timestamp
     const { data: orderData } = await supabaseAdmin
       .from('orders')
-      .select('total_amount')
+      .select('total_amount, created_at')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -2125,9 +2125,19 @@ async function handleOrderServedTasks(userId, orderId) {
     });
 
     const orderTotal = (orderData?.total_amount) || 0;
+    const orderCreatedAtTime = orderData?.created_at ? new Date(orderData.created_at).getTime() : Date.now();
 
     // 3. For each active task, evaluate triggers
     for (const task of activeTasks) {
+      // ⚠️ Check: Past orders placed BEFORE this task was published MUST NEVER count!
+      if (task.created_at) {
+        const taskCreatedAtTime = new Date(task.created_at).getTime();
+        if (orderCreatedAtTime < (taskCreatedAtTime - 5000)) {
+          // Order was placed BEFORE task was published. Skip!
+          continue;
+        }
+      }
+
       let isTriggerMatch = false;
       let incrementAmount = 1;
 
@@ -2186,6 +2196,7 @@ async function handleOrderServedTasks(userId, orderId) {
               reward_discount_percent: task.reward_discount_percent || 10,
               is_completed: isCompleted,
               is_claimed: false,
+              created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             });
 
@@ -3293,7 +3304,9 @@ app.get('/api/vouchers/my-tasks', authMiddleware, async (req, res) => {
           target_progress: master.target_progress || 1,
           reward_discount_percent: master.reward_discount_percent || 10,
           is_completed: false,
-          is_claimed: false
+          is_claimed: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
       }
     }

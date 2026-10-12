@@ -1364,38 +1364,57 @@ CREATE POLICY "Service role manage reward_tasks" ON public.reward_tasks FOR ALL 
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#44403c', marginBottom: '6px' }}>
                   Action
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                   <button
                     type="button"
-                    onClick={() => setAwardAction('complete')}
+                    onClick={() => setAwardAction('reset')}
                     style={{
-                      padding: '10px',
+                      padding: '10px 6px',
                       borderRadius: '10px',
-                      border: awardAction === 'complete' ? '2px solid #16a34a' : '1px solid #e7e5e4',
-                      background: awardAction === 'complete' ? '#f0fdf4' : '#ffffff',
-                      color: awardAction === 'complete' ? '#16a34a' : '#44403c',
+                      border: awardAction === 'reset' ? '2px solid #ef4444' : '1px solid #e7e5e4',
+                      background: awardAction === 'reset' ? '#fef2f2' : '#ffffff',
+                      color: awardAction === 'reset' ? '#b91c1c' : '#44403c',
                       fontWeight: 700,
-                      fontSize: '12px',
-                      cursor: 'pointer'
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
                     }}
                   >
-                    🎉 Complete (100%)
+                    🔄 Reset (0 Steps)
                   </button>
                   <button
                     type="button"
                     onClick={() => setAwardAction('increment')}
                     style={{
-                      padding: '10px',
+                      padding: '10px 6px',
                       borderRadius: '10px',
                       border: awardAction === 'increment' ? '2px solid #d97706' : '1px solid #e7e5e4',
                       background: awardAction === 'increment' ? '#fffbeb' : '#ffffff',
                       color: awardAction === 'increment' ? '#d97706' : '#44403c',
                       fontWeight: 700,
-                      fontSize: '12px',
-                      cursor: 'pointer'
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
                     }}
                   >
-                    ➕ Add +1 Progress
+                    ➕ +1 Progress
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAwardAction('complete')}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: '10px',
+                      border: awardAction === 'complete' ? '2px solid #16a34a' : '1px solid #e7e5e4',
+                      background: awardAction === 'complete' ? '#f0fdf4' : '#ffffff',
+                      color: awardAction === 'complete' ? '#16a34a' : '#44403c',
+                      fontWeight: 700,
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    🎉 Complete (100%)
                   </button>
                 </div>
               </div>
@@ -1423,15 +1442,29 @@ CREATE POLICY "Service role manage reward_tasks" ON public.reward_tasks FOR ALL 
                     padding: '10px 22px',
                     borderRadius: '10px',
                     border: 'none',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    background: awardAction === 'reset'
+                      ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                      : awardAction === 'increment'
+                      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                      : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                     color: '#ffffff',
                     fontSize: '13px',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+                    boxShadow: awardAction === 'reset'
+                      ? '0 4px 14px rgba(239, 68, 68, 0.4)'
+                      : awardAction === 'increment'
+                      ? '0 4px 14px rgba(245, 158, 11, 0.4)'
+                      : '0 4px 14px rgba(16, 185, 129, 0.4)'
                   }}
                 >
-                  {awarding ? 'Awarding...' : 'Send Real-time Award'}
+                  {awarding
+                    ? 'Updating...'
+                    : awardAction === 'reset'
+                    ? 'Reset Progress to 0'
+                    : awardAction === 'increment'
+                    ? 'Add +1 Step'
+                    : 'Award 100% Completion'}
                 </button>
               </div>
             </form>

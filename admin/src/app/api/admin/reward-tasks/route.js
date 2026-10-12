@@ -137,6 +137,7 @@ export async function POST(req) {
       .trim()
       .replace(/^_+|_+$/g, '');
 
+    const nowIso = new Date().toISOString();
     const record = {
       task_key: finalKey,
       title: title.trim(),
@@ -146,7 +147,9 @@ export async function POST(req) {
       reward_discount_percent: parseInt(reward_discount_percent) || 10,
       trigger_type,
       trigger_value: trigger_value ? parseFloat(trigger_value) : null,
-      is_active: Boolean(is_active)
+      is_active: Boolean(is_active),
+      created_at: nowIso,
+      updated_at: nowIso
     };
 
     const { data, error } = await supabaseAdmin
@@ -159,12 +162,12 @@ export async function POST(req) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Sync task to all existing users' discount tasks so they immediately see it
+    // Sync task to all existing users' discount tasks so they immediately see it starting at 0 progress
     try {
       const { data: users } = await supabaseAdmin
         .from('users')
         .select('id')
-        .eq('role', 'customer');
+        .limit(500);
 
       if (users && users.length > 0) {
         const toInsert = users.map(u => ({
@@ -176,12 +179,15 @@ export async function POST(req) {
           target_progress: record.target_progress,
           reward_discount_percent: record.reward_discount_percent,
           is_completed: false,
-          is_claimed: false
+          is_claimed: false,
+          created_at: nowIso,
+          updated_at: nowIso
         }));
 
+        // Upsert to ensure any recycled or existing task key starts freshly at 0 progress
         await supabaseAdmin
           .from('user_discount_tasks')
-          .upsert(toInsert, { onConflict: 'user_id,task_key', ignoreDuplicates: true });
+          .upsert(toInsert, { onConflict: 'user_id,task_key' });
       }
     } catch (syncErr) {
       console.warn('Sync to users warning:', syncErr.message);

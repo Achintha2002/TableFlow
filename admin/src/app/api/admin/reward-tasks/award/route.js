@@ -60,8 +60,13 @@ export async function POST(req) {
       const current = userTask?.current_progress || 0;
       let nextProgress = current;
       let willComplete = false;
+      let willClaimed = userTask?.is_claimed || false;
 
-      if (action === 'complete') {
+      if (action === 'reset') {
+        nextProgress = 0;
+        willComplete = false;
+        willClaimed = false;
+      } else if (action === 'complete') {
         nextProgress = targetProgress;
         willComplete = true;
       } else {
@@ -78,7 +83,7 @@ export async function POST(req) {
         target_progress: targetProgress,
         reward_discount_percent: task?.reward_discount_percent || 10,
         is_completed: willComplete,
-        is_claimed: userTask?.is_claimed || false,
+        is_claimed: willClaimed,
         updated_at: new Date().toISOString()
       };
 

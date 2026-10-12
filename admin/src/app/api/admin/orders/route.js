@@ -13,8 +13,6 @@ export async function GET(req) {
         user_id,
         table_id,
         total_amount,
-        subtotal,
-        discount_amount,
         status,
         payment_status,
         payment_method,
@@ -32,7 +30,13 @@ export async function GET(req) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, orders: orders || [] });
+    const sanitized = (orders || []).map(o => ({
+      ...o,
+      subtotal: o.total_amount || 0,
+      discount_amount: 0
+    }));
+
+    return NextResponse.json({ success: true, orders: sanitized });
   } catch (err) {
     console.error('API orders error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
