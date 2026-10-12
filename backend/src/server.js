@@ -1955,6 +1955,8 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       } catch (err) {
         console.warn('Table occupancy update notice:', err.message);
       }
+    }
+
     // Automatically synchronize and evaluate user discount task progress!
     if (req.user?.id) {
       syncUserTaskProgress(req.user.id).catch(err => {
@@ -2121,7 +2123,8 @@ async function syncUserTaskProgress(userId) {
       // If already claimed, preserve it
       if (existing?.is_claimed) continue;
 
-      const taskCreatedIso = task.created_at ? new Date(new Date(task.created_at).getTime() - 5000).toISOString() : '1970-01-01T00:00:00.000Z';
+      // Allow orders placed in current session (within 30 mins) or later to count towards newly created tasks
+      const taskCreatedIso = task.created_at ? new Date(new Date(task.created_at).getTime() - 30 * 60 * 1000).toISOString() : '1970-01-01T00:00:00.000Z';
 
       let calculatedProgress = 0;
 

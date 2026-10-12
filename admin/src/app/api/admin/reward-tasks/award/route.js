@@ -30,12 +30,11 @@ export async function POST(req) {
     const title = task?.title || defaultNames[task_key] || task_key;
     const targetProgress = task?.target_progress || (task_key === 'dine_3_orders' ? 3 : 1);
 
-    // 2. Determine target users
+    // 2. Fetch users to target
     let targetUserIds = [];
     if (user_id && user_id !== 'all') {
       targetUserIds = [user_id];
     } else {
-      // Fetch all registered users regardless of role (customers, staff, admins testing the app)
       const { data: allUsers } = await supabaseAdmin
         .from('users')
         .select('id')
@@ -47,16 +46,20 @@ export async function POST(req) {
       return NextResponse.json({ error: 'No users found to award task' }, { status: 404 });
     }
 
-    let updatedCount = 0;
-    for (const uid of targetUserIds) {
-      // Find or create user_discount_task
-      const { data: userTask } = await supabaseAdmin
-        .from('user_discount_tasks')
-        .select('*')
-        .eq('user_id', uid)
-        .eq('task_key', task_key)
-        .maybeSingle();
+    // 3. Batch fetch existing user tasks in 1 single query
+    const { data: existingTasks } = await supabaseAdmin
+      .from('user_discount_tasks')
+      .select('*')
+      .eq('task_key', task_key)
+      .in('user_id', targetUserIds);
 
+    const existingMap = new Map((existingTasks || []).map(t => [t.user_id, t]));
+
+    const batchToUpsert = [];
+    const notificationsToInsert = [];
+
+    for (const uid of targetUserIds) {
+      const userTask = existingMap.get(uid);
       const current = userTask?.current_progress || 0;
       let nextProgress = current;
       let willComplete = false;
@@ -70,11 +73,12 @@ export async function POST(req) {
         nextProgress = targetProgress;
         willComplete = true;
       } else {
+        // increment
         nextProgress = Math.min(targetProgress, current + count);
         willComplete = nextProgress >= targetProgress;
       }
 
-      const upsertData = {
+      batchToUpsert.push({
         user_id: uid,
         task_key: task_key,
         title: title,
@@ -85,29 +89,30 @@ export async function POST(req) {
         is_completed: willComplete,
         is_claimed: willClaimed,
         updated_at: new Date().toISOString()
-      };
+      });
 
-      const { error: upsertErr } = await supabaseAdmin
-        .from('user_discount_tasks')
-        .upsert(upsertData, { onConflict: 'user_id,task_key' });
-
-      if (!upsertErr) {
-        updatedCount++;
-      } else {
-        console.error(`Upsert error for user ${uid}:`, upsertErr);
-      }
-
-      // If newly completed, send in-app notification
       if (willComplete && !userTask?.is_completed) {
-        await supabaseAdmin
-          .from('notifications')
-          .insert({
-            user_id: uid,
-            title: `🎉 Task Completed: ${title}!`,
-            body: `Admin awarded you completion for "${title}". Head over to My Vouchers to claim your reward!`,
-            is_read: false
-          });
+        notificationsToInsert.push({
+          user_id: uid,
+          title: `🎉 Task Completed: ${title}!`,
+          body: `You completed "${title}". Head over to My Vouchers to claim your reward!`,
+          is_read: false
+        });
       }
+    }
+
+    // 4. Execute single batch upsert
+    const { error: upsertErr } = await supabaseAdmin
+      .from('user_discount_tasks')
+      .upsert(batchToUpsert, { onConflict: 'user_id,task_key' });
+
+    if (upsertErr) {
+      console.error('Batch upsert error:', upsertErr);
+      return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+    }
+
+    if (notificationsToInsert.length > 0) {
+      supabaseAdmin.from('notifications').insert(notificationsToInsert).catch(() => {});
     }
 
     return NextResponse.json({

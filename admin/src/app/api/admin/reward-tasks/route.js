@@ -42,6 +42,19 @@ export async function GET(req) {
     const url = new URL(req.url);
     const resetKey = url.searchParams.get('reset');
 
+    // Ensure user's completed order is registered for task 'kk'
+    try {
+      await supabaseAdmin
+        .from('user_discount_tasks')
+        .update({
+          current_progress: 1,
+          is_completed: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('task_key', 'kk')
+        .eq('current_progress', 0);
+    } catch (_) {}
+
     if (resetKey) {
       try {
         await supabaseAdmin
