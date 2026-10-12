@@ -53,6 +53,32 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>
+    // Clean up stale OAuth code query parameter if no PKCE verifier is in localStorage
+    (function() {
+      try {
+        var search = window.location.search;
+        if (search && search.indexOf('code=') !== -1) {
+          var hasVerifier = false;
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('code-verifier') !== -1) {
+              hasVerifier = true;
+              break;
+            }
+          }
+          if (!hasVerifier) {
+            var params = new URLSearchParams(search);
+            params.delete('code');
+            params.delete('state');
+            var cleanQuery = params.toString();
+            var cleanUrl = window.location.pathname + (cleanQuery ? '?' + cleanQuery : '') + window.location.hash;
+            window.history.replaceState(null, '', cleanUrl);
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

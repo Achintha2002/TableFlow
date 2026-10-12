@@ -62,6 +62,7 @@ class AppRoutes {
   static const myVouchers = '/my-vouchers';
   static const qrCheckin = '/qr-checkin';
   static const orderTracker = '/order-tracker';
+  static const orderStatus = '/order-status';
   static const waiterFloor = '/waiter-floor';
   static const staffHub = '/staff-hub';
   static const manageQueue = '/manage-queue';
@@ -104,6 +105,7 @@ class AppRoutes {
         loyalty,
         reservationDetails,
         orderTracker,
+        orderStatus,
         waiterFloor,
         staffHub,
         manageQueue,
@@ -165,6 +167,15 @@ class AppRoutes {
       GoRoute(
         parentNavigatorKey: rootNavigatorKey,
         path: orderTracker,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final queryOrderId = state.uri.queryParameters['orderId'];
+          return LiveOrderTrackerScreen(orderId: queryOrderId ?? extra['orderId']?.toString());
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: orderStatus,
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>? ?? {};
           final queryOrderId = state.uri.queryParameters['orderId'];

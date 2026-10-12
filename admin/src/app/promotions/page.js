@@ -58,7 +58,7 @@ export default function PromotionsPage() {
     description: '',
     discount_type: 'percent', // 'percent' | 'flat'
     discount_value: 15,
-    min_order_amount: 1500,
+    min_order_amount: 0,
     max_uses_per_user: 1,
     has_expiry: true,
     valid_until: '',
@@ -203,7 +203,7 @@ export default function PromotionsPage() {
       description: '',
       discount_type: 'percent',
       discount_value: 15,
-      min_order_amount: 1500,
+      min_order_amount: 0,
       max_uses_per_user: 1,
       has_expiry: true,
       valid_until: defaultExpiry,

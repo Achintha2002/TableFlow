@@ -296,10 +296,22 @@ class _CartScreenState extends State<CartScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errText = e.toString().replaceAll('Exception: ', '');
+        final isMinSpend = errText.toLowerCase().contains('minimum order');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.redAccent,
+            content: Row(
+              children: [
+                Icon(
+                  isMinSpend ? Icons.info_outline_rounded : Icons.error_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(errText)),
+              ],
+            ),
+            backgroundColor: isMinSpend ? const Color(0xFFD97706) : Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -317,6 +329,8 @@ class _CartScreenState extends State<CartScreen> {
       );
       return null;
     }
+
+    final cart = context.read<CartProvider>();
 
     return showModalBottomSheet<String>(
       context: context,
@@ -392,6 +406,9 @@ class _CartScreenState extends State<CartScreen> {
                       final code = v['code'] ?? '';
                       final disc = v['discount_percent'] ?? 10;
                       final desc = v['description'] ?? '';
+                      final minSpend = (v['min_order_amount'] as num?)?.toDouble() ?? 0.0;
+                      final cartSubtotal = cart.totalAmount;
+                      final isEligible = minSpend <= 0 || cartSubtotal >= minSpend;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -417,17 +434,47 @@ class _CartScreenState extends State<CartScreen> {
                             code,
                             style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 14),
                           ),
-                          subtitle: Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (desc.isNotEmpty)
+                                Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                              if (minSpend > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    isEligible
+                                        ? 'Min. spend: LKR ${minSpend.toStringAsFixed(0)} (Eligible)'
+                                        : 'Min. spend: LKR ${minSpend.toStringAsFixed(0)} (Add LKR ${(minSpend - cartSubtotal).toStringAsFixed(0)} more)',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isEligible ? const Color(0xFF059669) : const Color(0xFFD97706),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                           trailing: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primary,
+                              backgroundColor: isEligible ? AppTheme.primary : Colors.grey.shade400,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               elevation: 0,
                             ),
-                            onPressed: () => Navigator.pop(ctx, code),
-                            child: const Text('Apply', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            onPressed: isEligible
+                                ? () => Navigator.pop(ctx, code)
+                                : () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Minimum order amount of LKR ${minSpend.toStringAsFixed(0)} required for "$code". Add LKR ${(minSpend - cartSubtotal).toStringAsFixed(0)} more to your cart.'),
+                                        backgroundColor: const Color(0xFFD97706),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  },
+                            child: Text(isEligible ? 'Apply' : 'Min LKR ${minSpend.toInt()}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       );

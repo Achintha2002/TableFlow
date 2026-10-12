@@ -89,7 +89,7 @@ class ApiService {
         throw Exception(data['error'] ?? 'Invalid promo code');
       }
     } catch (e) {
-      debugPrint('Validate Coupon Error: $e');
+      debugPrint('Validate Coupon notice: $e');
       rethrow;
     }
   }
