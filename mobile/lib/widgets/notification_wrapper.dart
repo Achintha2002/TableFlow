@@ -336,7 +336,7 @@ class _NotificationWrapperState extends State<NotificationWrapper> {
                       child: ElevatedButton.icon(
                         onPressed: () {
                           Navigator.of(ctx).pop();
-                          AppRoutes.router.go('/order-status');
+                          AppRoutes.router.go(AppRoutes.orderTracker);
                         },
                         icon: const Icon(Icons.receipt_long_rounded, size: 20),
                         label: const Text('View Order Status', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

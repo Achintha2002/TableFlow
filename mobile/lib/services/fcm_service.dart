@@ -190,7 +190,7 @@ class FCMService {
     final type = data['type'] as String?;
     switch (type) {
       case 'order_ready':
-        AppRoutes.router.go('/order-status');
+        AppRoutes.router.go(AppRoutes.orderTracker);
         break;
       case 'queue_ready':
         AppRoutes.router.go('/queue');
