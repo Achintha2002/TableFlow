@@ -129,6 +129,22 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY // fallback to anon if missing, though it will fail RLS
 );
 
+// Automatically reset any min_order_amount >= 1000 in coupons table to 0
+(async () => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('coupons')
+      .update({ min_order_amount: 0 })
+      .gte('min_order_amount', 1000)
+      .select('code, min_order_amount');
+    if (data && data.length > 0) {
+      console.log('✅ [Coupons Fix] Successfully updated coupon min_order_amount to 0 for:', data);
+    }
+  } catch (err) {
+    console.error('❌ [Coupons Fix] Error updating coupon min_order_amount:', err);
+  }
+})();
+
 // ==========================================
 // Staff RBAC Middleware
 // ==========================================

@@ -79,7 +79,7 @@ class _LiveOrderTrackerScreenState extends State<LiveOrderTrackerScreen>
             .from('orders')
             .select('id')
             .eq('user_id', user.id)
-            .inFilter('status', ['pending', 'preparing', 'ready', 'payment_pending', 'payment_rejected', 'cancelled'])
+            .inFilter('status', ['pending', 'preparing', 'ready'])
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle();

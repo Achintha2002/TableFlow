@@ -117905,7 +117905,7 @@ break}p=4
 s=n.d==null?7:8
 break
 case 7:s=9
-return A.i(f.bI("orders").e6(0,"id").cD("user_id",m.a).U_("status",["pending","preparing","ready","payment_pending","payment_rejected","cancelled"]).jN(0,"created_at",!1).qO(1).lx(),$async$t3)
+return A.i(f.bI("orders").e6(0,"id").cD("user_id",m.a).U_("status",["pending","preparing","ready"]).jN(0,"created_at",!1).qO(1).lx(),$async$t3)
 case 9:l=b
 s=l!=null?10:12
 break

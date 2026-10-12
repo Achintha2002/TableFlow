@@ -3,6 +3,12 @@ import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
 
 export async function GET() {
   try {
+    // Auto-fix coupons with high min_order_amount so they work for any order size
+    await supabaseAdmin
+      .from('coupons')
+      .update({ min_order_amount: 0 })
+      .gte('min_order_amount', 1000);
+
     const { data: coupons, error } = await supabaseAdmin
       .from('coupons')
       .select('*')
