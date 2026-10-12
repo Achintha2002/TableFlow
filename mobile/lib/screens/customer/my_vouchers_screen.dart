@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
 import '../../services/api_service.dart';
 import '../../services/supabase_service.dart';
@@ -21,11 +22,82 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
   List<Map<String, dynamic>> _vouchers = [];
   List<Map<String, dynamic>> _tasks = [];
   String? _claimingTaskKey;
+  RealtimeChannel? _tasksChannel;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _subscribeToRealtimeTasks();
+  }
+
+  @override
+  void dispose() {
+    if (_tasksChannel != null) {
+      SupabaseService.client.removeChannel(_tasksChannel!);
+    }
+    super.dispose();
+  }
+
+  void _subscribeToRealtimeTasks() {
+    final user = SupabaseService.client.auth.currentUser;
+    if (user == null) return;
+
+    _tasksChannel = SupabaseService.client
+        .channel('user_tasks_realtime_${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'user_discount_tasks',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            debugPrint('⚡ [Realtime] user_discount_tasks update: ${payload.eventType}');
+            _loadData();
+
+            if (payload.eventType == PostgresChangeEvent.update) {
+              final newRec = payload.newRecord;
+              final oldRec = payload.oldRecord;
+              if (newRec['is_completed'] == true && oldRec['is_completed'] != true) {
+                HapticFeedback.heavyImpact();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.celebration, color: Colors.white, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '🎉 Challenge Completed: ${newRec['title'] ?? 'Task'}! Claim your reward now!',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: const Color(0xFF10B981),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
+                }
+              }
+            }
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'reward_tasks',
+          callback: (payload) {
+            debugPrint('⚡ [Realtime] reward_tasks master change: ${payload.eventType}');
+            _loadData();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadData() async {
@@ -1073,18 +1145,31 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
         final double progressRatio = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
 
         // Custom task iconography
-        IconData taskIcon = Icons.restaurant_menu;
-        Color accentColor = const Color(0xFFD4AF37);
-        if (taskKey == 'weekday_booking') {
+        final iconType = (task['icon_type'] ?? '').toString();
+        IconData taskIcon = Icons.dining_rounded;
+        Color accentColor = const Color(0xFF10B981);
+
+        if (iconType == 'calendar' || taskKey.contains('booking')) {
           taskIcon = Icons.calendar_month_rounded;
           accentColor = const Color(0xFF3B82F6);
-        } else if (taskKey == 'chef_special') {
+        } else if (iconType == 'flame' || taskKey.contains('special') || taskKey.contains('chef')) {
           taskIcon = Icons.local_fire_department_rounded;
           accentColor = const Color(0xFFF59E0B);
+        } else if (iconType == 'star') {
+          taskIcon = Icons.star_rounded;
+          accentColor = const Color(0xFFEAB308);
+        } else if (iconType == 'award') {
+          taskIcon = Icons.military_tech_rounded;
+          accentColor = const Color(0xFFD4AF37);
+        } else if (iconType == 'coffee') {
+          taskIcon = Icons.coffee_rounded;
+          accentColor = const Color(0xFF8B5CF6);
         } else {
           taskIcon = Icons.dining_rounded;
           accentColor = const Color(0xFF10B981);
         }
+
+        final discountPercent = task['reward_discount_percent'] ?? 10;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -1112,7 +1197,7 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with Themed Icon & 10% OFF Badge
+                // Header with Themed Icon & Dynamic Discount Badge
                 Row(
                   children: [
                     Container(
@@ -1162,9 +1247,9 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
                       ),
-                      child: const Text(
-                        '🎟️ 10% OFF',
-                        style: TextStyle(
+                      child: Text(
+                        '🎟️ $discountPercent% OFF',
+                        style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF92400E),
@@ -1303,12 +1388,12 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
                                 height: 14,
                                 child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                               )
-                            : const Row(
+                            : Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.card_giftcard, size: 14),
-                                  SizedBox(width: 5),
-                                  Text('Claim 10% Reward', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  const Icon(Icons.card_giftcard, size: 14),
+                                  const SizedBox(width: 5),
+                                  Text('Claim $discountPercent% Reward', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                 ],
                               ),
                       )
