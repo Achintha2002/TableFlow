@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/cart_provider.dart';
@@ -12,6 +13,18 @@ import 'providers/settings_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Catch and safely ignore stale OAuth code verifier errors on Flutter Web
+  PlatformDispatcher.instance.onError = (error, stack) {
+    final str = error.toString();
+    if (str.contains('Code verifier could not be found') ||
+        str.contains('code_verifier') ||
+        str.contains('token-code-verifier')) {
+      debugPrint('Supabase Auth: Gracefully handled stale OAuth code verifier: $error');
+      return true; // handled
+    }
+    return false;
+  };
   
   // Initialize Supabase real-time connection
   await SupabaseService.initialize();
@@ -34,7 +47,7 @@ class TableFlowApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
-        ChangeNotifierProvider(create: (_) => OperatingHoursService()),
+        ChangeNotifierProvider.value(value: OperatingHoursService()),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, _) {

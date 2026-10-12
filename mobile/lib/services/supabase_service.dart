@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../utils/web_auth_helper.dart';
 
 /// Exception thrown when Supabase database cannot be reached or connected to
 class DatabaseConnectionException implements Exception {
@@ -19,11 +20,17 @@ class SupabaseService {
 
   /// Initialize Supabase — called once in main()
   static Future<void> initialize() async {
+    // On web, sanitize stale OAuth query params if PKCE code verifier is missing
+    sanitizeAuthUrl();
+
     await Supabase.initialize(
       url: 'https://azjjndqecpemltvdbkvy.supabase.co',
       publishableKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6ampuZHFlY3BlbWx0dmRia3Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3OTA3ODEsImV4cCI6MjEwMjM2Njc4MX0.grBF4XJu0696MnrvKC-ZccppLGxPEM9KIHED8viZELc',
     );
     debugPrint('SupabaseService: Initialized');
+
+    // Clean up OAuth query parameters on web once initialized
+    cleanAuthUrl();
 
     // Immediately sync user session if returning from Google OAuth redirect
     final user = _client.auth.currentUser;
