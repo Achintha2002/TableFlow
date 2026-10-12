@@ -46,7 +46,13 @@ export async function GET() {
 
     if (error) {
       const errMsg = error.message || '';
-      const isMissing = errMsg.includes('does not exist') || error.code === '42P01';
+      const isMissing =
+        errMsg.includes('does not exist') ||
+        errMsg.includes('Could not find the table') ||
+        errMsg.includes('schema cache') ||
+        error.code === '42P01' ||
+        error.code === 'PGRST205' ||
+        error.code === 'PGRST200';
 
       if (isMissing) {
         return NextResponse.json({

@@ -94,7 +94,14 @@ export default function RewardTasksManager({ showToast }) {
     try {
       const res = await fetch('/api/admin/reward-tasks');
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to fetch tasks');
+      if (!res.ok) {
+        const errMsg = json.error || '';
+        if (errMsg.includes('schema cache') || errMsg.includes('reward_tasks') || errMsg.includes('not find the table')) {
+          setTableNotCreated(true);
+          return;
+        }
+        throw new Error(errMsg || 'Failed to fetch tasks');
+      }
       setTableNotCreated(Boolean(json.tableNotCreated));
       setTasks(json.tasks || []);
     } catch (err) {
