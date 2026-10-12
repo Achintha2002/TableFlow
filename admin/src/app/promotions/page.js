@@ -29,9 +29,12 @@ import {
   UserCheck
 } from 'lucide-react';
 
+import RewardTasksManager from '../../components/RewardTasksManager';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function PromotionsPage() {
+  const [activeTab, setActiveTab] = useState('coupons'); // 'coupons' | 'reward_tasks'
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -437,53 +440,110 @@ export default function PromotionsPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => fetchCoupons(true)}
-            disabled={refreshing}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              border: '1px solid #e2e8f0',
-              background: '#f8fafc',
-              color: 'var(--text-secondary)',
-              fontSize: '13px',
-              fontWeight: 600,
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <RefreshCw size={15} className={refreshing ? 'spin-icon' : ''} />
-            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
+        {activeTab === 'coupons' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => fetchCoupons(true)}
+              disabled={refreshing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                color: 'var(--text-secondary)',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: refreshing ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <RefreshCw size={15} className={refreshing ? 'spin-icon' : ''} />
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
 
-          <button
-            onClick={handleOpenCreate}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 18px',
-              borderRadius: '10px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #B87F5C 0%, #9c6848 100%)',
-              color: '#ffffff',
-              fontSize: '13px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(184, 127, 92, 0.4)',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <Plus size={16} />
-            <span>Create New Voucher</span>
-          </button>
-        </div>
+            <button
+              onClick={handleOpenCreate}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                borderRadius: '10px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #B87F5C 0%, #9c6848 100%)',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(184, 127, 92, 0.4)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Plus size={16} />
+              <span>Create New Voucher</span>
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Section Tabs */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        borderBottom: '1px solid #e7e5e4',
+        paddingBottom: '14px',
+        marginTop: '-4px'
+      }}>
+        <button
+          onClick={() => setActiveTab('coupons')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '9px 18px',
+            borderRadius: '10px',
+            border: activeTab === 'coupons' ? '1px solid #1c1917' : '1px solid transparent',
+            background: activeTab === 'coupons' ? '#1c1917' : '#f5f5f4',
+            color: activeTab === 'coupons' ? '#ffffff' : '#78716c',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <TicketPercent size={16} />
+          <span>Coupons &amp; Discount Vouchers</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reward_tasks')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '9px 18px',
+            borderRadius: '10px',
+            border: activeTab === 'reward_tasks' ? '1px solid #1c1917' : '1px solid transparent',
+            background: activeTab === 'reward_tasks' ? '#1c1917' : '#f5f5f4',
+            color: activeTab === 'reward_tasks' ? '#ffffff' : '#78716c',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Sparkles size={16} color={activeTab === 'reward_tasks' ? '#D4AF37' : '#a8a29e'} />
+          <span>Customer Reward Tasks (Gamification)</span>
+        </button>
+      </div>
+
+      {activeTab === 'reward_tasks' ? (
+        <RewardTasksManager showToast={showToast} />
+      ) : (
+        <>
       {/* Missing DB Table Banner */}
       {tableNotCreated && (
         <div style={{
@@ -1030,6 +1090,8 @@ ON CONFLICT (code) DO NOTHING;`;
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* CREATE / EDIT MODAL */}
       {modalOpen && (

@@ -2088,37 +2088,31 @@ app.patch('/api/kitchen/orders/:id/status', authMiddleware, async (req, res) => 
 // Helper function to increment user discount tasks when order is served
 async function handleOrderServedTasks(userId, orderId) {
   try {
-    // 1. Task: dine_3_orders
-    const { data: dineTask } = await supabaseAdmin
-      .from('user_discount_tasks')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('task_key', 'dine_3_orders')
+    if (!userId) return;
+
+    // 1. Fetch active tasks
+    let activeTasks = [
+      { task_key: 'dine_3_orders', title: 'Dine-In Explorer', target_progress: 3, trigger_type: 'dine_in_orders' },
+      { task_key: 'chef_special', title: "Chef's Signature Fan", target_progress: 1, trigger_type: 'chef_special' }
+    ];
+
+    try {
+      const { data: dbTasks, error: dbErr } = await supabaseAdmin
+        .from('reward_tasks')
+        .select('*')
+        .eq('is_active', true);
+      if (!dbErr && dbTasks && dbTasks.length > 0) {
+        activeTasks = dbTasks;
+      }
+    } catch (_) {}
+
+    // 2. Fetch order details & items
+    const { data: orderData } = await supabaseAdmin
+      .from('orders')
+      .select('total_amount')
+      .eq('id', orderId)
       .maybeSingle();
 
-    if (dineTask && !dineTask.is_completed) {
-      const nextProgress = (dineTask.current_progress || 0) + 1;
-      const isCompleted = nextProgress >= dineTask.target_progress;
-      await supabaseAdmin
-        .from('user_discount_tasks')
-        .update({
-          current_progress: nextProgress,
-          is_completed: isCompleted,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', dineTask.id);
-
-      if (isCompleted) {
-        await supabaseAdmin.from('notifications').insert({
-          user_id: userId,
-          title: '🎉 Task Completed: Dine-In Explorer!',
-          body: 'You completed 3 dine-in meals! Go to My Vouchers to claim your 10% discount reward.',
-          is_read: false
-        });
-      }
-    }
-
-    // 2. Task: chef_special (Check if order contains any Chef's special item)
     const { data: orderItems } = await supabaseAdmin
       .from('order_items')
       .select('menu_item_id, menu_items(name, category)')
@@ -2130,30 +2124,80 @@ async function handleOrderServedTasks(userId, orderId) {
       return cat.includes('special') || cat.includes('signature') || cat.includes('chef') || name.includes('wagyu') || name.includes('truffle') || name.includes('rib');
     });
 
-    if (hasChefSpecial) {
-      const { data: chefTask } = await supabaseAdmin
-        .from('user_discount_tasks')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('task_key', 'chef_special')
-        .maybeSingle();
+    const orderTotal = (orderData?.total_amount) || 0;
 
-      if (chefTask && !chefTask.is_completed) {
-        await supabaseAdmin
+    // 3. For each active task, evaluate triggers
+    for (const task of activeTasks) {
+      let isTriggerMatch = false;
+      let incrementAmount = 1;
+
+      if (task.trigger_type === 'dine_in_orders' || task.task_key === 'dine_3_orders') {
+        isTriggerMatch = true;
+      } else if (task.trigger_type === 'chef_special' || task.task_key === 'chef_special') {
+        if (hasChefSpecial) isTriggerMatch = true;
+      } else if (task.trigger_type === 'min_spend') {
+        const threshold = task.trigger_value || 0;
+        if (orderTotal >= threshold) isTriggerMatch = true;
+      }
+
+      if (isTriggerMatch) {
+        // Fetch or create user task
+        const { data: userTask } = await supabaseAdmin
           .from('user_discount_tasks')
-          .update({
-            current_progress: 1,
-            is_completed: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', chefTask.id);
+          .select('*')
+          .eq('user_id', userId)
+          .eq('task_key', task.task_key)
+          .maybeSingle();
 
-        await supabaseAdmin.from('notifications').insert({
-          user_id: userId,
-          title: "🎉 Task Completed: Chef's Special Fan!",
-          body: "You enjoyed a Chef's Special dish! Claim your 10% discount reward in My Vouchers.",
-          is_read: false
-        });
+        if (userTask) {
+          if (!userTask.is_completed) {
+            const nextProgress = (userTask.current_progress || 0) + incrementAmount;
+            const isCompleted = nextProgress >= (userTask.target_progress || task.target_progress || 1);
+            await supabaseAdmin
+              .from('user_discount_tasks')
+              .update({
+                current_progress: nextProgress,
+                is_completed: isCompleted,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', userTask.id);
+
+            if (isCompleted) {
+              await supabaseAdmin.from('notifications').insert({
+                user_id: userId,
+                title: `🎉 Task Completed: ${userTask.title}!`,
+                body: `You completed "${userTask.title}"! Open My Vouchers to claim your reward.`,
+                is_read: false
+              });
+            }
+          }
+        } else {
+          // Insert initial progress
+          const isCompleted = incrementAmount >= (task.target_progress || 1);
+          await supabaseAdmin
+            .from('user_discount_tasks')
+            .insert({
+              user_id: userId,
+              task_key: task.task_key,
+              title: task.title,
+              description: task.description || '',
+              current_progress: incrementAmount,
+              target_progress: task.target_progress || 1,
+              reward_discount_percent: task.reward_discount_percent || 10,
+              is_completed: isCompleted,
+              is_claimed: false,
+              updated_at: new Date().toISOString()
+            });
+
+          if (isCompleted) {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: userId,
+              title: `🎉 Task Completed: ${task.title}!`,
+              body: `You completed "${task.title}"! Open My Vouchers to claim your reward.`,
+              is_read: false
+            });
+          }
+        }
       }
     }
   } catch (err) {
@@ -3201,47 +3245,80 @@ app.get('/api/vouchers/my-tasks', authMiddleware, async (req, res) => {
         title: 'Dine-In Explorer',
         description: 'Complete 3 served dine-in meals at TableFlow to unlock 10% OFF.',
         target_progress: 3,
-        reward_discount_percent: 10
+        reward_discount_percent: 10,
+        icon_type: 'restaurant'
       },
       {
         task_key: 'weekday_booking',
         title: 'Weekday Gourmet',
         description: 'Book and complete a table reservation between Monday and Thursday.',
         target_progress: 1,
-        reward_discount_percent: 10
+        reward_discount_percent: 10,
+        icon_type: 'calendar'
       },
       {
         task_key: 'chef_special',
         title: "Chef's Signature Fan",
         description: "Order any signature dish from our Chef's Special menu.",
         target_progress: 1,
-        reward_discount_percent: 10
+        reward_discount_percent: 10,
+        icon_type: 'flame'
       }
     ];
 
-    if (!existingTasks || existingTasks.length === 0) {
-      // Seed default tasks for this user
-      const toInsert = defaultTasks.map(t => ({
-        user_id: userId,
-        task_key: t.task_key,
-        title: t.title,
-        description: t.description,
-        current_progress: 0,
-        target_progress: t.target_progress,
-        reward_discount_percent: t.reward_discount_percent,
-        is_completed: false,
-        is_claimed: false
-      }));
+    // 1. Fetch active master tasks if reward_tasks table exists
+    let masterTasks = defaultTasks;
+    try {
+      const { data: dbTasks, error: dbErr } = await supabaseAdmin
+        .from('reward_tasks')
+        .select('*')
+        .eq('is_active', true);
+      if (!dbErr && dbTasks && dbTasks.length > 0) {
+        masterTasks = dbTasks;
+      }
+    } catch (_) {}
 
-      const { data: seeded } = await supabaseAdmin
-        .from('user_discount_tasks')
-        .insert(toInsert)
-        .select();
+    const existingMap = new Map((existingTasks || []).map(t => [t.task_key, t]));
 
-      return res.json({ success: true, tasks: seeded || toInsert });
+    // 2. Auto-insert missing active master tasks for this user
+    const missingTasks = [];
+    for (const master of masterTasks) {
+      if (!existingMap.has(master.task_key)) {
+        missingTasks.push({
+          user_id: userId,
+          task_key: master.task_key,
+          title: master.title,
+          description: master.description,
+          current_progress: 0,
+          target_progress: master.target_progress || 1,
+          reward_discount_percent: master.reward_discount_percent || 10,
+          is_completed: false,
+          is_claimed: false
+        });
+      }
     }
 
-    res.json({ success: true, tasks: existingTasks });
+    if (missingTasks.length > 0) {
+      const { data: newlyInserted } = await supabaseAdmin
+        .from('user_discount_tasks')
+        .insert(missingTasks)
+        .select();
+      if (newlyInserted) {
+        newlyInserted.forEach(t => existingMap.set(t.task_key, t));
+      }
+    }
+
+    // 3. Return enriched tasks with icons & target progress
+    const masterMap = new Map(masterTasks.map(m => [m.task_key, m]));
+    const allUserTasks = Array.from(existingMap.values()).map(ut => {
+      const master = masterMap.get(ut.task_key);
+      return {
+        ...ut,
+        icon_type: master?.icon_type || (ut.task_key.includes('booking') ? 'calendar' : ut.task_key.includes('chef') ? 'flame' : 'restaurant')
+      };
+    });
+
+    res.json({ success: true, tasks: allUserTasks });
   } catch (err) {
     console.error('Error fetching user tasks:', err);
     res.status(500).json({ error: err.message });
