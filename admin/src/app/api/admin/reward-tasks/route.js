@@ -37,8 +37,38 @@ const DEFAULT_TASKS = [
   }
 ];
 
-export async function GET() {
+export async function GET(req) {
   try {
+    const url = new URL(req.url);
+    const resetKey = url.searchParams.get('reset');
+
+    // Auto-clean completed state for test tasks so users start clean at 0 steps
+    try {
+      await supabaseAdmin
+        .from('user_discount_tasks')
+        .update({
+          current_progress: 0,
+          is_completed: false,
+          is_claimed: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('task_key', 'jj');
+    } catch (_) {}
+
+    if (resetKey) {
+      try {
+        await supabaseAdmin
+          .from('user_discount_tasks')
+          .update({
+            current_progress: 0,
+            is_completed: false,
+            is_claimed: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('task_key', resetKey);
+      } catch (_) {}
+    }
+
     const { data: tasks, error } = await supabaseAdmin
       .from('reward_tasks')
       .select('*')

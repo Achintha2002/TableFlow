@@ -8,6 +8,7 @@ import {
   Search,
   Filter,
   RefreshCw,
+  RotateCcw,
   Edit3,
   Trash2,
   CheckCircle2,
@@ -294,12 +295,35 @@ export default function RewardTasksManager({ showToast }) {
     }
   }
 
+  // Direct Quick Action: Reset to 0 or +1 Step
+  async function handleDirectAction(taskKey, action = 'reset') {
+    try {
+      const res = await fetch('/api/admin/reward-tasks/award', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task_key: taskKey,
+          user_id: 'all',
+          action: action
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Action failed');
+      if (showToast) {
+        showToast(action === 'reset' ? 'Progress reset to 0 steps for all diners!' : 'Added +1 step progress in real-time!', 'success');
+      }
+      fetchTasks();
+    } catch (err) {
+      if (showToast) showToast('Error: ' + err.message, 'error');
+    }
+  }
+
   // Open Award Modal
   function handleOpenAward(taskKey = '') {
     const list = tasks.length > 0 ? tasks : DEFAULT_TASKS;
     setSelectedTaskKey(taskKey || (list[0]?.task_key || 'dine_3_orders'));
     setAwardAudience('all');
-    setAwardAction('complete');
+    setAwardAction('reset');
     setAwardModalOpen(true);
     fetchCustomersList();
   }
@@ -918,25 +942,49 @@ CREATE POLICY "Service role manage reward_tasks" ON public.reward_tasks FOR ALL 
                   paddingTop: '12px'
                 }}>
                   <button
-                    onClick={() => handleOpenAward(task.task_key)}
+                    onClick={() => handleDirectAction(task.task_key, 'reset')}
+                    title="Reset diner progress back to 0 steps"
                     style={{
                       flex: 1,
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
-                      padding: '8px 12px',
+                      gap: '5px',
+                      padding: '8px 10px',
                       borderRadius: '8px',
-                      border: '1px solid #fde68a',
-                      background: '#fffbeb',
-                      color: '#92400e',
-                      fontSize: '12px',
+                      border: '1px solid #fee2e2',
+                      background: '#fff1f2',
+                      color: '#b91c1c',
+                      fontSize: '11px',
                       fontWeight: 700,
                       cursor: 'pointer'
                     }}
                   >
-                    <Award size={14} color="#d97706" />
-                    <span>Award to Diner</span>
+                    <RotateCcw size={13} color="#b91c1c" />
+                    <span>Reset (0)</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDirectAction(task.task_key, 'increment')}
+                    title="Advance diner progress by +1 step"
+                    style={{
+                      flex: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #fde68a',
+                      background: '#fffbeb',
+                      color: '#92400e',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={13} color="#d97706" />
+                    <span>+1 Step</span>
                   </button>
 
                   <button
