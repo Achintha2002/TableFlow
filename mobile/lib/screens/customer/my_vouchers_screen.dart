@@ -110,6 +110,15 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
             _loadData();
           },
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'orders',
+          callback: (payload) {
+            debugPrint('⚡ [Realtime] orders change detected: ${payload.eventType}');
+            _loadData();
+          },
+        )
         .subscribe();
   }
 
@@ -145,17 +154,17 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
             final taskCreatedAtStr = t['created_at']?.toString();
             DateTime? taskCreatedAt;
             if (taskCreatedAtStr != null) {
-              taskCreatedAt = DateTime.tryParse(taskCreatedAtStr);
+              taskCreatedAt = DateTime.tryParse(taskCreatedAtStr)?.toUtc();
             }
 
-            // Count orders placed in current active session (within 2 hours of task creation or later)
+            // Count orders placed in current active session (within 30 mins before task creation or newly placed)
             final count = ordersList.where((o) {
               final orderCreatedAtStr = o['created_at']?.toString();
               if (orderCreatedAtStr == null) return false;
-              final orderTime = DateTime.tryParse(orderCreatedAtStr);
+              final orderTime = DateTime.tryParse(orderCreatedAtStr)?.toUtc();
               if (orderTime == null) return false;
               if (taskCreatedAt != null) {
-                return orderTime.isAfter(taskCreatedAt.subtract(const Duration(hours: 2)));
+                return orderTime.isAfter(taskCreatedAt.subtract(const Duration(minutes: 30)));
               }
               return true;
             }).length;
@@ -163,6 +172,21 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
             final current = int.tryParse(t['current_progress']?.toString() ?? '') ?? 0;
             final newProgress = (count > current) ? count.clamp(0, target) : current;
             final isCompleted = newProgress >= target;
+
+            // Also attempt background sync to user_discount_tasks
+            if (newProgress > current) {
+              SupabaseService.client
+                  .from('user_discount_tasks')
+                  .update({
+                    'current_progress': newProgress,
+                    'is_completed': isCompleted,
+                    'updated_at': DateTime.now().toUtc().toIso8601String(),
+                  })
+                  .eq('user_id', user.id)
+                  .eq('task_key', t['task_key'] ?? '')
+                  .then((_) {})
+                  .catchError((_) {});
+            }
 
             return {
               ...t,
