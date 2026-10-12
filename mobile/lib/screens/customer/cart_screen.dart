@@ -8,6 +8,7 @@ import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme.dart';
+import '../../core/routes.dart';
 import '../../providers/cart_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/supabase_service.dart';
@@ -23,6 +24,30 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
+  void _navigateBackOrToMenu() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      try {
+        AppRoutes.router.go(AppRoutes.menu);
+      } catch (_) {
+        try {
+          context.go('/menu');
+        } catch (_) {}
+      }
+    }
+  }
+
+  void _safePush(String route) {
+    try {
+      AppRoutes.router.push(route);
+    } catch (_) {
+      try {
+        context.push(route);
+      } catch (_) {}
+    }
+  }
+
   // Stepper state (0: Review Order, 1: Payment & Confirmation)
   int _currentStep = 0;
   final PageController _pageController = PageController();
@@ -368,7 +393,7 @@ class _CartScreenState extends State<CartScreen> {
                   TextButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      context.push('/my-vouchers');
+                      _safePush('/my-vouchers');
                     },
                     child: const Text('Earn More', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primary)),
                   ),
@@ -698,7 +723,13 @@ class _CartScreenState extends State<CartScreen> {
           );
 
           // 4. Replace navigation stack with /order-tracker so user cannot pop back to checkout
-          context.go('/order-tracker', extra: {'orderId': orderId.toString()});
+          try {
+            AppRoutes.router.go(AppRoutes.orderTracker, extra: {'orderId': orderId.toString()});
+          } catch (_) {
+            try {
+              context.go('/order-tracker', extra: {'orderId': orderId.toString()});
+            } catch (_) {}
+          }
         }
       } else {
         final errMsg = respData['error'] ??
@@ -836,10 +867,8 @@ class _CartScreenState extends State<CartScreen> {
             onPressed: () {
               if (_currentStep == 1) {
                 _goToStep(0);
-              } else if (context.canPop()) {
-                context.pop();
               } else {
-                context.go('/menu');
+                _navigateBackOrToMenu();
               }
             },
           ),
@@ -1228,11 +1257,7 @@ class _CartScreenState extends State<CartScreen> {
                 const SizedBox(width: 4),
                 TextButton.icon(
                   onPressed: () {
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go('/menu');
-                    }
+                    _navigateBackOrToMenu();
                   },
                   icon: const Icon(Icons.add, size: 14, color: AppTheme.primary),
                   label: const Text('Add More', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
@@ -2357,7 +2382,7 @@ class _CartScreenState extends State<CartScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => context.push('/order-tracker'),
+          onTap: () => _safePush('/order-tracker'),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             child: Row(
@@ -2414,11 +2439,7 @@ class _CartScreenState extends State<CartScreen> {
           const SizedBox(height: 24),
           ElevatedButton(
             onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/menu');
-              }
+              _navigateBackOrToMenu();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,

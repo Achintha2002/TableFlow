@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
+import '../core/routes.dart';
 import '../providers/cart_provider.dart';
 
 class ItemCustomizationSheet extends StatefulWidget {
@@ -230,7 +231,11 @@ class _ItemCustomizationSheetState extends State<ItemCustomizationSheet> {
             label: 'View Cart',
             textColor: AppTheme.tertiary,
             onPressed: () {
-              Navigator.of(context).pushNamed('/cart');
+              try {
+                AppRoutes.router.push(AppRoutes.cart);
+              } catch (_) {
+                Navigator.of(context).pushNamed('/cart');
+              }
             },
           ),
         ),
