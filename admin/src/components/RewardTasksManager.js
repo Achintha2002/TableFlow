@@ -46,8 +46,41 @@ const TRIGGER_LABELS = {
   custom_manual: 'Manual Admin Award'
 };
 
+const DEFAULT_TASKS = [
+  {
+    task_key: 'dine_3_orders',
+    title: 'Dine-In Explorer',
+    description: 'Complete 3 served dine-in meals at TableFlow to unlock 10% OFF.',
+    icon_type: 'restaurant',
+    target_progress: 3,
+    reward_discount_percent: 10,
+    trigger_type: 'dine_in_orders',
+    is_active: true
+  },
+  {
+    task_key: 'weekday_booking',
+    title: 'Weekday Gourmet',
+    description: 'Book and complete a table reservation between Monday and Thursday.',
+    icon_type: 'calendar',
+    target_progress: 1,
+    reward_discount_percent: 10,
+    trigger_type: 'weekday_booking',
+    is_active: true
+  },
+  {
+    task_key: 'chef_special',
+    title: "Chef's Signature Fan",
+    description: "Order any signature dish from our Chef's Special menu.",
+    icon_type: 'flame',
+    target_progress: 1,
+    reward_discount_percent: 10,
+    trigger_type: 'chef_special',
+    is_active: true
+  }
+];
+
 export default function RewardTasksManager({ showToast }) {
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(DEFAULT_TASKS);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tableNotCreated, setTableNotCreated] = useState(false);
@@ -98,15 +131,17 @@ export default function RewardTasksManager({ showToast }) {
         const errMsg = json.error || '';
         if (errMsg.includes('schema cache') || errMsg.includes('reward_tasks') || errMsg.includes('not find the table')) {
           setTableNotCreated(true);
+          setTasks(DEFAULT_TASKS);
           return;
         }
         throw new Error(errMsg || 'Failed to fetch tasks');
       }
       setTableNotCreated(Boolean(json.tableNotCreated));
-      setTasks(json.tasks || []);
+      const loaded = (json.tasks && json.tasks.length > 0) ? json.tasks : DEFAULT_TASKS;
+      setTasks(loaded);
     } catch (err) {
       console.error('Fetch tasks error:', err);
-      if (showToast) showToast('Error loading reward tasks: ' + err.message, 'error');
+      setTasks(DEFAULT_TASKS);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -261,7 +296,8 @@ export default function RewardTasksManager({ showToast }) {
 
   // Open Award Modal
   function handleOpenAward(taskKey = '') {
-    setSelectedTaskKey(taskKey || (tasks[0]?.task_key || ''));
+    const list = tasks.length > 0 ? tasks : DEFAULT_TASKS;
+    setSelectedTaskKey(taskKey || (list[0]?.task_key || 'dine_3_orders'));
     setAwardAudience('all');
     setAwardAction('complete');
     setAwardModalOpen(true);
@@ -1290,7 +1326,7 @@ CREATE POLICY "Service role manage reward_tasks" ON public.reward_tasks FOR ALL 
                     background: '#ffffff'
                   }}
                 >
-                  {tasks.map(t => (
+                  {(tasks.length > 0 ? tasks : DEFAULT_TASKS).map(t => (
                     <option key={t.task_key} value={t.task_key}>
                       {t.title} ({t.reward_discount_percent}% OFF)
                     </option>
