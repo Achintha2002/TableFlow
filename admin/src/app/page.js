@@ -68,13 +68,15 @@ export default function Dashboard() {
         { count: orderCount }, 
         { count: reservCount }, 
         usersRes,
-        analyticsRes
+        analyticsRes,
+        ordersRes
       ] = await Promise.all([
         supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('status', 'waiting'),
         supabase.from('orders').select('*', { count: 'exact', head: true }).in('status', ['pending', 'preparing']),
         supabase.from('reservations').select('*', { count: 'exact', head: true }).eq('status', 'confirmed'),
         fetch(`${API_BASE}/api/admin/users`).then(res => res.json()).catch(() => []),
-        fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] }))
+        fetch('/api/admin/analytics').then(res => res.json()).catch(() => ({ revenue: [], popularItems: [] })),
+        fetch('/api/admin/orders?limit=5').then(res => res.json()).catch(() => null)
       ]);
 
       const safeUsers = Array.isArray(usersRes) ? usersRes : [];
@@ -82,22 +84,17 @@ export default function Dashboard() {
       const adminCount = safeUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').length;
 
       let recentOrdersList = [];
-      try {
-        const { data: oData, error: oErr } = await supabase
-          .from('orders')
-          .select('id, status, total_amount, subtotal, discount_amount, special_notes, created_at')
-          .order('created_at', { ascending: false })
-          .limit(5);
-        if (!oErr && oData && oData.length > 0) {
-          recentOrdersList = oData;
-        }
-      } catch (_) {}
-
-      if (recentOrdersList.length === 0) {
+      if (ordersRes?.orders && Array.isArray(ordersRes.orders) && ordersRes.orders.length > 0) {
+        recentOrdersList = ordersRes.orders;
+      } else {
         try {
-          const apiOrdersRes = await fetch('/api/admin/orders?limit=5').then(r => r.json()).catch(() => null);
-          if (apiOrdersRes?.orders && apiOrdersRes.orders.length > 0) {
-            recentOrdersList = apiOrdersRes.orders;
+          const { data: oData, error: oErr } = await supabase
+            .from('orders')
+            .select('id, status, total_amount, subtotal, discount_amount, special_notes, created_at')
+            .order('created_at', { ascending: false })
+            .limit(5);
+          if (!oErr && oData && oData.length > 0) {
+            recentOrdersList = oData;
           }
         } catch (_) {}
       }
@@ -117,6 +114,23 @@ export default function Dashboard() {
       setLoading(false);
     }
     loadData();
+
+    const channel = supabase
+      .channel('admin_dashboard_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries' }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, () => {
+        loadData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Loading dashboard...</p>;

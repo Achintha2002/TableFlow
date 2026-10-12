@@ -6,34 +6,54 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    const { data: orders, error } = await supabaseAdmin
-      .from('orders')
-      .select(`
-        id,
-        user_id,
-        table_id,
-        total_amount,
-        status,
-        payment_status,
-        payment_method,
-        special_notes,
-        created_at,
-        users (id, full_name, email),
-        restaurant_tables (id, table_number),
-        order_items (id, menu_item_id, quantity, unit_price, menu_items(name, price))
-      `)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    // 1. Try fetching orders with relational joins
+    let orders = null;
 
-    if (error) {
-      console.error('Fetch orders error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select(`
+          id,
+          user_id,
+          table_id,
+          total_amount,
+          subtotal,
+          discount_amount,
+          status,
+          payment_status,
+          payment_method,
+          special_notes,
+          created_at,
+          restaurant_tables (id, table_number),
+          order_items (id, menu_item_id, quantity, unit_price, menu_items(name, price))
+        `)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (!error && data) {
+        orders = data;
+      }
+    } catch (_) {}
+
+    // 2. Resilient fallback: direct select * from orders without complex foreign joins
+    if (!orders) {
+      const { data: simpleOrders, error: simpleErr } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (simpleErr) {
+        console.error('Fetch simple orders error:', simpleErr);
+        return NextResponse.json({ error: simpleErr.message }, { status: 500 });
+      }
+      orders = simpleOrders || [];
     }
 
     const sanitized = (orders || []).map(o => ({
       ...o,
-      subtotal: o.total_amount || 0,
-      discount_amount: 0
+      subtotal: o.subtotal || o.total_amount || 0,
+      discount_amount: o.discount_amount || 0
     }));
 
     return NextResponse.json({ success: true, orders: sanitized });
