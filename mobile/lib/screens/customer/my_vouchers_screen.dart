@@ -127,11 +127,59 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
       final vouchers = await ApiService.fetchMyVouchers();
       final tasks = await ApiService.fetchMyTasks();
 
+      // Automatically evaluate user's live orders to ensure progress increments 100% automatically!
+      List<Map<String, dynamic>> evaluatedTasks = tasks.isNotEmpty ? tasks : _getDefaultTasks();
+      try {
+        final ordersData = await SupabaseService.client
+            .from('orders')
+            .select('id, created_at, status')
+            .eq('user_id', user.id)
+            .neq('status', 'cancelled');
+
+        if (ordersData.isNotEmpty) {
+          final ordersList = List<Map<String, dynamic>>.from(ordersData);
+          evaluatedTasks = evaluatedTasks.map((t) {
+            if (t['is_claimed'] == true) return t;
+
+            final target = int.tryParse(t['target_progress']?.toString() ?? '') ?? 1;
+            final taskCreatedAtStr = t['created_at']?.toString();
+            DateTime? taskCreatedAt;
+            if (taskCreatedAtStr != null) {
+              taskCreatedAt = DateTime.tryParse(taskCreatedAtStr);
+            }
+
+            // Count orders placed in current active session (within 2 hours of task creation or later)
+            final count = ordersList.where((o) {
+              final orderCreatedAtStr = o['created_at']?.toString();
+              if (orderCreatedAtStr == null) return false;
+              final orderTime = DateTime.tryParse(orderCreatedAtStr);
+              if (orderTime == null) return false;
+              if (taskCreatedAt != null) {
+                return orderTime.isAfter(taskCreatedAt.subtract(const Duration(hours: 2)));
+              }
+              return true;
+            }).length;
+
+            final current = int.tryParse(t['current_progress']?.toString() ?? '') ?? 0;
+            final newProgress = (count > current) ? count.clamp(0, target) : current;
+            final isCompleted = newProgress >= target;
+
+            return {
+              ...t,
+              'current_progress': newProgress,
+              'is_completed': isCompleted || (t['is_completed'] == true),
+            };
+          }).toList();
+        }
+      } catch (e) {
+        debugPrint('Direct order progress evaluation notice: $e');
+      }
+
       if (mounted) {
         setState(() {
           _loyaltyTier = tier;
           _vouchers = vouchers;
-          _tasks = tasks.isNotEmpty ? tasks : _getDefaultTasks();
+          _tasks = evaluatedTasks;
           _isLoading = false;
         });
       }

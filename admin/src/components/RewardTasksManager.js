@@ -941,51 +941,22 @@ CREATE POLICY "Service role manage reward_tasks" ON public.reward_tasks FOR ALL 
                   borderTop: '1px solid #f5f5f4',
                   paddingTop: '12px'
                 }}>
-                  <button
-                    onClick={() => handleDirectAction(task.task_key, 'reset')}
-                    title="Reset diner progress back to 0 steps"
-                    style={{
-                      flex: 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '5px',
-                      padding: '8px 10px',
-                      borderRadius: '8px',
-                      border: '1px solid #fee2e2',
-                      background: '#fff1f2',
-                      color: '#b91c1c',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <RotateCcw size={13} color="#b91c1c" />
-                    <span>Reset (0)</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleDirectAction(task.task_key, 'increment')}
-                    title="Advance diner progress by +1 step"
-                    style={{
-                      flex: 1,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '5px',
-                      padding: '8px 10px',
-                      borderRadius: '8px',
-                      border: '1px solid #fde68a',
-                      background: '#fffbeb',
-                      color: '#92400e',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Plus size={13} color="#d97706" />
-                    <span>+1 Step</span>
-                  </button>
+                  <div style={{
+                    flex: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    padding: '8px 12px',
+                    borderRadius: '8px'
+                  }}>
+                    <CheckCircle2 size={13} color="#16a34a" />
+                    <span>Auto-tracked from Dine-In Orders</span>
+                  </div>
 
                   <button
                     onClick={() => handleOpenEdit(task)}
