@@ -183,17 +183,32 @@ export default function Dashboard() {
         <div className="data-card">
           <div className="data-card-header">
             <h3>Popular Items</h3>
+            <Link href="/reports" className="btn btn-ghost" style={{ fontSize: '12px' }}>View all</Link>
           </div>
           <div style={{ height: '300px', width: '100%', padding: '16px 0' }}>
             {analytics.popularItems && analytics.popularItems.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analytics.popularItems} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
+                <BarChart 
+                  data={analytics.popularItems.slice(0, 5)} 
+                  layout="vertical" 
+                  margin={{ top: 10, right: 30, left: 10, bottom: 0 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-                  <XAxis type="number" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis dataKey="name" type="category" stroke="var(--text-secondary)" fontSize={12} tickLine={false} axisLine={false} width={100} />
+                  <XAxis type="number" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    stroke="var(--text-secondary)" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    width={130}
+                    tickFormatter={(val) => (val && val.length > 18 ? `${val.slice(0, 16)}…` : val)}
+                  />
                   <RechartsTooltip 
                     cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                     contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--text-primary)' }}
+                    formatter={(val) => [`${val} orders`, 'Ordered']}
                   />
                   <Bar dataKey="count" fill="#B87F5C" radius={[0, 6, 6, 0]} barSize={20} />
                 </BarChart>
