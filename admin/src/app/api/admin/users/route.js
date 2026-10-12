@@ -14,9 +14,10 @@ export async function GET() {
         if (u.email?.toLowerCase() === targetEmail || u.user_metadata?.role === 'super_admin') {
           await supabaseAdmin.auth.admin.deleteUser(u.id).catch(() => {});
         }
-      }
-      await supabaseAdmin.from('users').delete().eq('email', targetEmail).catch(() => {});
-      await supabaseAdmin.from('users').delete().eq('role', 'super_admin').catch(() => {});
+      try {
+        await supabaseAdmin.from('users').delete().eq('email', targetEmail);
+        await supabaseAdmin.from('users').delete().eq('role', 'super_admin');
+      } catch (_) {}
     } catch (purgeErr) {
       console.warn('Super admin purge error:', purgeErr);
     }
@@ -53,7 +54,7 @@ export async function GET() {
             role: 'customer',
             created_at: au.created_at || new Date().toISOString()
           };
-          await supabaseAdmin.from('users').upsert(newProfile).catch(() => {});
+          await supabaseAdmin.from('users').upsert(newProfile);
           publicUsers.push(newProfile);
           publicUserIds.add(au.id);
         } catch (_) {}

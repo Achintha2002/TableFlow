@@ -112,7 +112,9 @@ export async function POST(req) {
     }
 
     if (notificationsToInsert.length > 0) {
-      supabaseAdmin.from('notifications').insert(notificationsToInsert).catch(() => {});
+      try {
+        await supabaseAdmin.from('notifications').insert(notificationsToInsert);
+      } catch (_) {}
     }
 
     return NextResponse.json({

@@ -2209,12 +2209,14 @@ async function syncUserTaskProgress(userId) {
           }, { onConflict: 'user_id,task_key' });
 
         if (isCompleted && (!existing || !existing.is_completed)) {
-          await supabaseAdmin.from('notifications').insert({
-            user_id: userId,
-            title: `🎉 Task Completed: ${task.title}!`,
-            body: `You completed "${task.title}"! Open My Vouchers to claim your reward.`,
-            is_read: false
-          }).catch(() => {});
+          try {
+            await supabaseAdmin.from('notifications').insert({
+              user_id: userId,
+              title: `🎉 Task Completed: ${task.title}!`,
+              body: `You completed "${task.title}"! Open My Vouchers to claim your reward.`,
+              is_read: false
+            });
+          } catch (_) {}
         }
       }
     }
