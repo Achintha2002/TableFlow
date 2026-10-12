@@ -11,14 +11,24 @@ export async function POST(req) {
     }
 
     // 1. Fetch task details
-    const { data: task, error: taskErr } = await supabaseAdmin
-      .from('reward_tasks')
-      .select('*')
-      .eq('task_key', task_key)
-      .maybeSingle();
+    let task = null;
+    try {
+      const { data, error: taskErr } = await supabaseAdmin
+        .from('reward_tasks')
+        .select('*')
+        .eq('task_key', task_key)
+        .maybeSingle();
+      if (!taskErr && data) task = data;
+    } catch (_) {}
 
-    const title = task?.title || task_key;
-    const targetProgress = task?.target_progress || 1;
+    const defaultNames = {
+      dine_3_orders: 'Dine-In Explorer',
+      weekday_booking: 'Weekday Gourmet',
+      chef_special: "Chef's Signature Fan"
+    };
+
+    const title = task?.title || defaultNames[task_key] || task_key;
+    const targetProgress = task?.target_progress || (task_key === 'dine_3_orders' ? 3 : 1);
 
     // 2. Determine target users
     let targetUserIds = [];
