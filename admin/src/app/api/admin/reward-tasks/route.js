@@ -223,43 +223,64 @@ export async function PUT(req) {
     const body = await req.json();
     const { id, ...updates } = body;
 
-    if (!id) {
-      return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
+    if (!id && !updates.task_key) {
+      return NextResponse.json({ error: 'Task ID or task_key is required' }, { status: 400 });
     }
 
-    updates.updated_at = new Date().toISOString();
+    const cleanUpdates = {
+      updated_at: new Date().toISOString()
+    };
+    if (updates.title !== undefined) cleanUpdates.title = updates.title.trim();
+    if (updates.description !== undefined) cleanUpdates.description = updates.description.trim();
+    if (updates.icon_type !== undefined) cleanUpdates.icon_type = updates.icon_type;
+    if (updates.target_progress !== undefined) cleanUpdates.target_progress = parseInt(updates.target_progress) || 1;
+    if (updates.reward_discount_percent !== undefined) cleanUpdates.reward_discount_percent = parseInt(updates.reward_discount_percent) || 10;
+    if (updates.trigger_type !== undefined) cleanUpdates.trigger_type = updates.trigger_type;
+    if (updates.trigger_value !== undefined) {
+      cleanUpdates.trigger_value = (updates.trigger_value !== '' && updates.trigger_value !== null)
+        ? parseFloat(updates.trigger_value)
+        : null;
+    }
+    if (updates.is_active !== undefined) cleanUpdates.is_active = Boolean(updates.is_active);
 
-    const { data, error } = await supabaseAdmin
-      .from('reward_tasks')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    let query = supabaseAdmin.from('reward_tasks').update(cleanUpdates);
+    if (id) {
+      query = query.eq('id', id);
+    } else {
+      query = query.eq('task_key', updates.task_key);
+    }
+
+    const { data: updatedRows, error } = await query.select();
 
     if (error) {
+      console.error('Reward tasks PUT Supabase error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const updatedTask = (updatedRows && updatedRows.length > 0) ? updatedRows[0] : null;
+    const taskKey = updatedTask?.task_key || updates.task_key;
+
     // If title or description changed, update user_discount_tasks
-    if (updates.title || updates.description || updates.target_progress || updates.reward_discount_percent) {
+    if (taskKey && (cleanUpdates.title || cleanUpdates.description || cleanUpdates.target_progress || cleanUpdates.reward_discount_percent)) {
       try {
-        const userUpdates = {};
-        if (updates.title) userUpdates.title = updates.title;
-        if (updates.description) userUpdates.description = updates.description;
-        if (updates.target_progress) userUpdates.target_progress = parseInt(updates.target_progress);
-        if (updates.reward_discount_percent) userUpdates.reward_discount_percent = parseInt(updates.reward_discount_percent);
-        userUpdates.updated_at = new Date().toISOString();
+        const userUpdates = {
+          updated_at: new Date().toISOString()
+        };
+        if (cleanUpdates.title) userUpdates.title = cleanUpdates.title;
+        if (cleanUpdates.description) userUpdates.description = cleanUpdates.description;
+        if (cleanUpdates.target_progress) userUpdates.target_progress = cleanUpdates.target_progress;
+        if (cleanUpdates.reward_discount_percent) userUpdates.reward_discount_percent = cleanUpdates.reward_discount_percent;
 
         await supabaseAdmin
           .from('user_discount_tasks')
           .update(userUpdates)
-          .eq('task_key', data.task_key);
+          .eq('task_key', taskKey);
       } catch (e) {
         console.warn('Update user_discount_tasks warning:', e.message);
       }
     }
 
-    return NextResponse.json({ success: true, task: data });
+    return NextResponse.json({ success: true, task: updatedTask });
   } catch (err) {
     console.error('Reward tasks PUT error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
