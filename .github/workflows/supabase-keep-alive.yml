@@ -30,25 +30,22 @@ jobs:
             exit 1
           fi
 
-          # 3. Format endpoint URL
-          if [[ "$CLEAN_URL" == */rest/v1* ]]; then
-            ENDPOINT="$CLEAN_URL"
-          else
-            ENDPOINT="$CLEAN_URL/rest/v1/"
-          fi
+          # 3. Target the public 'menu_items' table with limit 1
+          ENDPOINT="${CLEAN_URL}/rest/v1/menu_items?select=id&limit=1"
 
-          echo "Target endpoint base configured."
-
-          # 4. Ping Supabase
-          HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X GET "$ENDPOINT" \
+          # 4. Make request and capture HTTP status + response body
+          RESPONSE_FILE=$(mktemp)
+          HTTP_STATUS=$(curl -sS -w "%{http_code}" -o "$RESPONSE_FILE" -X GET "$ENDPOINT" \
             -H "apikey: $CLEAN_KEY" \
             -H "Authorization: Bearer $CLEAN_KEY")
 
+          RESPONSE_BODY=$(cat "$RESPONSE_FILE")
           echo "Supabase HTTP response code: $HTTP_STATUS"
 
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
-            echo "✅ Success! Supabase is active."
+            echo "✅ Success! Supabase database responded with $HTTP_STATUS. Project is kept active!"
           else
-            echo "❌ Failed to ping Supabase. HTTP Status: $HTTP_STATUS"
+            echo "Response body: $RESPONSE_BODY"
+            echo "❌ Failed with HTTP status: $HTTP_STATUS"
             exit 1
           fi
