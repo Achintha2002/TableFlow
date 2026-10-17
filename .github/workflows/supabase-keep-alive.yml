@@ -2,25 +2,53 @@ name: Keep Supabase Active
 
 on:
   schedule:
-    
+    # Dawas 4kata serayak run wenawa (UTC 00:00)
     - cron: '0 0 */4 * *'
-  workflow_dispatch: # Actions tab එකෙන් manually run කරලා test කරන්න පුළුවන්
+  workflow_dispatch: # Actions tab eken manually run karanna puluwan
 
 jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          response=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/?apikey=${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          # 1. Clean whitespace, newlines, carriage returns, and quotes
+          CLEAN_URL=$(echo "$SUPABASE_URL" | tr -d '\r\n "' | sed 's:/*$::')
+          CLEAN_KEY=$(echo "$SUPABASE_ANON_KEY" | tr -d '\r\n "')
 
-          echo "Response code: $response"
+          # 2. Check if secrets are missing
+          if [ -z "$CLEAN_URL" ]; then
+            echo "❌ Error: SUPABASE_URL secret is empty or missing! Please check GitHub Secrets."
+            exit 1
+          fi
 
-          if [ "$response" -ge 200 ] && [ "$response" -lt 400 ]; then
-            echo "Supabase successfully pinged! DB is active."
+          if [ -z "$CLEAN_KEY" ]; then
+            echo "❌ Error: SUPABASE_ANON_KEY secret is empty or missing! Please check GitHub Secrets."
+            exit 1
+          fi
+
+          # 3. Format endpoint URL
+          if [[ "$CLEAN_URL" == */rest/v1* ]]; then
+            ENDPOINT="$CLEAN_URL"
           else
-            echo "Failed to ping Supabase. Status: $response"
+            ENDPOINT="$CLEAN_URL/rest/v1/"
+          fi
+
+          echo "Target endpoint base configured."
+
+          # 4. Ping Supabase
+          HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X GET "$ENDPOINT" \
+            -H "apikey: $CLEAN_KEY" \
+            -H "Authorization: Bearer $CLEAN_KEY")
+
+          echo "Supabase HTTP response code: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
+            echo "✅ Success! Supabase is active."
+          else
+            echo "❌ Failed to ping Supabase. HTTP Status: $HTTP_STATUS"
             exit 1
           fi
