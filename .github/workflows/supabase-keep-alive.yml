@@ -1,0 +1,26 @@
+name: Keep Supabase Active
+
+on:
+  schedule:
+    
+    - cron: '0 0 */4 * *'
+  workflow_dispatch: # Actions tab එකෙන් manually run කරලා test කරන්න පුළුවන්
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase API
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/?apikey=${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "Response code: $response"
+
+          if [ "$response" -ge 200 ] && [ "$response" -lt 400 ]; then
+            echo "Supabase successfully pinged! DB is active."
+          else
+            echo "Failed to ping Supabase. Status: $response"
+            exit 1
+          fi
